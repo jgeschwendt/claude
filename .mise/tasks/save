@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+#MISE description="Commit the tree as today's sync and push main"
+# Commit the whole tree as today's `sync: MM/DD/YY` (amending it if HEAD already is), then push main.
+# The push leases on the origin/main just fetched, so a rewrite never clobbers commits this checkout hasn't seen.
+set -euo pipefail
+
+repo="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../.." && pwd -P)"
+git() { command git -C "$repo" "$@"; }
+
+branch="$(git symbolic-ref --short -q HEAD)" || { echo "refuse: detached HEAD" >&2; exit 1; }
+[[ "$branch" == "main" ]] || { echo "refuse: not on main ($branch)" >&2; exit 1; }
+
+git fetch -q origin "$branch"
+remote="$(git rev-parse "origin/$branch")"
+git merge-base --is-ancestor "$remote" HEAD || { echo "refuse: origin/$branch has commits this checkout lacks" >&2; exit 1; }
+
+git add --all
+if ! git diff --cached --quiet; then
+	subject="sync: $(date +%m/%d/%y)"
+	if [[ "$(git log -1 --format=%s)" == "$subject" ]]; then
+		git commit --quiet --amend --no-edit
+	else
+		git commit --quiet --message "$subject"
+	fi
+fi
+
+git push --force-with-lease="$branch:$remote" origin "$branch"

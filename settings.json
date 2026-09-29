@@ -1,10 +1,15 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "cleanupPeriodDays": 365,
+  "attribution": {
+    "sessionUrl": false
+  },
   "permissions": {
+    "allow": [
+      "Bash(~/.local/bin/sandman forget:*)"
+    ],
     "defaultMode": "auto"
   },
-  "model": "fable[1m]",
   "hooks": {
     "PostToolUse": [
       {
@@ -48,7 +53,7 @@
     ],
     "Notification": [
       {
-        "matcher": "permission_prompt|idle_prompt|agent_needs_input",
+        "matcher": "permission_prompt",
         "hooks": [
           {
             "type": "command",
@@ -94,7 +99,16 @@
   "enabledPlugins": {
     "rust-analyzer-lsp@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
-    "vercel@claude-plugins-official": true
+    "vercel@claude-plugins-official": true,
+    "typesafe@typesafe-ai": true
+  },
+  "extraKnownMarketplaces": {
+    "typesafe-ai": {
+      "source": {
+        "source": "github",
+        "repo": "typesafe-ai/skills"
+      }
+    }
   },
   "effortLevel": "high",
   "askUserQuestionTimeout": "never",
@@ -103,6 +117,7 @@
     "enabled": true,
     "mode": "hold"
   },
+  "autoMemoryEnabled": false,
   "skipDangerousModePermissionPrompt": false,
   "skipWorkflowUsageWarning": true,
   "theme": "auto",
@@ -110,17 +125,43 @@
   "verbose": false,
   "preferredNotifChannel": "auto",
   "switchModelsOnFlag": true,
+  "autoContinueAtUsageLimit": false,
+  "remoteControlAtStartup": false,
+  "autoUploadSessions": false,
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
+  "autoMode": {
+    "environment": [
+      "### Org-wide",
+      "**Organization**: None configured",
+      "**Cloud provider(s)**: None configured",
+      "**Repository visibility**: assume private unless the remote host and repo name indicate otherwise, or a visibility check in the transcript shows public — not queryable here (repo/org not derivable from origin remote)",
+      "**Internal sharing / snippet hosting**: None configured — treat public paste/gist services as outside the trust boundary",
+      "**Secrets management**: None configured",
+      "**Default / protected branches**: unknown — origin/HEAD unset, and gh visibility/branch-protection lookup was not queryable here",
+      "**CI/CD deploy targets**: None configured",
+      "**Network posture**: None configured",
+      "**Host containment**: None configured — assume Claude Code runs on an ordinary developer machine with open internet",
+      "**Source control**: The trusted repo (/Users/jlg/.grove/code) and its configured remote(s) only — remote URL was unparseable so could not be further scoped",
+      "**Trusted internal domains**: None configured",
+      "**Trusted cloud buckets**: None configured",
+      "**Key internal services**: None configured",
+      "**Internal package registry**: npm.pkg.github.com (config-derived — not a confirmed upload destination; uploads of local data still require confirmation)",
+      "**Sensitive data locations & audiences**: any file or store holding personal data, confidential business data, credentials, regulated data, or similarly sensitive material; preserve exact handles when known and share only with audiences cleared at the [named+specifics] bar — note: .env / .env.local files exist in sibling checkouts under jgeschwendt/{bridge,jgeschwendt,jlg.io,typescript}/main but these are unverified-provenance filename-scan hits outside this project's scope",
+      "**Data retention / declassification**: None configured",
+      "**Sensitive remote targets**: any namespace, host, or container whose name carries `prod` or `production` as a whole word or name segment",
+      "**Protected deployment namespaces / environments**: None configured — fall back to the Sensitive remote targets heuristic",
+      "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries `prod` or `production` as a whole word or name segment",
+      "### User-specific",
+      "**Primary use of Claude Code**: software development",
+      "**Trusted repo**: /Users/jlg/.grove/code and its configured remote (origin) — remote URL was unparseable so no host/org could be confirmed; treat as private by default",
+      "**Org-specific CLIs**: None configured — non-standard CLIs observed in this project (bin, mise, open, grove, launchctl, pstree, readlink, setopt, thread) appear to be personal tooling, not org-specific"
+    ]
+  },
   "voiceEnabled": true,
-  "defaultToAgentsView": true,
+  "defaultToAgentsView": false,
   "feedbackSurveyState": {
     "lastShownTime": 1754086909438
-  },
-  "autoUploadSessions": false,
-  "remoteControlAtStartup": false,
-  "attribution": {
-    "sessionUrl": false
   }
 }

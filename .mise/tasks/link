@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+#MISE description="Symlink the harness entries into ~/.claude (--check only reports)"
+# Symlink into ~/.claude each entry read through it — by Claude Code, or as a ~/.claude/target/release path.
+#   ok      already linked here           drift   a real file or foreign link; never overwritten
+#   link    was missing, now linked       unlink  a link here for an unlisted entry, removed
+# --check changes nothing (reports missing: / stale: instead); either mode exits 1 on anything but ok.
+set -euo pipefail
+
+check=0
+home="${CLAUDE_HOME:-$HOME/.claude}"
+repo="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../.." && pwd -P)"
+
+case "${1:-}" in
+"") ;;
+--check) check=1 ;;
+*) echo "usage: link [--check]" >&2; exit 2 ;;
+esac
+
+entries=(
+	rules
+	skills
+	target
+	CLAUDE.md
+	settings.json
+	settings.local.json
+)
+
+status=0
+for entry in "${entries[@]}"; do
+	dest="$home/$entry"
+	if [[ -L "$dest" && "$(readlink "$dest")" == "$repo/$entry" ]]; then
+		echo "ok: $entry"
+	elif [[ -e "$dest" || -L "$dest" ]]; then
+		echo "drift: $entry"
+		status=1
+	elif ((check)); then
+		echo "missing: $entry"
+		status=1
+	else
+		ln -s "$repo/$entry" "$dest"
+		echo "link: $entry"
+	fi
+done
+
+for dest in "$home"/* "$home"/.[!.]*; do
+	[[ -L "$dest" && "$(readlink "$dest")" == "$repo/"* ]] || continue
+	entry="${dest##*/}"
+	[[ " ${entries[*]} " == *" $entry "* ]] && continue
+	if ((check)); then
+		echo "stale: $entry"
+		status=1
+	else
+		rm "$dest"
+		echo "unlink: $entry"
+	fi
+done
+
+exit "$status"

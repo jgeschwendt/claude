@@ -1,13 +1,18 @@
-# ~/.claude
+# claude
 
-What shapes a Claude Code session is tracked and synced; what sessions accrete stays gitignored.
+What shapes a Claude Code session is tracked and synced; what sessions accrete stays out.
+The repo is the grove root `jgeschwendt/claude`, checked out at `~/.grove/code/jgeschwendt/claude/main`.
+`~/.claude` is not a repo: it holds Claude Code's runtime state plus a symlink into this checkout for
+each entry read through it — `CLAUDE.md`, `rules/`, `settings*.json`, `skills/`, `target/`. `mise run link` re-links (`--check` only reports); a `drift:` line means a writer replaced
+a link with a real file — merge it into the checkout by hand, then re-link.
 
 ## Tracked
 
-<!-- curated, not exhaustive: plugins/config.json is tracked but deliberately omitted -->
+<!-- curated, not exhaustive -->
 
 ```
-~/.claude
+jgeschwendt/claude
+├── .mise/tasks/           link and save — `mise tasks` describes them
 ├── rules/                 house standards for code and docs
 ├── skills/                personal skills, lean and self-contained
 ├── src/                   claude-home crate: format (PostToolUse hook), statusline, log
@@ -15,10 +20,11 @@ What shapes a Claude Code session is tracked and synced; what sessions accrete s
 ├── Cargo.toml             the crate manifest
 ├── CLAUDE.md              global instructions: golden rule, house rules, memory contract
 ├── mise.toml              toolchain pins (rust, bun) and the build/test tasks
-├── save                   amend or cut today's sync: MM/DD/YY commit; force-push main
 ├── settings.json          harness config — hook wiring, permissions
 └── settings.local.json    output-style override
 ```
+
+Runtime but load-bearing, in `~/.claude` rather than the repo: `plans/` is what `/execute-plan` runs (newest file wins); `briefs/` holds write-ups meant to brief a future session, never executed.
 
 ## The crate
 

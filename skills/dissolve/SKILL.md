@@ -34,7 +34,7 @@ interactive session is taken simply by exiting — and an explicit take **before
 harmful. Claude Code's exit flush re-creates `<sid>.jsonl`, the hook takes that live
 fragment, and `.recent/<sid>.json` is overwritten to name a stub while the real
 conversation sits orphaned in the archive (sandman observed this across twelve sessions on
-2026-08-25; `stele:landmark resume-is-not-an-ending` in sandman's cli.rs). The dispatcher
+2026-08-25; `※ resume-is-not-an-ending` in sandman's cli.rs). The dispatcher
 armed in step 3 does the take after the process is gone, when the file is final.
 
 ## 3. End the session

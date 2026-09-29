@@ -98,6 +98,11 @@ Each pass, until step 4 says stop:
   Each brief carries the scope triad (layer it owns · layers sibling lenses
   own · the map + axes as shared context) and the pass number with the
   ledger's rejected-list — so lenses don't re-propose the dead.
+  Taste-bearing prose (resume, marketing copy, public writing): run a
+  second panel of the same lenses pinned `model: 'fable'` beside the opus
+  one — hunting there is critique, and model diversity surfaces phrasings
+  one model never reaches. (since 2026-09-24 · jlg.io resume: "use some
+  fabel agents too")
   Code lenses: **deletion/redundancy** · **structure/altitude** ·
   **naming/clarity** · **efficiency** · **idiom/consistency** ·
   **coverage** (tests the refactor makes cheap). Docs/prompts: the step-1

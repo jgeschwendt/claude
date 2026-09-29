@@ -17,7 +17,7 @@
 # harmful — Claude Code's exit flush re-creates `<sid>.jsonl`, the hook takes that live
 # fragment, and `.recent/<sid>.json` is overwritten to name a stub while the real
 # conversation sits orphaned in the archive (sandman observed this across twelve sessions on
-# 2026-08-25; see `stele:landmark resume-is-not-an-ending` in sandman's cli.rs). The
+# 2026-08-25; see `※ resume-is-not-an-ending` in sandman's cli.rs). The
 # dispatcher therefore waits out the pid, the flush, and the hook's own take before deciding
 # anything.
 #

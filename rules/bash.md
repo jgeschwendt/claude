@@ -5,7 +5,7 @@ paths:
 
 # Bash
 
-Comment syntax: see `rules/comments.md`. The globs can't catch extensionless scripts (`~/.claude/save`) — a bash shebang means these rules apply even when this file didn't auto-load.
+Comment syntax: see `rules/comments.md`. The globs can't catch extensionless scripts (the harness repo's `.mise/tasks/*`) — a bash shebang means these rules apply even when this file didn't auto-load.
 
 ## macOS 3.2 compatibility
 

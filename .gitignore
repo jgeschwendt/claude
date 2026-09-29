@@ -1,52 +1,8 @@
-# $HOME/.claude/.gitignore
-.archive/
-.vscode/
-
-backups/
-briefs/
-cache/
-chrome/
-debug/
-downloads/
-feedback/
-file-history/
-ide/
-image-cache/
-jobs/
-paste-cache/
-plans/
-plugins/
-projects/
-session-env/
-sessions/
-shell-snapshots/
-statsig
-tasks/
-teams/
-telemetry/
-todos/
-usage-data/
-worktrees/
-
-daemon*
-
-.claude.json
-.last-cleanup
-.last-update-result.json
-gh-pr-status-cache.json
-history.jsonl
-mcp-needs-auth-cache.json
-policy-limits.json
-remote-settings.json
-settings.json.*
-stats-cache.json
-
-*.log
 .DS_Store
 CLAUDE.local.md
 
-node_modules/
+# written by Claude Code through the ~/.claude/skills link
+skills/synced/
 
-# rust
+# cargo
 target/
-logs/

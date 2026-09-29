@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Bump the agent-browser binary (pinned in the global mise config — the GitHub release's native build) and re-vendor
+# SKILL.md from upstream beside it, keeping our provenance trailer. Prints updated / unchanged for the skill.
+set -euo pipefail
+
+mise -C "$HOME" --quiet upgrade --bump github:vercel-labs/agent-browser
+
+url="https://raw.githubusercontent.com/vercel-labs/agent-browser/refs/heads/main/skills/agent-browser/SKILL.md"
+dir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd -P)"
+skill="$dir/SKILL.md"
+tmp="$(mktemp "$dir/.SKILL.md.XXXXXX")"
+trap 'rm -f "$tmp"' EXIT
+
+curl -fsSL --max-time 30 "$url" >"$tmp"
+[[ "$(head -n 1 "$tmp")" == "---" ]] && grep -q '^name: agent-browser$' "$tmp" || {
+	echo "refuse: upstream is not an agent-browser SKILL.md" >&2
+	exit 1
+}
+
+cat >>"$tmp" <<EOF
+
+Vendored from vercel-labs/agent-browser by \`update\` beside this file — everything above is upstream's, byte for byte; propose changes upstream, never edit them here. Upstream source:
+
+\`\`\`
+$url
+\`\`\`
+EOF
+
+if cmp -s "$tmp" "$skill"; then
+	echo "unchanged"
+else
+	chmod 644 "$tmp"
+	mv "$tmp" "$skill"
+	echo "updated"
+fi

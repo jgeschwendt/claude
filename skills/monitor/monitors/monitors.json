@@ -1,7 +1,7 @@
 [
   {
-    "command": "${CLAUDE_PLUGIN_ROOT}/scripts/watch-afk.sh",
-    "description": "**/afk** flag transitions (owner away/returned)",
-    "name": "afk"
+    "name": "monitor",
+    "description": "Emits world-to-machine events",
+    "command": "${CLAUDE_PLUGIN_ROOT}/monitor.sh"
   }
 ]

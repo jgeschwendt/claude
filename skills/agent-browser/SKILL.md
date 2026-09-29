@@ -32,6 +32,7 @@ agent-browser skills get slack             # Slack workspace automation
 agent-browser skills get dogfood           # Exploratory testing / QA / bug hunts
 agent-browser skills get derive-client     # Record a HAR, derive a standalone API client for a site
 agent-browser skills get vercel-sandbox    # agent-browser inside Vercel Sandbox microVMs
+agent-browser skills get protected-vercel-deployments  # Access protected Vercel deployments
 agent-browser skills get agentcore         # AWS Bedrock AgentCore cloud browsers
 ```
 
@@ -50,7 +51,7 @@ Run `agent-browser skills list` to see everything available on the installed ver
 
 The dashboard runs independently of browser sessions on port 4848 and can also be opened through a proxied or forwarded URL such as `https://dashboard.agent-browser.localhost`. Agents should stay on the dashboard origin: session tabs, status, and stream traffic are proxied internally, so session ports do not need to be exposed.
 
-Vendored from vercel-labs/agent-browser — the body above is byte-synced with upstream (verified 2026-07-29 · first 51 lines identical); propose changes upstream, never edit them here. Upstream source:
+Vendored from vercel-labs/agent-browser by `update` beside this file — everything above is upstream's, byte for byte; propose changes upstream, never edit them here. Upstream source:
 
 ```
 https://raw.githubusercontent.com/vercel-labs/agent-browser/refs/heads/main/skills/agent-browser/SKILL.md

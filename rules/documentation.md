@@ -10,6 +10,7 @@ Out of scope: pipeline-owned markdown (`~/.sandman/memories/` banks, their `MEMO
 ## Present tense only
 
 - **Living docs describe what exists today.** Migrations, predecessors, retired designs, and the decision process live in git history and plans — never in documentation. A "what X was, and where it went" section is a deletion, not a record. (since 2026-07-27 · orrery atlas recut — "Remove anything about the migration … that's git history.")
+- **A feature is not done until its end-to-end flow is in the repo's living docs.** Trigger, components crossed, data path, configuration — into whatever the repo designates (stele AGENTS.md nodes and docs/ where adopted, the README elsewhere); a stub being wired up counts. (since 2026-07 · grove)
 
 ## Machine portability
 
@@ -27,7 +28,7 @@ Why: every review is diff-scoped and every consistency check uses the repo as it
 
 ## Reference integrity
 
-- **A rename, move, or delete is not done while a resolving reference remains.** `rg` the old name (word-bounded / path-scoped for common words) and fix every hit that _resolves_ — links, `paths:` frontmatter globs, procedure steps, mermaid node labels, code fences that instruct. Historical prose describing the old name (changelogs, incident stamps, memories) stays.
+- **A rename, move, or delete is not done while a resolving reference remains.** `rg` the old name (word-bounded / path-scoped for common words) and fix every hit that _resolves_ — links, `paths:` frontmatter globs, procedure steps, mermaid node labels, code fences that instruct. Historical prose describing the old name (changelogs, incident stamps, memories) stays. Parallel agents with disjoint file ownership never satisfy this — each greps only its own files, so retired terms survive in the seams while every agent reports green; the orchestrator runs the one repo-wide case-insensitive sweep after merge. (since 2026-08-26)
 - **Relative links resolve from the linking file's directory.** Moving a doc shifts every `](./x)` both inside it and pointing at it — recompute, don't just move.
 
 Why: nothing validates markdown pointers. (since 2026-07-19 · deleting rules/learn-code.md left dangling references in skills/dissolve/SKILL.md, a mermaid diagram in @apps/web/lib/core/memory.md (since extracted to orrery lib/orrery/memory.md), and a CLAUDE.md pointer — found only by `rg`, flagged by nothing.)

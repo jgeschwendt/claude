@@ -1,5 +1,5 @@
 {
-  "description": "Background monitor that broadcasts a shared flag-file state to every interactive session as a notification; the mechanism /afk rides on",
   "name": "monitor",
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "description": "Machine monitor that broadcasts a shared flag-file state to every interactive session as a notification."
 }

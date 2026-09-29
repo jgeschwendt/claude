@@ -28,7 +28,7 @@ On heavy runs, show the plan in ≤5 lines after Phase 1 (question, sub-question
 ## Web stack (this environment)
 
 - **Search** = WebSearch, **fetch** = WebFetch — load via ToolSearch if deferred. Subagents use the same pair; this is the documented exception to the global agent-browser rule, because fan-out needs cheap parallel calls.
-- **Escalate to `agent-browser`** before marking a lead `blocked`: JS-heavy pages, paywalls, 403s, anything WebFetch mangles. Bash sessions need `~/.local/bin` (its `node` symlinks to bun) and the mise shims on PATH — `~/.bun/bin` holds no JS runtime, only the agent-browser binary (verified 2026-07-19).
+- **Escalate to `agent-browser`** before marking a lead `blocked`: JS-heavy pages, paywalls, 403s, anything WebFetch mangles. Bash sessions need the mise shims on PATH — agent-browser is the native binary pinned in the global mise config (verified 2026-09-28).
 
 ## Workspace
 

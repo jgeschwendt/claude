@@ -166,8 +166,8 @@ export const register = (on) => {
   });
 
   on("prompt.submit", async ($, e, next) => {
-    // the person's own words: Enter at the prompt, or the driver's prompt under `claude -p`
-    if (e.origin.kind !== "composer" && e.origin.kind !== "sdk") return next(e);
+    // the owner's live words only: a `claude -p` shift brief's "never …" is no correction
+    if (e.origin.kind !== "composer") return next(e);
     const tokens = tokensOf(e.text);
     const isRepeat =
       tokens.size >= REPEAT_MIN_TOKENS &&

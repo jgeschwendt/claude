@@ -162,14 +162,15 @@ test("a failed sandman call is logged and the prompt goes on", async ($, on) => 
   expect(logs.join("\n")).toMatch(/sandman trail append failed/);
 });
 
-test("headless: capture runs and the band reads nothing", async ($, on) => {
+test("headless: neither the band nor the capture runs", async ($, on) => {
   const { reads, runs } = world(on, {
     [`${HOME}/.sandman/shifts/current.json`]: JSON.stringify(SHIFT),
   });
   await start($, false);
   expect(reads).toEqual([]);
-  await submit($, "never do that again", { kind: "sdk" });
-  expect(runs.map((argv) => argv.slice(0, 3))).toEqual([[SANDMAN, "trail", "append"]]);
+  await submit($, "never spawn an unpinned agent", { kind: "sdk" });
+  await submit($, "never spawn an unpinned agent", { kind: "sdk" });
+  expect(runs).toEqual([]);
 });
 
 test("/trail 5 logs the last five trail lines and answers nothing", async ($, on) => {

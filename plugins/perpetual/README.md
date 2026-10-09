@@ -9,7 +9,7 @@ A Claude Code mod that puts the sandman shift in front of the session and trails
   Read every 15 s from `~/.sandman/shifts/current.json` (`shift`, `theme`, `repo`, `handoff_by`) and the last line of
   today's (UTC) trail file `~/.sandman/trail/<yyyy>/<mm>/<dd>.jsonl`. Either may be missing; with neither, the band is left to
   the engine. Interactive sessions only.
-- **Correction capture** — a prompt the person typed (or the driver's prompt under `claude -p`) that matches `^no[,.! ]`,
+- **Correction capture** — a prompt the person typed at the composer (never a `claude -p`, plugin or notification prompt) that matches `^no[,.! ]`,
   `don't`/`dont`, `never`, `stop`, `i said`, `wrong` or `not what i` (case-insensitive) runs
   `sandman trail append --kind correction --rationale <first 200 chars> --ref session:<id>`, plus `--shift $SANDMAN_SHIFT`
   when set. A prompt of three or more tokens whose token set has Jaccard ≥ 0.8 with an earlier prompt of the session is
@@ -25,7 +25,7 @@ claude --plugin-dir <checkout>/plugins/perpetual
 ```
 
 or, where no flag can be given, name the folder in `CLAUDE_CODE_PLUGIN_DIRS` (process environment or the `env` block of
-`~/.claude/settings.json`). An interactive session hot-reloads the folder on save. (verified 2026-10-09 · Claude Code 2.1.296 plugin-authoring reference; `-p` load probed)
+`~/.claude/settings.json`). An interactive session hot-reloads the folder on save. (verified 2026-10-09 · Claude Code 2.1.296 plugin-authoring reference)
 
 ## Checking it
 

@@ -1,0 +1,6 @@
+{
+  "name": "perpetual",
+  "version": "0.1.0",
+  "description": "Shows the sandman shift above the prompt and trails corrections; observes only.",
+  "author": { "name": "jgeschwendt" }
+}

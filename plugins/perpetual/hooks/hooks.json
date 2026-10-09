@@ -1,0 +1,4 @@
+{
+  "description": "perpetual: shift band, correction capture, /shift and /trail",
+  "modules": ["./perpetual.mjs"]
+}

@@ -13,6 +13,7 @@ a link with a real file — merge it into the checkout by hand, then re-link.
 ```
 jgeschwendt/claude
 ├── .mise/tasks/           link and save — `mise tasks` describes them
+├── plugins/               Claude Code mods, each loaded with `--plugin-dir`
 ├── rules/                 house standards for code and docs
 ├── skills/                personal skills, lean and self-contained
 ├── src/                   claude-home crate: statusline, log
@@ -25,6 +26,10 @@ jgeschwendt/claude
 ```
 
 Runtime but load-bearing, in `~/.claude` rather than the repo: `plans/` is what `/execute-plan` runs (newest file wins); `briefs/` holds write-ups meant to brief a future session, never executed.
+
+## Mods
+
+`plugins/perpetual` is a Claude Code mod that only observes and displays: a band above the prompt with the current sandman shift and the trail's latest event, a `sandman trail append --kind correction` for every prompt that reads as a correction or repeats an earlier one, and `/shift` and `/trail [n]`, whose output is a transcript line Claude never reads. No marketplace lists it and `settings.json` does not enable it: load it per session with `claude --plugin-dir <checkout>/plugins/perpetual`, or name that folder in `CLAUDE_CODE_PLUGIN_DIRS`. Its README holds the detail; `claude plugin validate plugins/perpetual --strict` and `claude plugin test plugins/perpetual` check it.
 
 ## The crate
 

@@ -6,7 +6,7 @@
 
 use chrono::Local;
 use claude_home::log;
-use claude_home::statusline::{Environment, Samples, StatusInput, columns, render};
+use claude_home::statusline::{Environment, Samples, StatusInput, columns, persist_window, render};
 use serde_json::Value;
 use std::io::Read;
 
@@ -17,8 +17,9 @@ fn write_log(body: &str) {
     let _ = std::fs::write(log::path("statusline"), format!("[{stamp}] {body}\n"));
 }
 
-/// One render tick. `Err` carries the message that lands in the log.
-fn tick(raw: &str) -> Result<String, String> {
+/// One render tick: the line, plus a window-clock failure worth a log line. `Err` carries the
+/// message that lands in the log.
+fn tick(raw: &str) -> Result<(String, Option<String>), String> {
     let input: StatusInput = serde_json::from_str(raw).map_err(|e| format!("SyntaxError: {e}"))?;
     let env = Environment::from_env();
     let path = env.samples_path(input.session_id.as_deref());
@@ -27,7 +28,8 @@ fn tick(raw: &str) -> Result<String, String> {
     if samples.dirty && let Some(path) = &path {
         samples.write(path);
     }
-    Ok(line)
+    let warning = persist_window(&input, chrono::Utc::now(), &env).err();
+    Ok((line, warning))
 }
 
 fn main() {
@@ -38,13 +40,16 @@ fn main() {
         return;
     }
     match tick(&raw) {
-        Ok(line) => {
+        Ok((line, warning)) => {
             println!("{line}");
             let payload = serde_json::from_str::<Value>(&raw)
                 .ok()
                 .and_then(|json| serde_json::to_string_pretty(&json).ok())
                 .unwrap_or(raw);
             write_log(&payload);
+            if let Some(warning) = warning {
+                log::append("statusline", &warning, None);
+            }
         }
         Err(error) => {
             write_log(&error);

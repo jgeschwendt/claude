@@ -23,6 +23,9 @@
 //! that owns the tty ([`columns`]). Head/tail are measured as plain strings and only then styled —
 //! ANSI escapes never count toward width. The bar absorbs whatever columns remain.
 //!
+//! Window clock: each tick whose payload carries `rate_limits` also persists the five-hour window
+//! to [`Environment::window_file`] for out-of-process readers — see [`persist_window`].
+//!
 //! Debugging: [`crate::log::path`]`("statusline")` receives each tick's payload (overwritten, last
 //! tick wins); an error lands there too and the line simply goes blank for that tick.
 //!
@@ -31,7 +34,7 @@
 //! loosely ([`js_number`]), `x || default` treats `0`/`NaN`/`""` as absent, and string widths are
 //! counted in characters.
 
-use chrono::{DateTime, Local, Timelike};
+use chrono::{DateTime, Local, SecondsFormat, Timelike, Utc};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
@@ -139,6 +142,10 @@ pub struct Environment {
     pub max_output_tokens: Option<String>,
     /// `TMPDIR` without its trailing slash, or `/tmp`.
     pub tmp: String,
+    /// Where [`persist_window`] writes: `CLAUDE_WINDOW_FILE`, else
+    /// `$XDG_STATE_HOME/claude/window.json`, else `~/.local/state/claude/window.json`. `None`
+    /// disables the write.
+    pub window_file: Option<PathBuf>,
 }
 
 impl Environment {
@@ -146,6 +153,13 @@ impl Environment {
     pub fn from_env() -> Self {
         let var = |k: &str| std::env::var(k).ok();
         let tmp = var("TMPDIR").unwrap_or_else(|| "/tmp".into());
+        let set = |k: &str| var(k).filter(|v| !v.is_empty());
+        let window_file = set("CLAUDE_WINDOW_FILE").map(PathBuf::from).or_else(|| {
+            let state = set("XDG_STATE_HOME")
+                .map(PathBuf::from)
+                .or_else(|| set("HOME").map(|home| Path::new(&home).join(".local/state")))?;
+            Some(state.join("claude/window.json"))
+        });
         Self {
             auto_compact_window: var("CLAUDE_CODE_AUTO_COMPACT_WINDOW"),
             disable_auto_compact: var("DISABLE_AUTO_COMPACT"),
@@ -154,6 +168,7 @@ impl Environment {
             home: var("HOME").unwrap_or_default(),
             max_output_tokens: var("CLAUDE_CODE_MAX_OUTPUT_TOKENS"),
             tmp: tmp.strip_suffix('/').unwrap_or(&tmp).to_string(),
+            window_file,
         }
     }
 
@@ -162,6 +177,37 @@ impl Environment {
         let id = session_id.filter(|s| !s.is_empty())?;
         Some(PathBuf::from(format!("{}/claude-statusline-{id}.json", self.tmp)))
     }
+}
+
+// ─── window clock ────────────────────────────────────────────────────────────
+
+/// Persist the five-hour window to [`Environment::window_file`] as
+/// `{"at":…,"five_hour":{"resets_at":…,"used_percentage":…},"session_id":…}` (keys sorted, `at`
+/// RFC 3339 UTC, `resets_at` unix seconds). A payload without `rate_limits` writes nothing, so a
+/// stale file is never clobbered with nulls. Atomic: a sibling temp file renamed into place.
+/// `Err` carries a one-line reason; the caller logs it and the tick carries on.
+pub fn persist_window(input: &StatusInput, now: DateTime<Utc>, env: &Environment) -> Result<(), String> {
+    let (Some(path), Some(limits)) = (&env.window_file, &input.rate_limits) else {
+        return Ok(());
+    };
+    let five = limits.five_hour.as_ref();
+    let body = json!({
+        "at": now.to_rfc3339_opts(SecondsFormat::Secs, true),
+        "five_hour": {
+            "resets_at": five.and_then(|f| f.resets_at).filter(|v| v.is_finite()).map(|v| v as i64),
+            "used_percentage": five.and_then(|f| f.used_percentage).filter(|v| v.is_finite()),
+        },
+        "session_id": input.session_id,
+    });
+    let fail = |e: std::io::Error| format!("window: {}: {e}", path.display());
+    let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    std::fs::create_dir_all(dir).map_err(fail)?;
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let tmp = dir.join(format!(".{name}.{}.tmp", std::process::id()));
+    std::fs::write(&tmp, body.to_string() + "\n").and_then(|()| std::fs::rename(&tmp, path)).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        fail(e)
+    })
 }
 
 // ─── JavaScript semantics ────────────────────────────────────────────────────
@@ -381,10 +427,10 @@ fn auto_compact_window(
     if window_size < 1_000_000.0 && LEGACY_200K_MODELS.contains(&model) {
         return 200_000.0;
     }
-    if cache.get(model).is_none() {
-        if let Some(fallback) = valid_window(surface_value(default_windows().get(model), entrypoint)) {
-            return fallback;
-        }
+    if cache.get(model).is_none()
+        && let Some(fallback) = valid_window(surface_value(default_windows().get(model), entrypoint))
+    {
+        return fallback;
     }
 
     // 5. No override anywhere → the full context window is the auto window (source "auto").
@@ -811,6 +857,28 @@ mod tests {
     }
 
     #[test]
+    fn persists_the_five_hour_window() {
+        let (dir, env) = scratch();
+        let file = dir.join("state/claude/window.json");
+        let env = Environment { window_file: Some(file.clone()), ..env };
+        let input =
+            payload(json!({ "rate_limits": { "five_hour": { "resets_at": 1_757_018_000, "used_percentage": 31.4 } } }));
+
+        render(&input, now(), 80, &mut Samples::default(), &env);
+        persist_window(&input, now().with_timezone(&Utc), &env).unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(&file).unwrap(),
+            concat!(
+                r#"{"at":"2025-09-04T15:33:20Z","#,
+                r#""five_hour":{"resets_at":1757018000,"used_percentage":31.4},"session_id":"s1"}"#,
+                "\n",
+            ),
+        );
+        assert_eq!(std::fs::read_dir(file.parent().unwrap()).unwrap().count(), 1, "temp file left behind");
+    }
+
+    #[test]
     fn rejects_malformed_input() {
         assert!(serde_json::from_str::<StatusInput>("not json").is_err());
         assert!(serde_json::from_str::<StatusInput>("{}").is_err());
@@ -886,6 +954,20 @@ mod tests {
 
         assert!(pct(&out) > pct(&base), "{out}");
         assert_eq!(pct(&out), js_round(50_000.0 / (100_000.0 - 20_000.0 - 13_000.0) * 100.0) as i64);
+    }
+
+    #[test]
+    fn skips_the_window_write_without_rate_limits() {
+        let (dir, env) = scratch();
+        let file = dir.join("window.json");
+        std::fs::write(&file, "stale").unwrap();
+        let env = Environment { window_file: Some(file.clone()), ..env };
+        let input = payload(json!({}));
+
+        render(&input, now(), 80, &mut Samples::default(), &env);
+        persist_window(&input, now().with_timezone(&Utc), &env).unwrap();
+
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "stale");
     }
 
     #[test]

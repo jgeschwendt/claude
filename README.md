@@ -39,7 +39,12 @@ mise run build          # cargo build --release → target/release/{format,statu
 mise run test           # cargo test: unit tests in src/, end-to-end tests in tests/
 ```
 
-Both binaries append to `logs/<name>.log` (gitignored), capped at the last 50 lines.
+Both binaries log to `logs/<name>.log` (gitignored): `format` appends, capped at the last 50 lines;
+`statusline` overwrites it each tick with that tick's payload or error (plus any window-write failure).
+
+Each statusline tick whose payload carries `rate_limits` also writes the five-hour window —
+`{"at","five_hour":{"resets_at","used_percentage"},"session_id"}` — atomically to
+`$XDG_STATE_HOME/claude/window.json` (default `~/.local/state/claude/window.json`; `$CLAUDE_WINDOW_FILE` overrides it).
 
 The format hook runs the _project's own_ formatters over the file just edited: `oxlint --fix` then
 `oxfmt`, each only when its config is on the walk-up path **and** the project pins the binary —

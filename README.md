@@ -29,7 +29,7 @@ Runtime but load-bearing, in `~/.claude` rather than the repo: `plans/` is what 
 
 ## Mods
 
-`plugins/perpetual` is a Claude Code mod that only observes and displays: a band above the prompt with the current sandman shift and the trail's latest event, a `sandman trail append --kind correction` for every prompt that reads as a correction or repeats an earlier one, and `/shift` and `/trail [n]`, whose output is a transcript line Claude never reads. No marketplace lists it and `settings.json` does not enable it: load it per session with `claude --plugin-dir <checkout>/plugins/perpetual`, or name that folder in `CLAUDE_CODE_PLUGIN_DIRS`. Its README holds the detail; `claude plugin validate plugins/perpetual --strict` and `claude plugin test plugins/perpetual` check it.
+`plugins/perpetual` is a Claude Code mod that only observes and displays: a band above the prompt with the current sandman shift and the trail's latest event, a `sandman trail append --kind correction` for every prompt typed at the composer that reads as a correction or repeats an earlier one (never a `claude -p` prompt), and `/shift` and `/trail [n]`, whose output is a transcript line Claude never reads. No marketplace lists it and `settings.json` does not enable it: load it per session with `claude --plugin-dir <checkout>/plugins/perpetual`, or name that folder in `CLAUDE_CODE_PLUGIN_DIRS`. Its README holds the detail; `claude plugin validate plugins/perpetual --strict` and `claude plugin test plugins/perpetual` check it.
 
 ## The crate
 

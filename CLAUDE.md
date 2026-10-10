@@ -33,8 +33,10 @@ Premium models plan and review, never implement the non-trivial: in a Fable (or 
 - "Another pass" escalates and curates—a heavier instrument than the round before, dedup and drop as you go; a pass that only adds is a failed pass; he tracks diminishing returns himself, so never argue the work is finished. (since 2026-08-26)
 - Assume auto-formatting—prioritize logic over style.
 - Assume expert-level context—skip basics, preamble, hedging; lead with the answer or action.
+- Code golf, source and tests alike—100 % coverage is table stakes (end-to-end style, the jlg.io precedent), test code is source code, and a refactor or tighten drives both to the fewest statements, functions, branches and lines that still fulfil the feature set; a change that lowers coverage does not merge. (since 2026-10-09 · "i don't see a difference between source code and test code … code golf should be in the spirit of the refactor/tighten phases")
 - Colocate helpers—a script serving one module or skill lives in that module's directory, never a top-level `shell/` or `scripts/`. (since 2026-07-21 · ~/.claude/shell moved under the dissolve skill)
 - Document only what can't be auto-discovered.
+- jdx tooling first—mise, mr-boxington (mbx), and the rest of jdx's stack over same-job alternatives (Swatinem/rust-cache, sccache); he trusts the author, and one maintainer across the toolchain is worth more than a marginal benchmark. (since 2026-10-09 · "i trust this author more anyway" — mbx replaced rust-cache in jlg.io CI and went global locally)
 - Kill by resolved PID—`lsof -ti :<port>` or `pgrep -x <name>`, inspect, then `kill <pid>`; never `pkill -f <substring>`, which matches every process's full argv. (since 2026-07-29 · a port-number pattern killed a Chrome renderer; a name fragment nearly took a live dev session)
 - Minimize tokens in user-facing prose—code is judged by its own rules.
 - Model backends—local or self-hosted over pay-per-token APIs and over capped free tiers (request caps throttle an agent loop); never spoof Claude Code's identity headers to reuse a subscription token elsewhere. System One judgments use only models listed at systemonemodels.org, never OpenJev; `dowse` (grove/stele/sandman) defaults to hosted TypeSafe, falls back to local Kev when out of tokens or down, and errors when both are down. (since 2026-09-25) (since 2026-07-19; allowlist 2026-09-25)
@@ -48,6 +50,7 @@ Premium models plan and review, never implement the non-trivial: in a Fable (or 
 - Throwaway credentials for new services—propose a generated value or take his through a `!`-prefixed command; never a real account password, which Basic Auth would replay into process lists, transcripts and history. (since 2026-07-19)
 - Use Unicode symbols (typographic), never emojis (decorative).
 - Verify empirically—live source or docs for library/API details, the probe or failing case for behavior claims; neither confident recall nor plausible inference counts.
+- YAML files end in `.yaml`, never `.yml`—workflows, actions, dotfile configs alike; rename on touch. (since 2026-10-09 · "change the .yml extensions to .yaml")
 
 ## Thinking
 

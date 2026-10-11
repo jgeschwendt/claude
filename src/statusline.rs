@@ -183,20 +183,24 @@ impl Environment {
 
 /// Persist the five-hour window to [`Environment::window_file`] as
 /// `{"at":…,"five_hour":{"resets_at":…,"used_percentage":…},"session_id":…}` (keys sorted, `at`
-/// RFC 3339 UTC, `resets_at` unix seconds). A payload without `rate_limits` writes nothing, so a
-/// stale file is never clobbered with nulls. Atomic: a sibling temp file renamed into place.
+/// RFC 3339 UTC, `resets_at` unix seconds). A payload without `rate_limits`, or whose
+/// `five_hour` fields are null or absent, writes nothing, so a stale file is never clobbered
+/// with nulls — readers (`sandman shift clock`) fault on a null `resets_at`. Atomic: a sibling temp file renamed into place.
 /// `Err` carries a one-line reason; the caller logs it and the tick carries on.
 pub fn persist_window(input: &StatusInput, now: DateTime<Utc>, env: &Environment) -> Result<(), String> {
     let (Some(path), Some(limits)) = (&env.window_file, &input.rate_limits) else {
         return Ok(());
     };
     let five = limits.five_hour.as_ref();
+    let (Some(resets_at), Some(used)) = (
+        five.and_then(|f| f.resets_at).filter(|v| v.is_finite()).map(|v| v as i64),
+        five.and_then(|f| f.used_percentage).filter(|v| v.is_finite()),
+    ) else {
+        return Ok(());
+    };
     let body = json!({
         "at": now.to_rfc3339_opts(SecondsFormat::Secs, true),
-        "five_hour": {
-            "resets_at": five.and_then(|f| f.resets_at).filter(|v| v.is_finite()).map(|v| v as i64),
-            "used_percentage": five.and_then(|f| f.used_percentage).filter(|v| v.is_finite()),
-        },
+        "five_hour": { "resets_at": resets_at, "used_percentage": used },
         "session_id": input.session_id,
     });
     let fail = |e: std::io::Error| format!("window: {}: {e}", path.display());
@@ -957,15 +961,19 @@ mod tests {
     }
 
     #[test]
-    fn skips_the_window_write_without_rate_limits() {
+    fn skips_the_window_write_without_a_whole_window() {
         let (dir, env) = scratch();
         let file = dir.join("window.json");
         std::fs::write(&file, "stale").unwrap();
         let env = Environment { window_file: Some(file.clone()), ..env };
-        let input = payload(json!({}));
-
-        render(&input, now(), 80, &mut Samples::default(), &env);
-        persist_window(&input, now().with_timezone(&Utc), &env).unwrap();
+        for input in [
+            payload(json!({})),
+            payload(json!({ "rate_limits": { "five_hour": null } })),
+            payload(json!({ "rate_limits": { "five_hour": { "resets_at": null, "used_percentage": null } } })),
+        ] {
+            render(&input, now(), 80, &mut Samples::default(), &env);
+            persist_window(&input, now().with_timezone(&Utc), &env).unwrap();
+        }
 
         assert_eq!(std::fs::read_to_string(&file).unwrap(), "stale");
     }

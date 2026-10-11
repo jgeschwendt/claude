@@ -37,6 +37,12 @@
             "command": "\"$HOME/.local/bin/thread\" --hook",
             "timeout": 10,
             "statusMessage": "checking threads..."
+          },
+          {
+            "type": "command",
+            "command": "\"$HOME/.local/bin/sandman\" report --hook",
+            "timeout": 10,
+            "statusMessage": "reading the night's reports..."
           }
         ]
       }

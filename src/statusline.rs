@@ -185,7 +185,9 @@ impl Environment {
 /// `{"at":…,"five_hour":{"resets_at":…,"used_percentage":…},"session_id":…}` (keys sorted, `at`
 /// RFC 3339 UTC, `resets_at` unix seconds). A payload without `rate_limits`, or whose
 /// `five_hour` fields are null or absent, writes nothing, so a stale file is never clobbered
-/// with nulls — readers (`sandman shift clock`) fault on a null `resets_at`. Atomic: a sibling temp file renamed into place.
+/// with nulls — readers (`sandman shift clock`) fault on a null `resets_at`. Monotone: a window
+/// already past, or one behind the file's (an earlier `resets_at`, or less used of the same one),
+/// writes nothing, so an idle session re-rendering stale limits never rolls the clock back. Atomic: a sibling temp file renamed into place.
 /// `Err` carries a one-line reason; the caller logs it and the tick carries on.
 pub fn persist_window(input: &StatusInput, now: DateTime<Utc>, env: &Environment) -> Result<(), String> {
     let (Some(path), Some(limits)) = (&env.window_file, &input.rate_limits) else {
@@ -198,6 +200,13 @@ pub fn persist_window(input: &StatusInput, now: DateTime<Utc>, env: &Environment
     ) else {
         return Ok(());
     };
+    let prior = std::fs::read_to_string(path).ok().and_then(|text| serde_json::from_str::<Value>(&text).ok());
+    let prior = prior.as_ref().and_then(|v| {
+        Some((v.pointer("/five_hour/resets_at")?.as_i64()?, v.pointer("/five_hour/used_percentage")?.as_f64()?))
+    });
+    if resets_at <= now.timestamp() || prior.is_some_and(|prior| prior > (resets_at, used)) {
+        return Ok(());
+    }
     let body = json!({
         "at": now.to_rfc3339_opts(SecondsFormat::Secs, true),
         "five_hour": { "resets_at": resets_at, "used_percentage": used },
@@ -576,8 +585,9 @@ fn eta_to_compact(
         return String::new();
     }
     let eta = (threshold - tokens) / rate;
-    // An idle session's rate decays toward 0 and the ETA toward nonsense — hide beyond 6h.
-    if eta < 6.0 * 3600.0 { format!("≈{}", dur(eta)) } else { String::new() }
+    // Past the threshold there is nothing to project; an idle session's rate decays toward 0 and
+    // the ETA toward nonsense — hide beyond 6h.
+    if eta > 0.0 && eta < 6.0 * 3600.0 { format!("≈{}", dur(eta)) } else { String::new() }
 }
 
 // ─── terminal ────────────────────────────────────────────────────────────────
@@ -880,6 +890,38 @@ mod tests {
             ),
         );
         assert_eq!(std::fs::read_dir(file.parent().unwrap()).unwrap().count(), 1, "temp file left behind");
+    }
+
+    #[test]
+    fn never_rolls_the_window_back() {
+        let (dir, env) = scratch();
+        let file = dir.join("window.json");
+        let env = Environment { window_file: Some(file.clone()), ..env };
+        let at = now().with_timezone(&Utc);
+        let write = |resets_at: i64, used: f64| {
+            let input = payload(json!({ "rate_limits": { "five_hour": { "resets_at": resets_at, "used_percentage": used } } }));
+            persist_window(&input, at, &env).unwrap();
+            std::fs::read_to_string(&file).ok().map(|text| serde_json::from_str::<Value>(&text).unwrap()["five_hour"].clone())
+        };
+
+        assert_eq!(write(1_756_999_000, 10.0), None, "a window already past was written");
+        assert_eq!(write(1_757_018_000, 92.0), Some(json!({ "resets_at": 1_757_018_000, "used_percentage": 92.0 })));
+        for (resets_at, used) in [(1_757_018_000, 40.0), (1_757_010_000, 99.0)] {
+            assert_eq!(write(resets_at, used).unwrap()["used_percentage"], 92.0, "rolled back by {resets_at}/{used}");
+        }
+        assert_eq!(write(1_757_036_000, 3.0).unwrap()["used_percentage"], 3.0);
+    }
+
+    #[test]
+    fn hides_the_eta_past_the_threshold() {
+        let (_dir, env) = scratch();
+        let mut samples =
+            Samples { dirty: false, samples: vec![Sample { at: now().timestamp_millis() - 120_000, tokens: 150_000.0 }] };
+        let input = payload(json!({ "context_window": { "context_window_size": 200_000, "total_input_tokens": 170_000 } }));
+
+        let out = render(&input, now(), 80, &mut samples, &env);
+
+        assert!(!out.contains('≈'), "{out}");
     }
 
     #[test]

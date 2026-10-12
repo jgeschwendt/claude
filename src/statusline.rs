@@ -203,7 +203,7 @@ pub fn persist_window(input: &StatusInput, now: DateTime<Utc>, env: &Environment
     let prior = std::fs::read_to_string(path).ok().and_then(|text| serde_json::from_str::<Value>(&text).ok());
     // The reader's bound: a live window resets within 6h. Outside it a payload is never written and
     // a stored window never blocks one, so a corrupt file heals on the next good tick.
-    let live = |resets_at: i64| (1..=6 * 3600).contains(&(resets_at - now.timestamp()));
+    let live = |resets_at: i64| (1..=6 * 3600).contains(&resets_at.saturating_sub(now.timestamp()));
     let prior = prior.as_ref().and_then(|v| {
         Some((v.pointer("/five_hour/resets_at")?.as_i64()?, v.pointer("/five_hour/used_percentage")?.as_f64()?))
     });

@@ -186,7 +186,7 @@ impl Environment {
 /// RFC 3339 UTC, `resets_at` unix seconds). A payload without `rate_limits`, or whose
 /// `five_hour` fields are null or absent, writes nothing, so a stale file is never clobbered
 /// with nulls — readers (`sandman shift clock`) fault on a null `resets_at`. Monotone: a window
-/// already past, or one behind the file's (an earlier `resets_at`, or less used of the same one),
+/// not resetting within 6h, or one behind the file's live window (an earlier `resets_at`, or less used of the same one),
 /// writes nothing, so an idle session re-rendering stale limits never rolls the clock back. Atomic: a sibling temp file renamed into place.
 /// `Err` carries a one-line reason; the caller logs it and the tick carries on.
 pub fn persist_window(input: &StatusInput, now: DateTime<Utc>, env: &Environment) -> Result<(), String> {
@@ -201,10 +201,13 @@ pub fn persist_window(input: &StatusInput, now: DateTime<Utc>, env: &Environment
         return Ok(());
     };
     let prior = std::fs::read_to_string(path).ok().and_then(|text| serde_json::from_str::<Value>(&text).ok());
+    // The reader's bound: a live window resets within 6h. Outside it a payload is never written and
+    // a stored window never blocks one, so a corrupt file heals on the next good tick.
+    let live = |resets_at: i64| (1..=6 * 3600).contains(&(resets_at - now.timestamp()));
     let prior = prior.as_ref().and_then(|v| {
         Some((v.pointer("/five_hour/resets_at")?.as_i64()?, v.pointer("/five_hour/used_percentage")?.as_f64()?))
     });
-    if resets_at <= now.timestamp() || prior.is_some_and(|prior| prior > (resets_at, used)) {
+    if !live(resets_at) || prior.is_some_and(|prior| live(prior.0) && prior > (resets_at, used)) {
         return Ok(());
     }
     let body = json!({
@@ -905,11 +908,13 @@ mod tests {
         };
 
         assert_eq!(write(1_756_999_000, 10.0), None, "a window already past was written");
+        assert_eq!(write(1_791_773_097_000, 10.0), None, "a millisecond resets_at was written");
+        std::fs::write(&file, r#"{"five_hour":{"resets_at":4102444800,"used_percentage":99.0}}"#).unwrap();
         assert_eq!(write(1_757_018_000, 92.0), Some(json!({ "resets_at": 1_757_018_000, "used_percentage": 92.0 })));
         for (resets_at, used) in [(1_757_018_000, 40.0), (1_757_010_000, 99.0)] {
             assert_eq!(write(resets_at, used).unwrap()["used_percentage"], 92.0, "rolled back by {resets_at}/{used}");
         }
-        assert_eq!(write(1_757_036_000, 3.0).unwrap()["used_percentage"], 3.0);
+        assert_eq!(write(1_757_020_000, 3.0).unwrap()["used_percentage"], 3.0);
     }
 
     #[test]

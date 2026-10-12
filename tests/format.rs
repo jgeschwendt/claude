@@ -344,6 +344,47 @@ fn concurrent_hooks_keep_every_log_line() {
 }
 
 #[test]
+fn walks_a_missing_directory_lexically() {
+    let home = Home::new("missing-dir");
+    let project = home.project();
+    write(&project.join(".prettierrc"), "{}");
+
+    assert!(home.run(&edit(&project.join("gone/probe.json"))).status.success());
+
+    assert_eq!(home.log_lines().len(), 1, "{:?}", home.log_lines());
+    cleanup(home);
+}
+
+#[test]
+fn a_log_it_cannot_lock_or_open_never_fails_the_hook() {
+    let home = Home::new("log-faults");
+    let project = home.project();
+    let probe = project.join("probe.json");
+    write(&project.join(".prettierrc"), "{}");
+    write(&probe, UNFORMATTED);
+    // Invalid UTF-8 is carried, not fatal.
+    fs::create_dir_all(home.log_path().parent().unwrap()).unwrap();
+    fs::write(home.log_path(), b"\xff\n").unwrap();
+    assert!(home.run(&edit(&probe)).status.success());
+    assert_eq!(home.log_lines().len(), 2, "{:?}", home.log_lines());
+
+    // A held lock drops the line after its deadline.
+    let held = fs::File::open(home.log_path()).unwrap();
+    held.lock().unwrap();
+    assert!(home.run(&edit(&probe)).status.success());
+    drop(held);
+    assert_eq!(home.log_lines().len(), 2, "{:?}", home.log_lines());
+
+    // An unopenable log drops the line.
+    fs::remove_file(home.log_path()).unwrap();
+    fs::set_permissions(home.log_path().parent().unwrap(), fs::Permissions::from_mode(0o500)).unwrap();
+    assert!(home.run(&edit(&probe)).status.success());
+    assert!(!home.log_path().exists());
+    fs::set_permissions(home.log_path().parent().unwrap(), fs::Permissions::from_mode(0o700)).unwrap();
+    cleanup(home);
+}
+
+#[test]
 fn caps_the_log_at_50_lines() {
     let home = Home::new("cap");
     let project = home.project();

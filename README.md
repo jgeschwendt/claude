@@ -45,6 +45,8 @@ Both binaries log to `logs/<name>.log` (gitignored): `format` appends, capped at
 Each statusline tick whose payload carries `rate_limits` also writes the five-hour window —
 `{"at","five_hour":{"resets_at","used_percentage"},"session_id"}` — atomically to
 `$XDG_STATE_HOME/claude/window.json` (default `~/.local/state/claude/window.json`; `$CLAUDE_WINDOW_FILE` overrides it).
+The write is monotone: a window not resetting within 6h, or behind the stored live one (an earlier
+`resets_at`, or less used of the same), writes nothing — an idle session never rolls the clock back.
 
 The format hook runs the _project's own_ formatters over the file just edited: `oxlint --fix` then
 `oxfmt`, each only when its config is on the walk-up path **and** the project pins the binary —

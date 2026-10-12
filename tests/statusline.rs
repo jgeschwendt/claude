@@ -76,18 +76,19 @@ fn renders_one_line_and_exits_zero() {
 #[test]
 fn persists_the_window_clock_when_the_payload_carries_rate_limits() {
     let dir = scratch();
-    let payload = r#"{
+    let resets_at = chrono::Utc::now().timestamp() + 3600;
+    let payload = serde_json::json!({
         "model": { "display_name": "Fable 5.1" },
-        "rate_limits": { "five_hour": { "resets_at": 4102444800, "used_percentage": 31.4 } },
+        "rate_limits": { "five_hour": { "resets_at": resets_at, "used_percentage": 31.4 } },
         "session_id": "it-2"
-    }"#;
+    });
 
-    let (code, _) = run(&dir, payload);
+    let (code, _) = run(&dir, &payload.to_string());
 
     assert_eq!(code, 0);
     let window: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(dir.join("state/window.json")).unwrap()).unwrap();
-    assert_eq!(window["five_hour"], serde_json::json!({ "resets_at": 4102444800_i64, "used_percentage": 31.4 }));
+    assert_eq!(window["five_hour"], serde_json::json!({ "resets_at": resets_at, "used_percentage": 31.4 }));
     assert_eq!(window["session_id"], "it-2");
     assert!(chrono::DateTime::parse_from_rfc3339(window["at"].as_str().unwrap()).is_ok(), "{window}");
     let _ = std::fs::remove_dir_all(&dir);

@@ -1,0 +1,46 @@
+{
+  "adrs": {},
+  "landmarks": {
+    "link-never-overwrites": {
+      "file": ".mise/tasks/link",
+      "line": 33,
+      "node": "/"
+    }
+  },
+  "nodes": {
+    "/": {
+      "budget": null,
+      "claims": [
+        {
+          "anchor": "※ link-never-overwrites",
+          "enforced_by": null,
+          "id": "link-never-overwrites",
+          "kind": "invariant",
+          "resolved": ".mise/tasks/link:33",
+          "text": "link never overwrites — an entry in ~/.claude that is a real file or a foreign link is reported `drift` and left alone; only missing entries are linked",
+          "verified": {
+            "digest": null,
+            "sha": "c73798058c20c7af129f8bb5aadbf7dbedfa06f1"
+          }
+        }
+      ],
+      "commands": {
+        "lint": "cargo clippy --all-targets -- -D warnings",
+        "test": "cargo test"
+      },
+      "contains": [],
+      "declared": {
+        "allow": [],
+        "decided_by": [],
+        "depends": []
+      },
+      "extracted": {
+        "imports": []
+      },
+      "id": "/",
+      "kind": "system",
+      "purpose": "Claude Code harness — global config, rules and skills, plus the Rust statusline and PostToolUse format hook; `mise run link` symlinks each entry into ~/.claude."
+    }
+  },
+  "version": 2
+}

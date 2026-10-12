@@ -30,7 +30,7 @@ for entry in "${entries[@]}"; do
 	dest="$home/$entry"
 	if [[ -L "$dest" && "$(readlink "$dest")" == "$repo/$entry" ]]; then
 		echo "ok: $entry"
-	elif [[ -e "$dest" || -L "$dest" ]]; then
+	elif [[ -e "$dest" || -L "$dest" ]]; then # ※ link-never-overwrites
 		echo "drift: $entry"
 		status=1
 	elif ((check)); then

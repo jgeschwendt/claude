@@ -1,5 +1,6 @@
 [tools]
 bun = "1.4.2"
+hk = "2.5.0"
 "npm:oxfmt" = "0.67.0"
 "npm:oxlint" = "1.82.0"
 rust = "1.97.1"

@@ -179,6 +179,10 @@ pub fn run(input: &str) {
         Some(dir) if !dir.as_os_str().is_empty() => dir,
         _ => Path::new("."),
     };
+    // Walk the real directory: an edit through a symlink (`~/.claude/skills`) still finds the
+    // configs and binaries of the tree it lands in.
+    let real = fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+    let dir = real.as_path();
 
     match detect(dir) {
         Decision::None => {}

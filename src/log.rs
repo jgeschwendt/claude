@@ -1,6 +1,7 @@
 //! Append-only run logs under `~/.claude/logs/`, one file per binary.
 
 use std::fs;
+use std::io::{Read, Seek, Write};
 use std::path::PathBuf;
 
 /// `~/.claude/logs/<name>.log`, creating the directory on first use.
@@ -11,23 +12,22 @@ pub fn path(name: &str) -> PathBuf {
     dir.join(format!("{name}.log"))
 }
 
-/// Append `[<ISO-8601 UTC>] <line>`; when `keep` is set, retain only the last `keep` lines.
+/// Append `[<ISO-8601 UTC>] <line>`; when `keep` is set, retain only the last `keep` lines. The
+/// rewrite holds an exclusive lock on the log, so concurrent hooks neither drop lines nor read a
+/// half-truncated file.
 pub fn append(name: &str, line: &str, keep: Option<usize>) {
-    let path = path(name);
     let stamp = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let entry = format!("[{stamp}] {line}");
-    let body = match keep {
-        Some(n) => {
-            let prev = fs::read_to_string(&path).unwrap_or_default();
-            let mut lines: Vec<&str> = prev.lines().filter(|l| !l.is_empty()).collect();
-            lines.push(&entry);
-            let start = lines.len().saturating_sub(n);
-            lines[start..].join("\n") + "\n"
-        }
-        None => {
-            let prev = fs::read_to_string(&path).unwrap_or_default();
-            prev + &entry + "\n"
-        }
-    };
-    let _ = fs::write(&path, body);
+    let _ = (|| -> std::io::Result<()> {
+        let mut file = fs::OpenOptions::new().read(true).write(true).create(true).truncate(false).open(path(name))?;
+        file.lock()?;
+        let mut prev = String::new();
+        file.read_to_string(&mut prev)?;
+        let mut lines: Vec<&str> = prev.lines().filter(|l| !l.is_empty()).collect();
+        lines.push(&entry);
+        let start = lines.len().saturating_sub(keep.unwrap_or(usize::MAX));
+        file.set_len(0)?;
+        file.rewind()?;
+        file.write_all((lines[start..].join("\n") + "\n").as_bytes())
+    })();
 }

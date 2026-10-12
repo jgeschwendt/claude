@@ -28,7 +28,8 @@ impl Home {
         let dir = std::env::temp_dir()
             .join(format!("claude-format-it-{tag}-{}-{nanos}-{n}", std::process::id()));
         fs::create_dir_all(dir.join("project")).unwrap();
-        Self { dir }
+        // The hook walks real paths; a symlinked temp dir (/tmp → /private/tmp) would skew asserts.
+        Self { dir: fs::canonicalize(dir).unwrap() }
     }
 
     /// The project root the fake edits happen in.
@@ -305,6 +306,40 @@ fn records_a_nonzero_exit_code() {
     let log = home.log_lines();
     assert_eq!(log.len(), 1, "{log:?}");
     assert!(log[0].ends_with(&format!("oxlint exit=3 {}", probe.display())), "{log:?}");
+    cleanup(home);
+}
+
+#[test]
+fn finds_the_config_through_a_symlinked_directory() {
+    let home = Home::new("symlink");
+    let project = home.project();
+    write(&project.join(".oxfmtrc.json"), "{}");
+    write(&project.join("skills/probe.json"), UNFORMATTED);
+    fake_bin(&project, "oxfmt", &home.calls(), 0);
+    let link = home.dir.join("link");
+    std::os::unix::fs::symlink(project.join("skills"), &link).unwrap();
+
+    assert!(home.run(&edit(&link.join("probe.json"))).status.success());
+
+    assert_eq!(home.call_lines().len(), 1, "{:?}", home.log_lines());
+    cleanup(home);
+}
+
+#[test]
+fn concurrent_hooks_keep_every_log_line() {
+    let home = Home::new("concurrent");
+    let project = home.project();
+    let probe = project.join("probe.json");
+    write(&project.join(".prettierrc"), "{}");
+    write(&probe, UNFORMATTED);
+
+    std::thread::scope(|scope| {
+        for _ in 0..16 {
+            scope.spawn(|| assert!(home.run(&edit(&probe)).status.success()));
+        }
+    });
+
+    assert_eq!(home.log_lines().len(), 16, "{:?}", home.log_lines());
     cleanup(home);
 }
 

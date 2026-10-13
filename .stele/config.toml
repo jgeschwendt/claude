@@ -1,5 +1,6 @@
 [exhaustiveness]
-# `.claude` is Claude Code's per-project runtime state, `target` cargo output.
+# `.claude` is Claude Code's per-project runtime state, `.github` CI wiring,
+# `target` cargo output.
 # `.mise`, `rules`, `skills`, `src`, `tests` are routed by the root Map table
 # alone until each gets its own AGENTS.md node — drop them from this list then.
-exclude = [".claude", ".mise", "rules", "skills", "src", "target", "tests"]
+exclude = [".claude", ".github", ".mise", "rules", "skills", "src", "target", "tests"]

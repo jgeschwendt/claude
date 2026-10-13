@@ -309,7 +309,7 @@ gh api notifications --jq '.[] | {reason, title: .subject.title, repo: .reposito
 **Stay read-only by default.** Every write to GitHub — merging, commenting,
 approving, resolving threads, closing, and any other mutation (labels,
 assignees, titles, re-requests) — requires an explicit user instruction. When
-asked: `gh pr merge <url> --squash`, `gh pr comment <url> --body "..."`,
+asked: `gh pr merge <url> --rebase`, `gh pr comment <url> --body "..."`,
 `gh pr review <url> --approve`, and the `resolveReviewThread` mutation (see
 `references/review-data-guide.md`).
 

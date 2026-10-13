@@ -1,0 +1,25 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  merge_group:
+
+# `check` is the required status check on main (ruleset `main`); renaming the
+# job renames the check and stalls every PR and the merge queue.
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        # Full history: stele freshness walks verified.sha..HEAD.
+        with:
+          fetch-depth: 0
+      - uses: jdx/mise-action@v2
+      - run: mise run test
+      # stele graph gate (check → emit --check). NEVER `stele build` in CI: it is
+      # the sole writer of .stele/graph.lock and would launder a stale lock green.
+      - run: curl -fsSL https://raw.githubusercontent.com/jgeschwendt/stele/main/scripts/install.sh | bash -s v0.3.0
+      - run: ~/.local/bin/stele check
+      - run: ~/.local/bin/stele emit --check

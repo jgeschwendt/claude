@@ -15,7 +15,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const UNFORMATTED: &str = "{\"a\":1,\n\"b\":[1,2]}";
 
-/// A throwaway `$HOME` with a `project/` subdirectory; dropped by [`cleanup`].
+/// A throwaway `$HOME` with a trusted `.grove/code/project/` subdirectory; dropped by [`cleanup`].
 struct Home {
     dir: PathBuf,
 }
@@ -27,14 +27,14 @@ impl Home {
         let n = N.fetch_add(1, Ordering::Relaxed);
         let dir = std::env::temp_dir()
             .join(format!("claude-format-it-{tag}-{}-{nanos}-{n}", std::process::id()));
-        fs::create_dir_all(dir.join("project")).unwrap();
+        fs::create_dir_all(dir.join(".grove/code/project")).unwrap();
         // The hook walks real paths; a symlinked temp dir (/tmp → /private/tmp) would skew asserts.
         Self { dir: fs::canonicalize(dir).unwrap() }
     }
 
     /// The project root the fake edits happen in.
     fn project(&self) -> PathBuf {
-        self.dir.join("project")
+        self.dir.join(".grove/code/project")
     }
 
     /// Where the fake binaries record their invocations.
@@ -463,5 +463,24 @@ fn mise_without_a_pin_means_skip() {
     assert!(out.status.success());
     assert_eq!(fs::read_to_string(&probe).unwrap(), UNFORMATTED);
     assert!(home.log_lines().last().unwrap().ends_with(&format!("no local oxfmt for {}", probe.display())));
+    cleanup(home);
+}
+
+#[test]
+fn never_runs_anything_outside_the_trusted_root() {
+    let home = Home::new("untrusted");
+    let planted = home.dir.join("download");
+    write(&planted.join(".oxlintrc.json"), "{}");
+    write(&planted.join("probe.json"), UNFORMATTED);
+    fake_bin(&planted, "oxlint", &home.calls(), 0);
+    fake_mise(&home);
+    fake_mise_bin(&home, "oxlint", 0);
+
+    // the second climbs out of the root lexically, into a directory that does not exist
+    for probe in [planted.join("probe.json"), home.project().join("../../../download/missing/probe.json")] {
+        assert!(home.run(&edit(&probe)).status.success());
+        assert!(home.log_lines().last().unwrap().ends_with(&format!("no local oxlint for {}", probe.display())));
+    }
+    assert!(home.call_lines().is_empty(), "{:?}", home.call_lines());
     cleanup(home);
 }

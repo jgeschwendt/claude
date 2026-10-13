@@ -7,10 +7,13 @@
 //!    `prettier` key — means the hook does nothing but log the skip. Such a project is assumed to
 //!    run Prettier through its own tooling. This wins even over an [`OXFMT`] config found closer
 //!    to the file.
-//! 2. **Project-pinned binaries only.** `oxfmt` and `oxlint` resolve to the nearest
-//!    `node_modules/.bin/<tool>` on the same walk-up, else to what `mise which <tool>` answers from
-//!    the file's directory — a project's `mise.toml` pin (`"npm:oxfmt" = "…"`). There is no PATH,
-//!    `bunx`, or global-install fallback: a config with no project binary is skipped and logged.
+//! 2. **Project-pinned binaries only, owner checkouts only.** The hook runs outside the Bash
+//!    sandbox, so it executes nothing for a file outside [`TRUSTED`]: there, any `node_modules`
+//!    is someone else's code, and mise honours an untrusted tree's tool pins (`path:` included).
+//!    Inside it, `oxfmt` and `oxlint` resolve to the nearest `node_modules/.bin/<tool>` on the
+//!    same walk-up, else to what `mise which <tool>` answers from the file's directory — a
+//!    project's `mise.toml` pin (`"npm:oxfmt" = "…"`). There is no PATH, `bunx`, or
+//!    global-install fallback: a config with no project binary is skipped and logged.
 //! 3. **oxlint first, then oxfmt.** Linting with `--fix` can rewrite the file, so formatting runs
 //!    after it. Each tool runs only when both its config and its local binary are present.
 //!
@@ -48,6 +51,9 @@ pub const PRETTIER: &[&str] = &[
     "prettier.config.mts",
     "prettier.config.ts",
 ];
+
+/// The owner's checkouts under `$HOME`: the only trees the hook runs a binary for.
+pub const TRUSTED: &str = ".grove/code";
 
 /// Log file name under `~/.claude/logs/`, and the number of lines kept there.
 const LOG: (&str, usize) = ("format", 50);
@@ -100,15 +106,19 @@ pub fn detect(from: &Path) -> Decision {
     if oxfmt || oxlint { Decision::Ox { oxfmt, oxlint } } else { Decision::None }
 }
 
-/// The project's `tool`: [`resolve_local`], else [`resolve_mise`]. Never falls back to PATH.
+/// The project's `tool` when the real `from` lies under the real [`TRUSTED`] root:
+/// [`resolve_local`], else [`resolve_mise`]. Never falls back to PATH.
 pub fn resolve(from: &Path, tool: &str) -> Option<PathBuf> {
-    resolve_local(from, tool).or_else(|| resolve_mise(from, tool))
+    let root = fs::canonicalize(Path::new(&std::env::var_os("HOME")?).join(TRUSTED)).ok()?;
+    // real, not lexical: `<root>/../..` starts_with the root while naming a tree outside it
+    let from = fs::canonicalize(from).ok().filter(|from| from.starts_with(&root))?;
+    resolve_local(&root, &from, tool).or_else(|| resolve_mise(&from, tool))
 }
 
-/// The nearest `node_modules/.bin/<tool>` walking up from `from`.
-pub fn resolve_local(from: &Path, tool: &str) -> Option<PathBuf> {
+/// The nearest `node_modules/.bin/<tool>` walking up from `from`, never leaving `root`.
+pub fn resolve_local(root: &Path, from: &Path, tool: &str) -> Option<PathBuf> {
     from.ancestors()
-        .filter(|dir| !dir.as_os_str().is_empty())
+        .take_while(|dir| dir.starts_with(root))
         .map(|dir| dir.join("node_modules").join(".bin").join(tool))
         .find(|bin| bin.exists())
 }
@@ -303,16 +313,17 @@ mod tests {
         let dir = tmpdir("resolve");
         let nested = dir.join("packages/app");
         fs::create_dir_all(&nested).unwrap();
-        assert_eq!(resolve_local(&nested, "oxfmt"), None);
+        assert_eq!(resolve_local(&dir, &nested, "oxfmt"), None);
 
         let outer = dir.join("node_modules/.bin/oxfmt");
         write(&outer, "");
-        assert_eq!(resolve_local(&nested, "oxfmt"), Some(outer));
+        assert_eq!(resolve_local(&dir, &nested, "oxfmt"), Some(outer));
+        assert_eq!(resolve_local(&nested, &nested, "oxfmt"), None, "walked above its root");
 
         let inner = nested.join("node_modules/.bin/oxfmt");
         write(&inner, "");
-        assert_eq!(resolve_local(&nested, "oxfmt"), Some(inner));
-        assert_eq!(resolve_local(&nested, "oxlint"), None);
+        assert_eq!(resolve_local(&dir, &nested, "oxfmt"), Some(inner));
+        assert_eq!(resolve_local(&dir, &nested, "oxlint"), None);
         fs::remove_dir_all(&dir).unwrap();
     }
 

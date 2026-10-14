@@ -22,7 +22,7 @@ jgeschwendt/claude
 ├── Cargo.toml             the crate manifest
 ├── CLAUDE.md              global instructions: golden rule, house rules, memory contract
 ├── mise.toml              toolchain pins (rust, bun) and the build/test tasks
-├── settings.json          harness config — hook wiring, permissions
+├── settings.json          harness config — permissions, enabled plugins (the perpetual mod), statusline
 └── settings.local.json    output-style override
 ```
 
@@ -30,14 +30,14 @@ Runtime but load-bearing, in `~/.claude` rather than the repo: `plans/` is what 
 
 ## Mods
 
-`plugins/perpetual` is the harness's mod: it runs sandman's and docket's session hooks, denies the commands the house rules forbid, writes the five-hour window clock and draws the shift band; its README holds the detail. The repo is a local marketplace, installed once per machine:
+`plugins/perpetual` is the harness's mod, and `settings.json` wires no hooks of its own: the mod runs sandman's and docket's session hooks, denies the commands the house rules forbid, writes the five-hour window clock and draws the shift band; its README holds the detail. The repo is a local marketplace, installed once per machine:
 
 ```sh
 claude plugin marketplace add ~/.grove/code/jgeschwendt/claude/main
 claude plugin install perpetual@jgeschwendt
 ```
 
-A local marketplace is read in place, so a trunk edit to the mod is live from the next session. `claude plugin validate plugins/perpetual --strict` and `claude plugin test plugins/perpetual` check it.
+`settings.json` enables it (`enabledPlugins`). A local marketplace is read in place, so a trunk edit to the mod is live from the next session. `claude plugin validate plugins/perpetual --strict` and `claude plugin test plugins/perpetual` check it.
 
 ## The crate
 

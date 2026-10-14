@@ -29,7 +29,7 @@ wants should not wait on the dream pass to rediscover it.
 
 ## 2. Do NOT take by hand before exiting
 
-The SessionEnd hook already runs `sandman take --hook` (`~/.claude/settings.json`), so an
+The SessionEnd hook already runs `sandman take --hook` (the perpetual mod, `plugins/perpetual`), so an
 interactive session is taken simply by exiting — and an explicit take **before** exit is
 harmful. Claude Code's exit flush re-creates `<sid>.jsonl`, the hook takes that live
 fragment, and `.recent/<sid>.json` is overwritten to name a stub while the real

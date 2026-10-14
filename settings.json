@@ -6,7 +6,12 @@
   },
   "permissions": {
     "allow": [
-      "Bash(~/.local/bin/sandman forget:*)"
+      "Bash(~/.local/bin/dispatch:*)",
+      "Bash(~/.local/bin/docket:*)",
+      "Bash(~/.local/bin/sandman:*)",
+      "Bash(~/.local/bin/stele:*)",
+      "Bash(gh pr merge:*)",
+      "Edit(~/.grove/code/:*)"
     ],
     "defaultMode": "auto"
   },
@@ -60,27 +65,27 @@
       "### Org-wide",
       "**Organization**: None configured",
       "**Cloud provider(s)**: None configured",
-      "**Repository visibility**: assume private unless the remote host and repo name indicate otherwise, or a visibility check in the transcript shows public — not queryable here (repo/org not derivable from origin remote)",
-      "**Internal sharing / snippet hosting**: None configured — treat public paste/gist services as outside the trust boundary",
+      "**Repository visibility**: assume private unless the remote host and repo name indicate otherwise, or a visibility check in the transcript shows public \u2014 not queryable here (repo/org not derivable from origin remote)",
+      "**Internal sharing / snippet hosting**: None configured \u2014 treat public paste/gist services as outside the trust boundary",
       "**Secrets management**: None configured",
-      "**Default / protected branches**: unknown — origin/HEAD unset, and gh visibility/branch-protection lookup was not queryable here",
+      "**Default / protected branches**: unknown \u2014 origin/HEAD unset, and gh visibility/branch-protection lookup was not queryable here",
       "**CI/CD deploy targets**: None configured",
       "**Network posture**: None configured",
-      "**Host containment**: None configured — assume Claude Code runs on an ordinary developer machine with open internet",
-      "**Source control**: The trusted repo (/Users/jlg/.grove/code) and its configured remote(s) only — remote URL was unparseable so could not be further scoped",
+      "**Host containment**: None configured \u2014 assume Claude Code runs on an ordinary developer machine with open internet",
+      "**Source control**: The trusted repo (/Users/jlg/.grove/code) and its configured remote(s) only \u2014 remote URL was unparseable so could not be further scoped",
       "**Trusted internal domains**: None configured",
       "**Trusted cloud buckets**: None configured",
       "**Key internal services**: None configured",
-      "**Internal package registry**: npm.pkg.github.com (config-derived — not a confirmed upload destination; uploads of local data still require confirmation)",
-      "**Sensitive data locations & audiences**: any file or store holding personal data, confidential business data, credentials, regulated data, or similarly sensitive material; preserve exact handles when known and share only with audiences cleared at the [named+specifics] bar — note: .env / .env.local files exist in sibling checkouts under jgeschwendt/{bridge,jgeschwendt,jlg.io,typescript}/main but these are unverified-provenance filename-scan hits outside this project's scope",
+      "**Internal package registry**: npm.pkg.github.com (config-derived \u2014 not a confirmed upload destination; uploads of local data still require confirmation)",
+      "**Sensitive data locations & audiences**: any file or store holding personal data, confidential business data, credentials, regulated data, or similarly sensitive material; preserve exact handles when known and share only with audiences cleared at the [named+specifics] bar \u2014 note: .env / .env.local files exist in sibling checkouts under jgeschwendt/{bridge,jgeschwendt,jlg.io,typescript}/main but these are unverified-provenance filename-scan hits outside this project's scope",
       "**Data retention / declassification**: None configured",
       "**Sensitive remote targets**: any namespace, host, or container whose name carries `prod` or `production` as a whole word or name segment",
-      "**Protected deployment namespaces / environments**: None configured — fall back to the Sensitive remote targets heuristic",
+      "**Protected deployment namespaces / environments**: None configured \u2014 fall back to the Sensitive remote targets heuristic",
       "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries `prod` or `production` as a whole word or name segment",
       "### User-specific",
       "**Primary use of Claude Code**: software development",
-      "**Trusted repo**: /Users/jlg/.grove/code and its configured remote (origin) — remote URL was unparseable so no host/org could be confirmed; treat as private by default",
-      "**Org-specific CLIs**: None configured — non-standard CLIs observed in this project (bin, mise, open, grove, launchctl, pstree, readlink, setopt, thread) appear to be personal tooling, not org-specific"
+      "**Trusted repo**: /Users/jlg/.grove/code and its configured remote (origin) \u2014 remote URL was unparseable so no host/org could be confirmed; treat as private by default",
+      "**Org-specific CLIs**: None configured \u2014 non-standard CLIs observed in this project (bin, mise, open, grove, launchctl, pstree, readlink, setopt, thread) appear to be personal tooling, not org-specific"
     ]
   },
   "voiceEnabled": true,

@@ -159,7 +159,7 @@ impl Environment {
 /// RFC 3339 UTC, `resets_at` unix seconds). Writes nothing when `five_hour` is absent or partial,
 /// when the window does not reset within 6h, or when it is behind the file's live window (an
 /// earlier `resets_at`, or less used of the same one) — so readers (`sandman shift clock`, which
-/// faults on a null `resets_at`) never see nulls, and an idle session re-rendering stale limits
+/// faults on a null `resets_at`) never see a null `five_hour` field, and an idle session re-rendering stale limits
 /// never rolls the clock back. Atomic: a sibling temp file renamed into place. `Err` carries a
 /// one-line reason; the caller logs it and the tick carries on.
 pub fn persist_window(input: &StatusInput, now: DateTime<Utc>, env: &Environment) -> Result<(), String> {
@@ -503,7 +503,8 @@ pub fn render(
     let usd = truthy(input.cost.as_ref().and_then(|c| c.total_cost_usd))
         .filter(|cost| *cost >= 0.005)
         // `toFixed(2)`: `{:.2}` also rounds the exact binary value, but ties to even — and an exact
-        // tie is an odd multiple of ⅛, which toFixed rounds up.
+        // tie is an odd multiple of ⅛, which toFixed rounds up. Exact below 2^46 (≈ $7e13), where one
+        // ulp stays under a cent (measured 2026-10-14 · node toFixed sweep, 709k values).
         .map(|cost| if (cost * 8.0) % 2.0 == 1.0 { cost.next_up() } else { cost })
         .map_or_else(String::new, |cost| format!("{DIM} · ${cost:.2}{RESET}"));
     let limit = input.rate_limits.as_ref().and_then(|r| r.five_hour.as_ref()).map_or_else(String::new, |five| {

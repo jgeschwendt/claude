@@ -1,0 +1,14 @@
+{
+  "name": "jgeschwendt",
+  "description": "jgeschwendt's Claude Code harness mods.",
+  "owner": {
+    "name": "jgeschwendt"
+  },
+  "plugins": [
+    {
+      "name": "perpetual",
+      "source": "./plugins/perpetual",
+      "description": "The harness's session hooks, house-rule guards, window clock and shift band."
+    }
+  ]
+}

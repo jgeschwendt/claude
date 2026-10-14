@@ -1,6 +1,6 @@
 {
   "name": "perpetual",
-  "version": "0.1.0",
-  "description": "Shows the sandman shift above the prompt and trails corrections; observes only.",
+  "version": "0.2.0",
+  "description": "The harness's session hooks (sandman recall/report/take, docket), house-rule guards, the five-hour window clock and the sandman shift band.",
   "author": { "name": "jgeschwendt" }
 }

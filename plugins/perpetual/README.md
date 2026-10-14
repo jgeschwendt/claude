@@ -1,9 +1,23 @@
 # perpetual
 
-A Claude Code mod that puts the sandman shift in front of the session and trails the person's corrections. It observes and displays only: no hook blocks, rewrites or approves anything.
+The harness's Claude Code mod: it runs the session hooks that `settings.json` used to wire, guards tool calls against the house rules, keeps the five-hour window clock, and puts the sandman shift above the prompt.
 
 ## Behaviour
 
+- **Session hooks** — each binary runs from `$HOME/.local/bin` through `$.process.run`, with the settings hook's stdin JSON (the `classic.<Event>` event's `e`) on stdin, and its output read as a command hook's: a JSON reply's `hookSpecificOutput.additionalContext`, else plain stdout. A missing binary, a timeout or a non-zero exit is a dim `$.ui.log` line and adds nothing; no exit code blocks.
+
+  | event | runs | returns |
+  | --- | --- | --- |
+  | `classic.SessionStart` | `sandman recall --hook`, `docket --hook`, `sandman report --hook`, concurrently, 10 s each | the chain's result plus each one's context, in that order, as `additionalContext` |
+  | `classic.UserPromptSubmit` | `docket --hook`, 10 s | docket's pull as `additionalContext` |
+  | `classic.Stop` | `docket --hook`, 10 s | the chain's result untouched |
+  | `classic.Notification` (`permission_prompt`, `idle_prompt`, `agent_needs_input`) | `docket --hook`, 10 s | the chain's result untouched |
+  | `classic.SessionEnd` | `sandman take --hook`, 1.5 s — the SessionEnd budget | the chain's result untouched |
+
+  A `classic.*` hook's result carries `additionalContext` on SessionStart, UserPromptSubmit and Stop, not on Notification or SessionEnd (verified 2026-10-14 · Claude Code 2.1.296 `ClassicResultFields`). Under managed settings an installed mod's `classic.*` hooks do not run (verified 2026-10-14 · `claude plugin validate`).
+
+- **Guards** — a Bash `pkill -f`, `git checkout … --`, `git reset --hard`, `git push --force`/`-f`/`--force-with-lease`, `git stash` (not `list`/`show`) or `git clean` at a command position, and a `Write`/`Edit` to a `*.yml` path, are denied with the house rule as the reason, and each denial is trailed: `sandman trail append --kind guard`. The match is textual: a forbidden command quoted after `;`, `&`, `|` or `(` inside an argument is denied too. An `agent.spawn` with no `model` (forks aside) is pinned to `opus`.
+- **Window clock** — at `session.start` and on every `session.measure`, the `five_hour` entry of `$.session.usage().rateLimits` is written to `$CLAUDE_WINDOW_FILE`, else `$XDG_STATE_HOME/claude/window.json`, else `~/.local/state/claude/window.json`, as `{"at","five_hour":{"resets_at","used_percentage"},"session_id"}`, `resets_at` in unix seconds — the statusline's format, read by `sandman shift clock`. `$.fs.write` is not atomic, so the file goes to `window.json.<session>.tmp` and `/bin/mv -f` renames it. No write without both figures. (verified 2026-10-14 · code.claude.com/docs/en/plugins/mods/reference, Mods API methods)
 - **Band above the prompt** — one dim line, cut to the band's width:
   `⟳ <shift> · <theme> · <repo> · <time to handoff> · last: <kind> <rationale>`.
   Read every 15 s from `~/.sandman/shifts/current.json` (`shift`, `theme`, `repo`, `handoff_by`) and the last line of
@@ -13,19 +27,20 @@ A Claude Code mod that puts the sandman shift in front of the session and trails
   `don't`/`dont`, `never`, `stop`, `i said`, `wrong` or `not what i` (case-insensitive) runs
   `sandman trail append --kind correction --rationale <first 200 chars> --ref session:<id>`, plus `--shift $SANDMAN_SHIFT`
   when set. A prompt of three or more tokens whose token set has Jaccard ≥ 0.8 with an earlier prompt of the session is
-  appended instead with the rationale `repeated instruction: …`. A failed append is a dim transcript line; the prompt
-  always continues unchanged.
-- **`/shift`** runs `sandman shift status` (unverified 2026-10-09 · sandman has no `shift` verb yet); **`/trail [n]`** runs `sandman trail log` and keeps its last `n` lines (10 by
-  default) — `trail log` takes no count (verified 2026-10-09 · sandman `src/cli.rs`). Output is a `$.ui.log` line Claude never reads; both run mid-turn.
+  appended instead with the rationale `repeated instruction: …`. The prompt always continues unchanged.
+- **`/shift`** runs `sandman shift status`, **`/docket`** `docket list`, **`/trail [n]`** `sandman trail log` cut to its last `n` lines (10 by
+  default). Output is a `$.ui.log` line Claude never reads; all three run mid-turn.
 
-## Running it
+## Installing it
+
+The harness repo is a marketplace (`.claude-plugin/marketplace.json`); once per machine:
 
 ```sh
-claude --plugin-dir <checkout>/plugins/perpetual
+claude plugin marketplace add ~/.grove/code/jgeschwendt/claude/main
+claude plugin install perpetual@jgeschwendt
 ```
 
-or, where no flag can be given, name the folder in `CLAUDE_CODE_PLUGIN_DIRS` (process environment or the `env` block of
-`~/.claude/settings.json`). An interactive session hot-reloads the folder on save. (verified 2026-10-09 · Claude Code 2.1.296 plugin-authoring reference)
+The install enables it under `enabledPlugins` in the user `settings.json` — this repo's, through the `~/.claude` link — so every session loads it, `claude --bg` shifts included. A local marketplace is read in place: an edit on the trunk is live from the next session. (verified 2026-10-14 · code.claude.com/docs/en/plugin-marketplaces)
 
 ## Checking it
 
@@ -33,3 +48,5 @@ or, where no flag can be given, name the folder in `CLAUDE_CODE_PLUGIN_DIRS` (pr
 claude plugin validate plugins/perpetual --strict
 claude plugin test plugins/perpetual
 ```
+
+The tests stub `$.process.run` beneath the mod, so no binary runs; `HOME` is stubbed to `/home/test` and each test asserts the argv under `/home/test/.local/bin`.

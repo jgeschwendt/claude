@@ -234,7 +234,7 @@ pub fn base_model_id(id: &str) -> String {
     let mut s = s.strip_prefix("anthropic.").unwrap_or(s);
     // /-v\d+(:\d+)?$/
     if let Some((head, v)) =
-        s.rsplit_once(':').map_or(Some(s), |(rest, d)| digits(d).then_some(rest)).and_then(|r| r.rsplit_once("-v"))
+        s.rsplit_once(':').filter(|(_, d)| digits(d)).map_or(s, |(rest, _)| rest).rsplit_once("-v")
         && digits(v)
     {
         s = head;
@@ -324,7 +324,7 @@ pub fn auto_compact_threshold(data: &StatusInput, env: &Environment) -> f64 {
     let window = window_size.min(auto_compact_window(
         &base_model_id(data.model.id.as_deref().unwrap_or("")),
         window_size,
-        data.workspace.as_ref().and_then(|w| w.project_dir.as_deref()),
+        data.workspace.as_ref().and_then(|w| w.project_dir.as_deref()).filter(|d| !d.is_empty()),
         &global_state,
         env,
     ));
@@ -503,9 +503,10 @@ pub fn render(
     // Session spend so far; hidden until it rounds to a cent.
     let usd = truthy(input.cost.as_ref().and_then(|c| c.total_cost_usd))
         .filter(|cost| *cost >= 0.005)
-        // `toFixed(2)` over a non-negative cost.
-        .map(|cost| js_round(cost * 100.0) as i64)
-        .map(|cents| format!("{DIM} · ${}.{:02}{RESET}", cents / 100, cents % 100))
+        // `toFixed(2)`: `{:.2}` also rounds the exact binary value, but ties to even — and an exact
+        // tie is an odd multiple of ⅛, which toFixed rounds up.
+        .map(|cost| if (cost * 8.0) % 2.0 == 1.0 { cost.next_up() } else { cost })
+        .map(|cost| format!("{DIM} · ${cost:.2}{RESET}"))
         .unwrap_or_default();
     let five = input.rate_limits.as_ref().and_then(|r| r.five_hour.as_ref());
     let limit = five
@@ -572,7 +573,7 @@ mod tests {
         assert_eq!(base_model_id("claude-opus-5[1m]"), "claude-opus-5");
         assert_eq!(base_model_id("Claude-Fable-5-1"), "claude-fable-5-1");
         assert_eq!(base_model_id("claude-sonnet-4-5-v"), "claude-sonnet-4-5-v");
-        assert_eq!(base_model_id("o:b"), "o:b");
+        assert_eq!(base_model_id("o:b-v1"), "o:b");
     }
 
     #[test]
@@ -609,6 +610,9 @@ mod tests {
         assert!(out.starts_with("Fable 5.1 (fast · low) "), "{out}");
         assert!(out.ends_with(&format!(" 30% · $1.20 · 5h 31%† ↻ {}", clock(1_757_018_000.0))), "{out}");
         assert_eq!(out.chars().count(), 80 - MARGIN, "{out}");
+        for (cost, usd) in [(0.015, " · $0.01"), (1.125, " · $1.13")] {
+            assert!(line(json!({ "cost": { "total_cost_usd": cost } })).ends_with(usd), "{cost}");
+        }
     }
 
     #[test]

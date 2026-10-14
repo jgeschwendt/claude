@@ -27,7 +27,11 @@ The harness's Claude Code mod: it runs the session hooks that `settings.json` us
   `don't`/`dont`, `never`, `stop`, `i said`, `wrong` or `not what i` (case-insensitive) runs
   `sandman trail append --kind correction --rationale <first 200 chars> --ref session:<id>`, plus `--shift $SANDMAN_SHIFT`
   when set. A prompt of three or more tokens whose token set has Jaccard ≥ 0.8 with an earlier prompt of the session is
-  appended instead with the rationale `repeated instruction: …`. The prompt always continues unchanged.
+  appended instead with the rationale `repeated instruction: …`. Skipped, and kept out of the repeat comparison: a prompt
+  over 400 characters, one starting `# ` (a shift or breath brief, a pasted document), and the opening prompt of a
+  `claude --bg` session — dispatch's brief. That prompt reaches the mod as a composer prompt of an interactive `terminal`
+  session; the one signal telling it apart is the daemon's `CLAUDE_CODE_SESSION_KIND=bg` (verified 2026-10-14 · Claude
+  Code 2.1.299, probe mod under `--bg` and interactive). The prompt always continues unchanged.
 - **`/shift`** runs `sandman shift status`, **`/docket`** `docket list`, **`/trail [n]`** `sandman trail log` cut to its last `n` lines (10 by
   default). Output is a `$.ui.log` line Claude never reads; all three run mid-turn.
 

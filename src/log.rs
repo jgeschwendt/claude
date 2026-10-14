@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 /// `~/.claude/logs/<name>.log`, creating the directory on first use.
 pub fn path(name: &str) -> PathBuf {
-    let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/"));
+    let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or("/".into());
     let dir = home.join(".claude").join("logs");
     let _ = fs::create_dir_all(&dir);
     dir.join(format!("{name}.log"))

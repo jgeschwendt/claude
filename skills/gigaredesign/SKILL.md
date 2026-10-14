@@ -145,11 +145,11 @@ skill exists for.
   null case via AskUserQuestion. Unattended → stop here: map + design ARE the
   deliverable; a rebuild never launches without approval.
   Unattended, open the door instead of only waiting at it:
-  `id=$(thread open "<design to commit to>" --kind decision --option "<winner>" --option "<runner-up>" --option "null design" --to "job:$(basename "$CLAUDE_JOB_DIR")" --body -)`
+  `id=$(docket open "<design to commit to>" --kind decision --option "<winner>" --option "<runner-up>" --option "null design" --to "job:$(basename "$CLAUDE_JOB_DIR")" --body -)`
   with `design.md`'s comparison on stdin (`--to any` when not a job), then
-  `thread wait "$id" --timeout 540` in a loop, re-waiting on 124. An `answer:`
+  `docket wait "$id" --timeout 540` in a loop, re-waiting on 124. An `answer:`
   IS the approval — record it in `design.md` and continue to step 4, resolving
-  the thread when the rebuild lands; anything else → `thread reply` (a table
+  the thread when the rebuild lands; anything else → `docket reply` (a table
   for a comparison) and wait again. No answer, no rebuild.
 
 **Success criteria**: `design.md` holds the chosen design with a total

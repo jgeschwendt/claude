@@ -98,12 +98,12 @@ none). If the plan names a different repo than the cwd, stop and say so.
 - Unattended (`$CLAUDE_JOB_DIR` set, or no user present) that checkpoint does
   not vanish and does not become a guess: open a thread and keep working
   where you can —
-  `id=$(thread open "<the question>" --kind decision --option "<A>" --option "<B>" --to "job:$(basename "$CLAUDE_JOB_DIR")" --body -)`
+  `id=$(docket open "<the question>" --kind decision --option "<A>" --option "<B>" --to "job:$(basename "$CLAUDE_JOB_DIR")" --body -)`
   with the decomposition table on stdin (`--to any` when not a job), then
-  `thread wait "$id" --timeout 540` in a loop, re-waiting on 124. A return
-  carrying `answer:` is the decision — act on it and `thread resolve` when the
+  `docket wait "$id" --timeout 540` in a loop, re-waiting on 124. A return
+  carrying `answer:` is the decision — act on it and `docket resolve` when the
   work lands; anything else is a question or a revised option set, so
-  `thread reply` (a table when it asks for a comparison) and wait again.
+  `docket reply` (a table when it asks for a comparison) and wait again.
 
 **Success criteria**: A workflow script where every `agent()` call carries
 `model: 'opus'` and every brief names its own success criteria and scope

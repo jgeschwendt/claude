@@ -48,32 +48,12 @@ fn logs_the_error_and_prints_a_blank_line_for_malformed_stdin() {
 }
 
 #[test]
-fn renders_one_line_and_exits_zero() {
-    let dir = scratch("renders");
-    let payload = r#"{
-        "context_window": { "context_window_size": 200000, "total_input_tokens": 50000 },
-        "model": { "display_name": "Fable 5.1", "id": "claude-fable-5-1" },
-        "session_id": "it-1"
-    }"#;
-
-    let (code, out) = run(&dir, payload);
-
-    assert_eq!(code, 0);
-    assert_eq!(out.lines().count(), 1, "{out:?}");
-    assert!(out.contains("Fable 5.1"), "{out:?}");
-    assert!(out.contains("30%"), "{out:?}");
-    // The samples file and the payload log both landed in the scratch dir.
-    assert!(dir.join("claude-statusline-it-1.json").is_file());
-    let log = std::fs::read_to_string(dir.join(".claude/logs/statusline.log")).unwrap();
-    assert!(log.contains("\"total_input_tokens\": 50000"), "{log}");
-}
-
-#[test]
-fn persists_the_window_clock_when_the_payload_carries_rate_limits() {
+fn renders_a_line_and_persists_the_window_clock() {
     let dir = scratch("window");
     let resets_at = chrono::Utc::now().timestamp() + 3600;
     let payload = serde_json::json!({
-        "model": { "display_name": "Fable 5.1" },
+        "context_window": { "context_window_size": 200000, "total_input_tokens": 50000 },
+        "model": { "display_name": "Fable 5.1", "id": "claude-fable-5-1" },
         "rate_limits": { "five_hour": { "resets_at": resets_at, "used_percentage": 31.4 } },
         "session_id": "it-2"
     })
@@ -89,7 +69,14 @@ fn persists_the_window_clock_when_the_payload_carries_rate_limits() {
     assert_eq!(std::fs::read_dir(file.parent().unwrap()).unwrap().count(), 1, "temp file left behind");
     std::fs::remove_dir(&file).unwrap();
 
-    assert_eq!(run(&dir, &payload).0, 0);
+    let (code, out) = run(&dir, &payload);
+    assert_eq!(code, 0);
+    assert_eq!(out.lines().count(), 1, "{out:?}");
+    assert!(out.contains("Fable 5.1") && out.contains("30%"), "{out:?}");
+    // The samples file and the payload log both landed in the scratch dir.
+    assert!(dir.join("claude-statusline-it-2.json").is_file());
+    let log = std::fs::read_to_string(dir.join(".claude/logs/statusline.log")).unwrap();
+    assert!(log.contains("\"total_input_tokens\": 50000"), "{log}");
     let window: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
     assert_eq!(window["five_hour"], serde_json::json!({ "resets_at": resets_at, "used_percentage": 31.4 }));
     assert_eq!(window["session_id"], "it-2");

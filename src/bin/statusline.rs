@@ -10,13 +10,6 @@ use claude_home::statusline::{Environment, Samples, StatusInput, columns, persis
 use serde_json::Value;
 use std::io::Read;
 
-/// Debug log for the last tick: the payload (plus any window-clock failure) on success, the error
-/// on failure. Overwritten each tick — last tick wins.
-fn write_log(body: &str) {
-    let stamp = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    let _ = std::fs::write(log::path("statusline"), format!("[{stamp}] {body}\n"));
-}
-
 /// One render tick: the line, plus a window-clock failure worth a log line. `Err` carries the
 /// message that lands in the log.
 fn tick(raw: &str) -> Result<(String, Option<String>), String> {
@@ -34,15 +27,17 @@ fn tick(raw: &str) -> Result<(String, Option<String>), String> {
 
 fn main() {
     let mut raw = String::new();
-    match std::io::stdin().read_to_string(&mut raw).map_err(|e| format!("Error: {e}")).and_then(|_| tick(&raw)) {
-        Ok((line, warning)) => {
-            println!("{line}");
-            let payload = serde_json::from_str::<Value>(&raw).and_then(|json| serde_json::to_string_pretty(&json));
-            write_log(&(payload.unwrap_or(raw) + &warning.map(|w| format!("\n{w}")).unwrap_or_default()));
-        }
-        Err(error) => {
-            write_log(&error);
-            println!();
-        }
-    }
+    // The debug log holds the last tick only: its payload (plus any window-clock failure) on
+    // success, its error on failure.
+    let (line, body) =
+        match std::io::stdin().read_to_string(&mut raw).map_err(|e| format!("Error: {e}")).and_then(|_| tick(&raw)) {
+            Ok((line, warning)) => {
+                let pretty = serde_json::from_str::<Value>(&raw).and_then(|json| serde_json::to_string_pretty(&json));
+                (line, pretty.unwrap_or(raw) + &warning.map(|w| format!("\n{w}")).unwrap_or_default())
+            }
+            Err(error) => (String::new(), error),
+        };
+    println!("{line}");
+    let stamp = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let _ = std::fs::write(log::path("statusline"), format!("[{stamp}] {body}\n"));
 }

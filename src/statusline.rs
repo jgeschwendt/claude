@@ -14,7 +14,7 @@
 //!   window — see [`auto_compact_threshold`] for how that is resolved. ⅛-block cells; tone
 //!   shifts green → yellow (50) → orange (75) → red (90) on both bar and digits.
 //! - ≈ETA: projected time until auto-compact from recent token velocity — see [`Samples`].
-//!   Appears past 50% usage when a ≥60s trend exists and the projection is <6h.
+//!   Appears from 50% usage when a ≥60s trend exists and the projection is <6h.
 //! - $cost (dim): session spend so far (`cost.total_cost_usd`), shown once it rounds to ≥ $0.01.
 //! - 5h limit: rate-limit usage (own tone), † when requests exceed 200k tokens (the 2×
 //!   long-context pricing/rate-limit tier), ↻ reset as local wall-clock time.
@@ -52,7 +52,6 @@ pub struct StatusInput {
     /// Whether requests crossed into the 2× long-context tier.
     pub exceeds_200k_tokens: Option<bool>,
     pub fast_mode: Option<bool>,
-    /// The only required member of the payload.
     pub model: Model,
     pub rate_limits: Option<RateLimits>,
     pub session_id: Option<String>,
@@ -106,21 +105,15 @@ pub struct Workspace {
 
 /// The process environment the renderer reads. Captured up front so [`render`] can be driven from
 /// tests against a scratch `HOME`/`TMPDIR` without mutating the real process environment.
-#[derive(Clone, Debug, Default)]
+#[derive(Default)]
 pub struct Environment {
-    /// `CLAUDE_CODE_AUTO_COMPACT_WINDOW`.
     pub auto_compact_window: Option<String>,
-    /// `DISABLE_AUTO_COMPACT`.
     pub disable_auto_compact: Option<String>,
-    /// `DISABLE_COMPACT`.
     pub disable_compact: Option<String>,
     /// `CLAUDE_CODE_ENTRYPOINT`, the surface key in the window tables.
     pub entrypoint: Option<String>,
-    /// `HOME`, or `""`.
     pub home: String,
-    /// `CLAUDE_CODE_MAX_OUTPUT_TOKENS`.
     pub max_output_tokens: Option<String>,
-    /// `TMPDIR` without its trailing slash, or `/tmp`.
     pub tmp: String,
     /// Where [`persist_window`] writes: `CLAUDE_WINDOW_FILE`, else
     /// `$XDG_STATE_HOME/claude/window.json`, else `~/.local/state/claude/window.json`. `None`
@@ -163,12 +156,12 @@ impl Environment {
 
 /// Persist the five-hour window to [`Environment::window_file`] as
 /// `{"at":…,"five_hour":{"resets_at":…,"used_percentage":…},"session_id":…}` (keys sorted, `at`
-/// RFC 3339 UTC, `resets_at` unix seconds). A payload without `rate_limits`, or whose
-/// `five_hour` fields are null or absent, writes nothing, so a stale file is never clobbered
-/// with nulls — readers (`sandman shift clock`) fault on a null `resets_at`. Monotone: a window
-/// not resetting within 6h, or one behind the file's live window (an earlier `resets_at`, or less used of the same one),
-/// writes nothing, so an idle session re-rendering stale limits never rolls the clock back. Atomic: a sibling temp file renamed into place.
-/// `Err` carries a one-line reason; the caller logs it and the tick carries on.
+/// RFC 3339 UTC, `resets_at` unix seconds). Writes nothing when `five_hour` is absent or partial,
+/// when the window does not reset within 6h, or when it is behind the file's live window (an
+/// earlier `resets_at`, or less used of the same one) — so readers (`sandman shift clock`, which
+/// faults on a null `resets_at`) never see nulls, and an idle session re-rendering stale limits
+/// never rolls the clock back. Atomic: a sibling temp file renamed into place. `Err` carries a
+/// one-line reason; the caller logs it and the tick carries on.
 pub fn persist_window(input: &StatusInput, now: DateTime<Utc>, env: &Environment) -> Result<(), String> {
     let five = input.rate_limits.as_ref().and_then(|l| l.five_hour.as_ref());
     let (Some(path), Some(resets_at), Some(used)) = (
@@ -210,12 +203,6 @@ fn positive(value: Option<&str>) -> Option<f64> {
 /// `Math.round`: halves go toward +∞, unlike Rust's round-half-away-from-zero.
 pub fn js_round(v: f64) -> f64 {
     (v + 0.5).floor()
-}
-
-/// `Number.prototype.toFixed(2)` for the non-negative values a cost can take.
-fn js_to_fixed_2(v: f64) -> String {
-    let cents = js_round(v * 100.0) as i64;
-    format!("{}.{:02}", cents / 100, cents % 100)
 }
 
 /// JS truthiness over a number: `0` and `NaN` are absent, so `value || d` is `truthy(value).unwrap_or(d)`.
@@ -463,14 +450,10 @@ const RESET: &str = "\x1b[0m";
 /// narrower than the PTY width — reserve `MARGIN` or it clips with `…`.
 const MARGIN: usize = 4;
 
-fn fg(n: u8) -> String {
-    format!("\x1b[38;5;{n}m")
-}
-
 /// Muted green → yellow → orange → red as usage climbs (256-color, calm at rest, loud near
 /// compact).
 fn tone(p: i64) -> String {
-    fg(if p >= 90 { 203 } else if p >= 75 { 208 } else if p >= 50 { 179 } else { 108 })
+    format!("\x1b[38;5;{}m", if p >= 90 { 203 } else if p >= 75 { 208 } else if p >= 50 { 179 } else { 108 })
 }
 
 /// ⅛-block resolution (`██▋░░░`) — the partial cell makes slow growth visible between whole cells.
@@ -482,7 +465,7 @@ fn bar(p: i64, width: usize) -> String {
         filled.push(*partial);
     }
     let empty = "░".repeat(width.saturating_sub(filled.chars().count()));
-    format!("{}{filled}{}{empty}{RESET}", tone(p), fg(238))
+    format!("{}{filled}\x1b[38;5;238m{empty}{RESET}", tone(p))
 }
 
 /// Unix timestamp → local wall-clock `10:50pm`.
@@ -522,7 +505,9 @@ pub fn render(
     // Session spend so far; hidden until it rounds to a cent.
     let usd = truthy(input.cost.as_ref().and_then(|c| c.total_cost_usd))
         .filter(|cost| *cost >= 0.005)
-        .map(|cost| format!("{DIM} · ${}{RESET}", js_to_fixed_2(cost)))
+        // `toFixed(2)` over a non-negative cost.
+        .map(|cost| js_round(cost * 100.0) as i64)
+        .map(|cents| format!("{DIM} · ${}.{:02}{RESET}", cents / 100, cents % 100))
         .unwrap_or_default();
     let five = input.rate_limits.as_ref().and_then(|r| r.five_hour.as_ref());
     let limit = five
@@ -551,7 +536,6 @@ pub fn render(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
 
     /// A fixed instant, so nothing in the suite depends on the wall clock.
     fn now() -> DateTime<Local> {
@@ -570,15 +554,10 @@ mod tests {
         serde_json::from_value(json).unwrap()
     }
 
-    /// An [`Environment`] rooted at a fresh scratch dir: no settings, no `~/.claude.json`, and
+    /// An [`Environment`] rooted at a scratch dir unique to `name`: no settings, no `~/.claude.json`, and
     /// every auto-compact/entrypoint variable cleared, so only the payload drives the render.
-    fn scratch() -> (PathBuf, Environment) {
-        static COUNTER: AtomicUsize = AtomicUsize::new(0);
-        let dir = std::env::temp_dir().join(format!(
-            "claude-test-{}-{}",
-            std::process::id(),
-            COUNTER.fetch_add(1, Ordering::Relaxed)
-        ));
+    fn scratch(name: &str) -> (PathBuf, Environment) {
+        let dir = std::env::temp_dir().join(format!("claude-test-{}-{name}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let env = Environment {
             home: dir.to_string_lossy().into_owned(),
@@ -586,13 +565,6 @@ mod tests {
             ..Environment::default()
         };
         (dir, env)
-    }
-
-    /// The rendered percentage.
-    fn pct(out: &str) -> i64 {
-        let plain = plain(out);
-        let (head, _) = plain.split_once('%').unwrap();
-        head.rsplit(' ').next().unwrap().parse().unwrap()
     }
 
     #[test]
@@ -625,7 +597,7 @@ mod tests {
 
     #[test]
     fn renders_each_segment_only_with_its_data() {
-        let (_dir, env) = scratch();
+        let (_dir, env) = scratch("segments");
         let line = |extra| plain(&render(&payload(extra), now(), 80, &mut Samples::default(), &env));
 
         assert!(!line(json!({ "cost": { "total_cost_usd": 0.001 }, "effort": { "level": "high" } })).contains(['$', '(']));
@@ -643,13 +615,14 @@ mod tests {
 
     #[test]
     fn projects_the_eta_only_from_a_live_forward_trend() {
-        let (_dir, env) = scratch();
+        let (_dir, env) = scratch("eta");
         for (prior, tokens, eta) in [
             (10_000.0, 120_000, Some("1m")),
             (150_000.0, 170_000, None),
             (130_000.0, 120_000, None),
             (120_000.0, 120_000, None),
             (10_000.0, 0, None),
+            (10_000.0, 60_000, None),
         ] {
             let mut samples =
                 Samples { dirty: false, samples: vec![Sample { at: now().timestamp_millis() - 120_000, tokens: prior }] };
@@ -663,7 +636,7 @@ mod tests {
 
     #[test]
     fn persists_the_five_hour_window() {
-        let (dir, env) = scratch();
+        let (dir, env) = scratch("persist");
         let file = dir.join("state/claude/window.json");
         let env = Environment { window_file: Some(file.clone()), ..env };
         let input =
@@ -684,16 +657,18 @@ mod tests {
 
     #[test]
     fn never_rolls_the_window_back() {
-        let (dir, env) = scratch();
+        let (dir, env) = scratch("rollback");
         let file = dir.join("window.json");
         let env = Environment { window_file: Some(file.clone()), ..env };
         let at = now().with_timezone(&Utc);
-        let write = |resets_at: i64, used: f64| {
-            let input = payload(json!({ "rate_limits": { "five_hour": { "resets_at": resets_at, "used_percentage": used } } }));
-            persist_window(&input, at, &env).unwrap();
+        let write_five = |five: Value| {
+            persist_window(&payload(json!({ "rate_limits": { "five_hour": five } })), at, &env).unwrap();
             std::fs::read_to_string(&file).ok().map(|text| serde_json::from_str::<Value>(&text).unwrap()["five_hour"].clone())
         };
+        let write = |resets_at: i64, used: f64| write_five(json!({ "resets_at": resets_at, "used_percentage": used }));
 
+        assert_eq!(write_five(Value::Null), None, "a payload without a window was written");
+        assert_eq!(write_five(json!({ "resets_at": null, "used_percentage": null })), None, "a null window was written");
         assert_eq!(write(1_756_999_000, 10.0), None, "a window already past was written");
         assert_eq!(write(1_791_773_097_000, 10.0), None, "a millisecond resets_at was written");
         std::fs::write(&file, r#"{"five_hour":{"resets_at":4102444800,"used_percentage":99.0}}"#).unwrap();
@@ -705,31 +680,30 @@ mod tests {
     }
 
     #[test]
-    fn renders_the_model_and_context_percentage() {
-        let (dir, env) = scratch();
+    fn keeps_one_sample_per_15s_and_the_newest_40() {
+        let (_dir, env) = scratch("samples");
         let mut samples = Samples::default();
+        let at = |s: i64| now() + chrono::TimeDelta::seconds(s);
 
-        let out = render(&payload(json!({})), now(), 80, &mut samples, &env);
+        (0..630).for_each(|s| drop(render(&payload(json!({})), at(s), 80, &mut samples, &env)));
 
-        let plain = plain(&out);
-        assert_eq!(plain.lines().count(), 1, "{plain}");
-        assert!(plain.starts_with("Fable 5.1 "), "{plain}");
-        assert_eq!(pct(&out), 30);
-
-        // The sample store round-trips through the shared on-disk shape.
+        let kept: Vec<i64> = samples.samples.iter().map(|s| s.at).collect();
+        assert_eq!(kept, (2..42).map(|i| at(15 * i).timestamp_millis()).collect::<Vec<_>>());
+        // The store round-trips through the shared on-disk shape, integer notation pinned.
         let path = env.samples_path(Some("s1")).unwrap();
-        assert!(path.starts_with(&dir));
         samples.write(&path);
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), r#"{"samples":[{"at":1757000000000,"tokens":50000}]}"#);
-        let reloaded = Samples::load(&path);
-        assert_eq!(reloaded.samples.len(), 1);
-        assert_eq!(reloaded.samples[0].tokens, 50_000.0);
+        let bytes = std::fs::read_to_string(&path).unwrap();
+        Samples::load(&path).write(&path);
+        assert!(samples.dirty && bytes == std::fs::read_to_string(&path).unwrap(), "{bytes}");
+        assert!(bytes.starts_with(&format!(r#"{{"samples":[{{"at":{},"tokens":50000}}"#, kept[0])), "{bytes}");
     }
 
     #[test]
     fn resolves_the_auto_compact_threshold() {
         let slot = |at: i64, window: i64| json!({ "at": at, "data": { "rowan_thicket": { "claude-fable-5-1": window } } });
         let fable = "claude-fable-5-1";
+        let (dir, env) = scratch("threshold");
+        std::fs::create_dir_all(dir.join(".claude")).unwrap();
         for (state, settings, model, size, window, expected) in [
             (json!({}), json!({}), fable, 200_000, "100000", 79_000.0),
             (json!({ "autoCompactEnabled": false }), json!({}), fable, 200_000, "", 200_000.0),
@@ -746,15 +720,14 @@ mod tests {
             (json!({}), json!({}), "claude-opus-4-6", 500_000, "", 179_000.0),
             (json!({}), json!({}), "claude-sonnet-5", 1_000_000, "", 479_000.0),
         ] {
-            let (dir, env) = scratch();
-            std::fs::create_dir_all(dir.join(".claude")).unwrap();
             std::fs::write(dir.join(".claude.json"), state.to_string()).unwrap();
             std::fs::write(dir.join(".claude/settings.local.json"), settings.to_string()).unwrap();
             let env = Environment {
                 auto_compact_window: Some(window.into()),
                 entrypoint: Some("local-agent".into()),
+                home: env.home.clone(),
                 max_output_tokens: Some("8000".into()),
-                ..env
+                ..Environment::default()
             };
             let input = payload(json!({
                 "context_window": { "context_window_size": size },
@@ -767,39 +740,11 @@ mod tests {
     }
 
     #[test]
-    fn skips_the_window_write_without_a_whole_window() {
-        let (dir, env) = scratch();
-        let file = dir.join("window.json");
-        std::fs::write(&file, "stale").unwrap();
-        let env = Environment { window_file: Some(file.clone()), ..env };
-        for input in [
-            payload(json!({})),
-            payload(json!({ "rate_limits": { "five_hour": null } })),
-            payload(json!({ "rate_limits": { "five_hour": { "resets_at": null, "used_percentage": null } } })),
-        ] {
-            persist_window(&input, now().with_timezone(&Utc), &env).unwrap();
-        }
-
-        assert_eq!(std::fs::read_to_string(&file).unwrap(), "stale");
-    }
-
-    #[test]
-    fn throttles_samples_within_the_same_second() {
-        let (_dir, env) = scratch();
-        let mut samples = Samples::default();
-
-        render(&payload(json!({})), now(), 80, &mut samples, &env);
-        render(&payload(json!({})), now(), 80, &mut samples, &env);
-
-        assert_eq!(samples.samples.len(), 1);
-    }
-
-    #[test]
     fn tones_shift_at_the_usage_thresholds() {
-        assert_eq!(tone(49), fg(108));
-        assert_eq!(tone(50), fg(179));
-        assert_eq!(tone(75), fg(208));
-        assert_eq!(tone(90), fg(203));
+        assert_eq!(tone(49), "\x1b[38;5;108m");
+        assert_eq!(tone(50), "\x1b[38;5;179m");
+        assert_eq!(tone(75), "\x1b[38;5;208m");
+        assert_eq!(tone(90), "\x1b[38;5;203m");
     }
 
     #[test]
@@ -808,7 +753,7 @@ mod tests {
             move |argv: &[&str]| match argv {
                 ["ps", _, "tty=", _, pid] => Some(if *pid == "7" { tty } else { "??" }.into()),
                 ["ps", _, "ppid=", ..] => Some(ppid.into()),
-                _ => Some(size.into()),
+                _ => (argv[2] == "/dev/ttys001").then(|| size.into()),
             }
         };
         assert_eq!(columns(walk("ttys001", "7", "50 120")), Some(120));

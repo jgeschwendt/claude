@@ -22,7 +22,7 @@
           },
           {
             "type": "command",
-            "command": "\"$HOME/.local/bin/thread\" --hook",
+            "command": "\"$HOME/.local/bin/docket\" --hook",
             "timeout": 10,
             "statusMessage": "checking threads..."
           },
@@ -51,7 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/.local/bin/thread\" --hook",
+            "command": "\"$HOME/.local/bin/docket\" --hook",
             "timeout": 10
           }
         ]
@@ -62,7 +62,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/.local/bin/thread\" --hook",
+            "command": "\"$HOME/.local/bin/docket\" --hook",
             "timeout": 10
           }
         ]
@@ -73,7 +73,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/.local/bin/thread\" --hook",
+            "command": "\"$HOME/.local/bin/docket\" --hook",
             "timeout": 10,
             "statusMessage": "checking threads..."
           }

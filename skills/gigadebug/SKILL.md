@@ -50,11 +50,11 @@ agents run probes and type the fix.
 - Any point the hunt needs the user unattended (`$CLAUDE_JOB_DIR` set, or no
   user present) — a missing symptom, a fix that needs sign-off, a fork the
   evidence can't settle — is a thread, not a guess and not a dead stop:
-  `id=$(thread open "<the question>" --kind decision --option "<A>" --option "<B>" --to "job:$(basename "$CLAUDE_JOB_DIR")" --body -)`
+  `id=$(docket open "<the question>" --kind decision --option "<A>" --option "<B>" --to "job:$(basename "$CLAUDE_JOB_DIR")" --body -)`
   with the ledger excerpt on stdin (`--to any` when not a job), then
-  `thread wait "$id" --timeout 540` in a loop, re-waiting on 124. `answer:`
-  → act on it, `thread resolve` when the fix lands; anything else →
-  `thread reply` (a table for a comparison) and wait again. Attended, ask with
+  `docket wait "$id" --timeout 540` in a loop, re-waiting on 124. `answer:`
+  → act on it, `docket resolve` when the fix lands; anything else →
+  `docket reply` (a table for a comparison) and wait again. Attended, ask with
   AskUserQuestion as before.
 
 **Success criteria**: a command that fails on demand (or a measured rate),

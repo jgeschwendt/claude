@@ -46,14 +46,16 @@ const GUARDS = /** @type {[string, string][]} */ ([
 const NOTIFY = ["agent_needs_input", "idle_prompt", "permission_prompt"];
 
 const HOOK_MS = 10000;
+/** past this many characters a prompt is a brief or a pasted document, not a correction */
+const PROMPT_MAX = 400;
 const REFRESH_MS = 15000;
 const REPEAT_JACCARD = 0.8;
 const REPEAT_MIN_TOKENS = 3;
 const TAKE_MS = 1500;
 const TRAIL_DEFAULT_LINES = 10;
 
-/** @type {{ home: string | undefined, last: any, prompts: Set<string>[], shift: any, timer: { cancel(): void } | undefined }} */
-const state = { home: undefined, last: null, prompts: [], shift: null, timer: undefined };
+/** @type {{ home: string | undefined, isOpened: boolean, last: any, prompts: Set<string>[], shift: any, timer: { cancel(): void } | undefined }} */
+const state = { home: undefined, isOpened: false, last: null, prompts: [], shift: null, timer: undefined };
 
 /**
  * Appends one trail event; a failure is logged, never raised.
@@ -286,8 +288,14 @@ export const register = (on) => {
   });
 
   on("prompt.submit", async ($, e, next) => {
-    // the owner's live words only: a `claude -p` shift brief's "never …" is no correction
+    // the owner's live words only: a `claude -p` shift brief's "never …" is no correction, nor is a long or `# `
+    // prompt (a brief, a pasted document), nor a `claude --bg` session's opening prompt — dispatch's brief, which
+    // arrives as a composer prompt of an interactive terminal session; only the daemon's env tells it apart
     if (e.origin.kind !== "composer") return next(e);
+    const isOpening = !state.isOpened;
+    state.isOpened = true;
+    if (e.text.length > PROMPT_MAX || e.text.startsWith("# ")) return next(e);
+    if (isOpening && (await $.env.get("CLAUDE_CODE_SESSION_KIND")) === "bg") return next(e);
     const tokens = tokensOf(e.text);
     const isRepeat =
       tokens.size >= REPEAT_MIN_TOKENS &&

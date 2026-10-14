@@ -191,6 +191,17 @@ test("a repeated prompt is flagged as a repeated instruction", async ($, on) => 
   expect(runs[0]?.[6]).toBe("repeated instruction: Pin every agent spawn to Opus, explicitly!");
 });
 
+test("a long prompt, a `# ` brief, or a --bg session's opening prompt appends nothing", async ($, on) => {
+  const { runs } = world(on, {}, { env: { CLAUDE_CODE_SESSION_KIND: "bg" } });
+  await submit($, "never stash in a shared tree");
+  await submit($, "# Shift brief\nnever stash");
+  await submit($, `never stash ${"x".repeat(400)}`);
+  await submit($, `never stash ${"x".repeat(400)}`);
+  expect(runs).toEqual([]);
+  await submit($, "never stash in a shared tree");
+  expect(runs[0]?.[6]).toBe("never stash in a shared tree");
+});
+
 test("a failed sandman call is logged and the prompt goes on", async ($, on) => {
   const { logs } = world(on, {}, { outs: { "sandman trail append --kind correction --rationale stop that --ref session:sess-1": "deny" } });
   expect(await submit($, "stop that")).toEqual({ text: "stop that" });

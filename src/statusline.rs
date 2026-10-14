@@ -255,7 +255,7 @@ fn surface_value(value: &Value, entrypoint: &str) -> Option<f64> {
     entry.as_f64().or(entry["default"].as_f64())
 }
 
-/// The CLI accepts configured windows only within [100k, 1M].
+/// The CLI accepts configured windows only as integers within [100k, 1M].
 fn valid_window(value: Option<f64>) -> Option<f64> {
     value.filter(|v| v.fract() == 0.0 && *v >= 100_000.0 && *v <= 1_000_000.0)
 }
@@ -498,33 +498,26 @@ pub fn render(
     // the ETA once the bar is half full.
     let eta = eta_to_compact(tokens, threshold, now.timestamp_millis(), samples)
         .filter(|_| pct >= 50)
-        .map(|eta| format!("{DIM} {eta}{RESET}"))
-        .unwrap_or_default();
+        .map_or_else(String::new, |eta| format!("{DIM} {eta}{RESET}"));
     // Session spend so far; hidden until it rounds to a cent.
     let usd = truthy(input.cost.as_ref().and_then(|c| c.total_cost_usd))
         .filter(|cost| *cost >= 0.005)
         // `toFixed(2)`: `{:.2}` also rounds the exact binary value, but ties to even — and an exact
         // tie is an odd multiple of ⅛, which toFixed rounds up.
         .map(|cost| if (cost * 8.0) % 2.0 == 1.0 { cost.next_up() } else { cost })
-        .map(|cost| format!("{DIM} · ${cost:.2}{RESET}"))
-        .unwrap_or_default();
-    let five = input.rate_limits.as_ref().and_then(|r| r.five_hour.as_ref());
-    let limit = five
-        .map(|five| {
-            let used = five.used_percentage.unwrap_or(0.0).floor() as i64;
-            // `exceeds_200k_tokens` flips when requests cross into the 2× long-context pricing tier —
-            // the dagger explains sudden rate-limit burn.
-            let tier = input.exceeds_200k_tokens.unwrap_or(false).then(|| format!("{DIM}†{RESET}"));
-            format!("{DIM} · 5h {RESET}{}{used}%{RESET}{}", tone(used), tier.unwrap_or_default())
-        })
-        .unwrap_or_default();
-    let reset = truthy(five.and_then(|f| f.resets_at)).map(|at| format!("{DIM} ↻ {}{RESET}", clock(at))).unwrap_or_default();
+        .map_or_else(String::new, |cost| format!("{DIM} · ${cost:.2}{RESET}"));
+    let limit = input.rate_limits.as_ref().and_then(|r| r.five_hour.as_ref()).map_or_else(String::new, |five| {
+        let used = five.used_percentage.unwrap_or(0.0).floor() as i64;
+        let tier = if input.exceeds_200k_tokens == Some(true) { format!("{DIM}†{RESET}") } else { String::new() };
+        let reset = truthy(five.resets_at).map_or_else(String::new, |at| format!("{DIM} ↻ {}{RESET}", clock(at)));
+        format!("{DIM} · 5h {RESET}{}{used}%{RESET}{tier}{reset}", tone(used))
+    });
     // Non-default mode markers next to the model — silent when running plain high-effort.
     let effort = input.effort.as_ref().and_then(|e| e.level.as_deref()).filter(|l| !l.is_empty() && *l != "high");
     let flags: Vec<&str> = input.fast_mode.unwrap_or(false).then_some("fast").into_iter().chain(effort).collect();
     let flags = if flags.is_empty() { String::new() } else { format!(" {DIM}({}){RESET}", flags.join(" · ")) };
     let head = format!("{BOLD}{model}{RESET}{flags} ");
-    let tail = format!("{} {pct}%{RESET}{eta}{usd}{limit}{reset}", tone(pct));
+    let tail = format!("{} {pct}%{RESET}{eta}{usd}{limit}", tone(pct));
     // ANSI escapes have zero printed width — the bar gets what the plain head/tail leave.
     let width = columns.saturating_sub(MARGIN + plain(&head).chars().count() + plain(&tail).chars().count());
     format!("{head}{}{tail}", bar(pct, width))
@@ -721,8 +714,8 @@ mod tests {
                 "",
                 109_000.0,
             ),
-            (json!({}), json!({}), "claude-opus-4-6", 500_000, "", 179_000.0),
-            (json!({}), json!({}), "claude-sonnet-5", 1_000_000, "", 479_000.0),
+            (json!({ "clientDataCache": { "rowan_thicket": { "claude-opus-4-6": 150_000.5 } } }), json!({}), "claude-opus-4-6", 500_000, "", 179_000.0),
+            (json!({ "clientDataCache": { "rowan_thicket": { "claude-sonnet-5": 1_000_001 } } }), json!({}), "claude-sonnet-5", 1_000_000, "", 479_000.0),
             (json!({ "autoCompactWindowsCache": { "claude-sonnet-5": 0 } }), json!({}), "claude-sonnet-5", 1_000_000, "", 979_000.0),
         ] {
             std::fs::write(dir.join(".claude.json"), state.to_string()).unwrap();

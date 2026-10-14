@@ -6,7 +6,7 @@ hk = "2.5.0"
 rust = "1.97.1"
 
 [tasks.build]
-description = "Build the statusline and format-hook binaries into target/release/"
+description = "Build the statusline binary into target/release/"
 run = "cargo build --release"
 
 [tasks.test]

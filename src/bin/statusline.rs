@@ -10,8 +10,8 @@ use claude_home::statusline::{Environment, Samples, StatusInput, columns, persis
 use serde_json::Value;
 use std::io::Read;
 
-/// Debug log for the last tick: the payload on success, the error on failure. Overwritten each
-/// tick — last tick wins.
+/// Debug log for the last tick: the payload (plus any window-clock failure) on success, the error
+/// on failure. Overwritten each tick — last tick wins.
 fn write_log(body: &str) {
     let stamp = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let _ = std::fs::write(log::path("statusline"), format!("[{stamp}] {body}\n"));
@@ -46,10 +46,7 @@ fn main() {
                 .ok()
                 .and_then(|json| serde_json::to_string_pretty(&json).ok())
                 .unwrap_or(raw);
-            write_log(&payload);
-            if let Some(warning) = warning {
-                log::append("statusline", &warning, None);
-            }
+            write_log(&(payload + &warning.map(|w| format!("\n{w}")).unwrap_or_default()));
         }
         Err(error) => {
             write_log(&error);

@@ -91,5 +91,11 @@ fn persists_the_window_clock_when_the_payload_carries_rate_limits() {
     assert_eq!(window["five_hour"], serde_json::json!({ "resets_at": resets_at, "used_percentage": 31.4 }));
     assert_eq!(window["session_id"], "it-2");
     assert!(chrono::DateTime::parse_from_rfc3339(window["at"].as_str().unwrap()).is_ok(), "{window}");
+    // A window path that cannot be created lands its failure in the log, never the exit code.
+    std::fs::remove_dir_all(dir.join("state")).unwrap();
+    std::fs::write(dir.join("state"), "").unwrap();
+    assert_eq!(run(&dir, &payload.to_string()).0, 0);
+    let log = std::fs::read_to_string(dir.join(".claude/logs/statusline.log")).unwrap();
+    assert!(log.contains("window: "), "{log}");
     let _ = std::fs::remove_dir_all(&dir);
 }

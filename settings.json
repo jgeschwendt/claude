@@ -11,18 +11,6 @@
     "defaultMode": "auto"
   },
   "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/target/release/format",
-            "statusMessage": "formatting..."
-          }
-        ]
-      }
-    ],
     "SessionStart": [
       {
         "hooks": [

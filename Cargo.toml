@@ -3,11 +3,7 @@ name = "claude-home"
 version = "0.1.0"
 edition = "2024"
 publish = false
-description = "Claude Code home tooling: the statusline renderer and the PostToolUse format hook"
-
-[[bin]]
-name = "format"
-path = "src/bin/format.rs"
+description = "Claude Code home tooling: the statusline renderer"
 
 [[bin]]
 name = "statusline"

@@ -2,7 +2,7 @@
 
 ```stele
 kind: system
-purpose: Claude Code harness — global config, rules and skills, plus the Rust statusline and PostToolUse format hook; `mise run link` symlinks each entry into ~/.claude.
+purpose: Claude Code harness — global config, rules and skills, plus the Rust statusline; `mise run link` symlinks each entry into ~/.claude.
 commands:
   lint: cargo clippy --all-targets -- -D warnings
   test: cargo test
@@ -18,12 +18,12 @@ invariants:
 | .mise/tasks/ | `link` (symlink entries into `~/.claude`; `--check` only reports) and `save` (commit today's `sync:` and push main) |
 | rules/ | house standards, one file per language or practice, read through `~/.claude/rules` |
 | skills/ | personal skills, read through `~/.claude/skills`; `skills/synced/` is Claude Code's, gitignored |
-| src/ | `claude-home` crate — `lib.rs` modules `format`, `log`, `statusline`; `src/bin/` holds thin `main`s over them |
-| tests/ | end-to-end tests driving the built `format` and `statusline` binaries against a temp `$HOME` |
+| src/ | `claude-home` crate — `lib.rs` modules `log`, `statusline`; `src/bin/` holds thin `main`s over them |
+| tests/ | end-to-end tests driving the built `statusline` binary against a temp `$HOME` |
 
 ## Working here
 
-- `settings.json` points the hooks at `~/.claude/target/release/<name>` — a source change is live only after `cargo build --release`.
+- `settings.json` points the statusline at `~/.claude/target/release/statusline` — a source change is live only after `cargo build --release`.
 
 <!-- @stele -->
 

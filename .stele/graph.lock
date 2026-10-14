@@ -20,7 +20,7 @@
           "text": "link never overwrites — an entry in ~/.claude that is a real file or a foreign link is reported `drift` and left alone; only missing entries are linked",
           "verified": {
             "digest": null,
-            "sha": "c73798058c20c7af129f8bb5aadbf7dbedfa06f1"
+            "sha": "2e25316ab7986769faedc6fd82d035e5cf4427df"
           }
         }
       ],
@@ -39,7 +39,7 @@
       },
       "id": "/",
       "kind": "system",
-      "purpose": "Claude Code harness — global config, rules and skills, plus the Rust statusline and PostToolUse format hook; `mise run link` symlinks each entry into ~/.claude."
+      "purpose": "Claude Code harness — global config, rules and skills, plus the Rust statusline; `mise run link` symlinks each entry into ~/.claude."
     }
   },
   "version": 2

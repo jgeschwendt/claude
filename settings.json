@@ -10,77 +10,6 @@
     ],
     "defaultMode": "auto"
   },
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$HOME/.local/bin/sandman\" recall --hook",
-            "timeout": 10,
-            "statusMessage": "recalling memories..."
-          },
-          {
-            "type": "command",
-            "command": "\"$HOME/.local/bin/docket\" --hook",
-            "timeout": 10,
-            "statusMessage": "checking threads..."
-          },
-          {
-            "type": "command",
-            "command": "\"$HOME/.local/bin/sandman\" report --hook",
-            "timeout": 10,
-            "statusMessage": "reading the night's reports..."
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$HOME/.local/bin/sandman\" take --hook"
-          }
-        ]
-      }
-    ],
-    "Notification": [
-      {
-        "matcher": "permission_prompt",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$HOME/.local/bin/docket\" --hook",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$HOME/.local/bin/docket\" --hook",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$HOME/.local/bin/docket\" --hook",
-            "timeout": 10,
-            "statusMessage": "checking threads..."
-          }
-        ]
-      }
-    ]
-  },
   "worktree": {
     "baseRef": "fresh",
     "bgIsolation": "none"
@@ -94,7 +23,8 @@
     "rust-analyzer-lsp@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
     "vercel@claude-plugins-official": true,
-    "typesafe@typesafe-ai": true
+    "typesafe@typesafe-ai": true,
+    "perpetual@jgeschwendt": true
   },
   "extraKnownMarketplaces": {
     "typesafe-ai": {

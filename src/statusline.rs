@@ -164,11 +164,9 @@ impl Environment {
 /// one-line reason; the caller logs it and the tick carries on.
 pub fn persist_window(input: &StatusInput, now: DateTime<Utc>, env: &Environment) -> Result<(), String> {
     let five = input.rate_limits.as_ref().and_then(|l| l.five_hour.as_ref());
-    let (Some(path), Some(resets_at), Some(used)) = (
-        &env.window_file,
-        five.and_then(|f| f.resets_at).filter(|v| v.is_finite()).map(|v| v as i64),
-        five.and_then(|f| f.used_percentage).filter(|v| v.is_finite()),
-    ) else {
+    let (Some(path), Some((resets_at, used))) =
+        (&env.window_file, five.and_then(|f| Some((f.resets_at? as i64, f.used_percentage?))))
+    else {
         return Ok(());
     };
     // The reader's bound: a live window resets within 6h. Outside it a payload is never written and
@@ -259,7 +257,7 @@ fn surface_value(value: &Value, entrypoint: &str) -> Option<f64> {
 
 /// The CLI accepts configured windows only within [100k, 1M].
 fn valid_window(value: Option<f64>) -> Option<f64> {
-    value.filter(|v| v.is_finite() && v.fract() == 0.0 && *v >= 100_000.0 && *v <= 1_000_000.0)
+    value.filter(|v| v.fract() == 0.0 && *v >= 100_000.0 && *v <= 1_000_000.0)
 }
 
 /// Resolve the auto-compact window for `model`, mirroring the CLI's precedence chain.
@@ -371,7 +369,7 @@ impl Samples {
     /// Best-effort write in the shared on-disk shape, integral values in integer notation; a
     /// failing write never breaks a tick.
     pub fn write(&self, path: &Path) {
-        let number = |v: f64| if v.is_finite() && v.fract() == 0.0 && v.abs() < 9e15 { json!(v as i64) } else { json!(v) };
+        let number = |v: f64| if v.fract() == 0.0 && v.abs() < 9e15 { json!(v as i64) } else { json!(v) };
         let samples: Vec<Value> = self.samples.iter().map(|s| json!({ "at": s.at, "tokens": number(s.tokens) })).collect();
         let _ = std::fs::write(path, json!({ "samples": samples }).to_string());
     }
@@ -460,7 +458,7 @@ fn tone(p: i64) -> String {
 fn bar(p: i64, width: usize) -> String {
     const EIGHTHS: [char; 7] = ['▏', '▎', '▍', '▌', '▋', '▊', '▉'];
     let eighths = js_round(p as f64 / 100.0 * width as f64 * 8.0) as i64;
-    let mut filled = "█".repeat((eighths / 8).max(0) as usize);
+    let mut filled = "█".repeat((eighths / 8) as usize);
     if let Some(partial) = usize::try_from(eighths % 8 - 1).ok().and_then(|i| EIGHTHS.get(i)) {
         filled.push(*partial);
     }
@@ -620,7 +618,7 @@ mod tests {
             (10_000.0, 120_000, Some("1m")),
             (150_000.0, 170_000, None),
             (130_000.0, 120_000, None),
-            (120_000.0, 120_000, None),
+            (119_999.0, 120_000, None),
             (10_000.0, 0, None),
             (10_000.0, 60_000, None),
         ] {
@@ -631,6 +629,7 @@ mod tests {
             let out = plain(&render(&input, now(), 80, &mut samples, &env));
 
             assert_eq!(out.split_once('≈').map(|(_, rest)| rest.split(' ').next().unwrap()), eta, "{out}");
+            assert_eq!(samples.dirty, tokens != 0, "{out}");
         }
     }
 
@@ -669,7 +668,7 @@ mod tests {
 
         assert_eq!(write_five(Value::Null), None, "a payload without a window was written");
         assert_eq!(write_five(json!({ "resets_at": null, "used_percentage": null })), None, "a null window was written");
-        assert_eq!(write(1_756_999_000, 10.0), None, "a window already past was written");
+        assert_eq!(write(1_757_000_000, 10.0), None, "a window resetting now was written");
         assert_eq!(write(1_791_773_097_000, 10.0), None, "a millisecond resets_at was written");
         std::fs::write(&file, r#"{"five_hour":{"resets_at":4102444800,"used_percentage":99.0}}"#).unwrap();
         assert_eq!(write(1_757_018_000, 92.0), Some(json!({ "resets_at": 1_757_018_000, "used_percentage": 92.0 })));
@@ -690,6 +689,7 @@ mod tests {
         let kept: Vec<i64> = samples.samples.iter().map(|s| s.at).collect();
         assert_eq!(kept, (2..42).map(|i| at(15 * i).timestamp_millis()).collect::<Vec<_>>());
         // The store round-trips through the shared on-disk shape, integer notation pinned.
+        assert_eq!(env.samples_path(Some("")), None);
         let path = env.samples_path(Some("s1")).unwrap();
         samples.write(&path);
         let bytes = std::fs::read_to_string(&path).unwrap();
@@ -705,7 +705,7 @@ mod tests {
         let (dir, env) = scratch("threshold");
         std::fs::create_dir_all(dir.join(".claude")).unwrap();
         for (state, settings, model, size, window, expected) in [
-            (json!({}), json!({}), fable, 200_000, "100000", 79_000.0),
+            (json!({}), json!({}), fable, 200_000, " 50000 ", 79_000.0),
             (json!({ "autoCompactEnabled": false }), json!({}), fable, 200_000, "", 200_000.0),
             (json!({}), json!({ "autoCompactWindow": 150_000 }), fable, 200_000, "", 129_000.0),
             (json!({ "clientDataCacheSlots": { "a": slot(1, 120_000), "b": slot(2, 140_000) } }), json!({}), fable, 200_000, "", 119_000.0),
@@ -719,6 +719,7 @@ mod tests {
             ),
             (json!({}), json!({}), "claude-opus-4-6", 500_000, "", 179_000.0),
             (json!({}), json!({}), "claude-sonnet-5", 1_000_000, "", 479_000.0),
+            (json!({ "autoCompactWindowsCache": { "claude-sonnet-5": 0 } }), json!({}), "claude-sonnet-5", 1_000_000, "", 979_000.0),
         ] {
             std::fs::write(dir.join(".claude.json"), state.to_string()).unwrap();
             std::fs::write(dir.join(".claude/settings.local.json"), settings.to_string()).unwrap();

@@ -6,7 +6,7 @@
 
 use chrono::Local;
 use claude_home::log;
-use claude_home::statusline::{Environment, Samples, StatusInput, columns, persist_window, render};
+use claude_home::statusline::{Environment, Samples, StatusInput, columns, persist_window, render, sh};
 use serde_json::Value;
 use std::io::Read;
 
@@ -24,7 +24,7 @@ fn tick(raw: &str) -> Result<(String, Option<String>), String> {
     let env = Environment::from_env();
     let path = env.samples_path(input.session_id.as_deref());
     let mut samples = path.as_deref().map(Samples::load).unwrap_or_default();
-    let line = render(&input, Local::now(), columns(80), &mut samples, &env);
+    let line = render(&input, Local::now(), columns(sh).unwrap_or(80), &mut samples, &env);
     if samples.dirty && let Some(path) = &path {
         samples.write(path);
     }
@@ -34,19 +34,11 @@ fn tick(raw: &str) -> Result<(String, Option<String>), String> {
 
 fn main() {
     let mut raw = String::new();
-    if let Err(error) = std::io::stdin().read_to_string(&mut raw) {
-        write_log(&format!("Error: {error}"));
-        println!();
-        return;
-    }
-    match tick(&raw) {
+    match std::io::stdin().read_to_string(&mut raw).map_err(|e| format!("Error: {e}")).and_then(|_| tick(&raw)) {
         Ok((line, warning)) => {
             println!("{line}");
-            let payload = serde_json::from_str::<Value>(&raw)
-                .ok()
-                .and_then(|json| serde_json::to_string_pretty(&json).ok())
-                .unwrap_or(raw);
-            write_log(&(payload + &warning.map(|w| format!("\n{w}")).unwrap_or_default()));
+            let payload = serde_json::from_str::<Value>(&raw).and_then(|json| serde_json::to_string_pretty(&json));
+            write_log(&(payload.unwrap_or(raw) + &warning.map(|w| format!("\n{w}")).unwrap_or_default()));
         }
         Err(error) => {
             write_log(&error);

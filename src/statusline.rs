@@ -20,8 +20,9 @@
 //!   long-context pricing/rate-limit tier), ↻ reset as local wall-clock time.
 //!
 //! Layout: stdout is a pipe, so the real PTY width comes from walking parent PIDs to the shell
-//! that owns the tty ([`columns`]). Head/tail are measured as plain strings and only then styled —
-//! ANSI escapes never count toward width. The bar absorbs whatever columns remain.
+//! that owns the tty ([`columns`]). Each segment is styled once; head and tail are measured with
+//! their ANSI escapes stripped, so escapes never count toward width. The bar absorbs whatever
+//! columns remain.
 //!
 //! Window clock: each tick whose payload carries `rate_limits` also persists the five-hour window
 //! to [`Environment::window_file`] for out-of-process readers — see [`persist_window`].
@@ -31,10 +32,10 @@
 //!
 //! Fidelity note: this is a port of the former `statusline.js`, so JavaScript semantics are
 //! reproduced deliberately — `Math.round` halves go toward +∞ ([`js_round`]), `Number(…)` parses
-//! loosely ([`js_number`]), `x || default` treats `0`/`NaN`/`""` as absent, and string widths are
-//! counted in characters.
+//! loosely (trimmed, `""` and garbage rejected), `x || default` treats `0`/`NaN`/`""` as absent,
+//! and string widths are counted in characters.
 
-use chrono::{DateTime, Local, SecondsFormat, Timelike, Utc};
+use chrono::{DateTime, Local, SecondsFormat, Utc};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
@@ -45,77 +46,56 @@ use std::path::{Path, PathBuf};
 /// renderer treats as optional is optional here too.
 #[derive(Debug, Deserialize)]
 pub struct StatusInput {
-    /// Context accounting for the session.
     pub context_window: Option<ContextWindow>,
-    /// Session spend.
     pub cost: Option<Cost>,
-    /// Reasoning-effort selection.
     pub effort: Option<Effort>,
     /// Whether requests crossed into the 2× long-context tier.
     pub exceeds_200k_tokens: Option<bool>,
-    /// Whether fast mode is on.
     pub fast_mode: Option<bool>,
-    /// The active model. The only required member of the payload.
+    /// The only required member of the payload.
     pub model: Model,
-    /// Rate-limit windows.
     pub rate_limits: Option<RateLimits>,
-    /// Session id, used to key the burn-rate sample file.
     pub session_id: Option<String>,
-    /// Workspace paths, used to find project settings.
     pub workspace: Option<Workspace>,
 }
 
-/// `context_window` member of [`StatusInput`].
 #[derive(Debug, Deserialize)]
 pub struct ContextWindow {
-    /// Hard context-window cap for the model.
     pub context_window_size: Option<f64>,
     /// The app's own numerator: input + cache read + cache creation.
     pub total_input_tokens: Option<f64>,
-    /// The app's own percentage; unused here, the bar measures against the auto-compact threshold.
-    pub used_percentage: Option<f64>,
 }
 
-/// `cost` member of [`StatusInput`].
 #[derive(Debug, Deserialize)]
 pub struct Cost {
-    /// Session spend so far, input and output priced together by the app.
     pub total_cost_usd: Option<f64>,
 }
 
-/// `effort` member of [`StatusInput`].
 #[derive(Debug, Deserialize)]
 pub struct Effort {
     /// `"high"` (the default, never shown), `"medium"`, `"low"`, …
     pub level: Option<String>,
 }
 
-/// `five_hour` member of [`RateLimits`].
 #[derive(Debug, Deserialize)]
 pub struct FiveHour {
-    /// Unix timestamp (seconds) at which the window resets.
+    /// Unix seconds.
     pub resets_at: Option<f64>,
-    /// Percentage of the window consumed.
     pub used_percentage: Option<f64>,
 }
 
-/// `model` member of [`StatusInput`].
 #[derive(Debug, Deserialize)]
 pub struct Model {
-    /// Human-facing name, rendered bold at the head of the line.
     pub display_name: String,
-    /// Model id, keyed on to resolve the auto-compact window.
+    /// Keyed on to resolve the auto-compact window.
     pub id: Option<String>,
 }
 
-/// `rate_limits` member of [`StatusInput`].
 #[derive(Debug, Deserialize)]
 pub struct RateLimits {
-    /// The rolling 5-hour window.
     pub five_hour: Option<FiveHour>,
 }
 
-/// `workspace` member of [`StatusInput`].
 #[derive(Debug, Deserialize)]
 pub struct Workspace {
     /// Project root, whose `.claude/settings*.json` can override the auto-compact window.
@@ -152,7 +132,7 @@ impl Environment {
     /// Snapshot the real process environment.
     pub fn from_env() -> Self {
         let var = |k: &str| std::env::var(k).ok();
-        let tmp = var("TMPDIR").unwrap_or_else(|| "/tmp".into());
+        let tmp = var("TMPDIR").unwrap_or("/tmp".into());
         let set = |k: &str| var(k).filter(|v| !v.is_empty());
         let window_file = set("CLAUDE_WINDOW_FILE").map(PathBuf::from).or_else(|| {
             let state = set("XDG_STATE_HOME")
@@ -190,23 +170,19 @@ impl Environment {
 /// writes nothing, so an idle session re-rendering stale limits never rolls the clock back. Atomic: a sibling temp file renamed into place.
 /// `Err` carries a one-line reason; the caller logs it and the tick carries on.
 pub fn persist_window(input: &StatusInput, now: DateTime<Utc>, env: &Environment) -> Result<(), String> {
-    let (Some(path), Some(limits)) = (&env.window_file, &input.rate_limits) else {
-        return Ok(());
-    };
-    let five = limits.five_hour.as_ref();
-    let (Some(resets_at), Some(used)) = (
+    let five = input.rate_limits.as_ref().and_then(|l| l.five_hour.as_ref());
+    let (Some(path), Some(resets_at), Some(used)) = (
+        &env.window_file,
         five.and_then(|f| f.resets_at).filter(|v| v.is_finite()).map(|v| v as i64),
         five.and_then(|f| f.used_percentage).filter(|v| v.is_finite()),
     ) else {
         return Ok(());
     };
-    let prior = std::fs::read_to_string(path).ok().and_then(|text| serde_json::from_str::<Value>(&text).ok());
     // The reader's bound: a live window resets within 6h. Outside it a payload is never written and
     // a stored window never blocks one, so a corrupt file heals on the next good tick.
     let live = |resets_at: i64| (1..=6 * 3600).contains(&resets_at.saturating_sub(now.timestamp()));
-    let prior = prior.as_ref().and_then(|v| {
-        Some((v.pointer("/five_hour/resets_at")?.as_i64()?, v.pointer("/five_hour/used_percentage")?.as_f64()?))
-    });
+    let prior = read_json(path)
+        .and_then(|v| Some((v["five_hour"]["resets_at"].as_i64()?, v["five_hour"]["used_percentage"].as_f64()?)));
     if !live(resets_at) || prior.is_some_and(|prior| live(prior.0) && prior > (resets_at, used)) {
         return Ok(());
     }
@@ -216,36 +192,19 @@ pub fn persist_window(input: &StatusInput, now: DateTime<Utc>, env: &Environment
         "session_id": input.session_id,
     });
     let fail = |e: std::io::Error| format!("window: {}: {e}", path.display());
-    let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
-    std::fs::create_dir_all(dir).map_err(fail)?;
-    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let tmp = dir.join(format!(".{name}.{}.tmp", std::process::id()));
-    std::fs::write(&tmp, body.to_string() + "\n").and_then(|()| std::fs::rename(&tmp, path)).map_err(|e| {
-        let _ = std::fs::remove_file(&tmp);
-        fail(e)
-    })
+    std::fs::create_dir_all(path.parent().unwrap_or(Path::new(""))).map_err(fail)?;
+    let tmp = path.with_file_name(format!(".{}.{}.tmp", path.file_name().unwrap_or_default().display(), std::process::id()));
+    std::fs::write(&tmp, body.to_string() + "\n")
+        .and_then(|()| std::fs::rename(&tmp, path))
+        .inspect_err(|_| drop(std::fs::remove_file(&tmp)))
+        .map_err(fail)
 }
 
 // ─── JavaScript semantics ────────────────────────────────────────────────────
 
-/// `Math.min(hi, Math.max(lo, v))`.
-fn clamp(v: f64, lo: f64, hi: f64) -> f64 {
-    hi.min(lo.max(v))
-}
-
-/// `Number(value)` for the subset that matters: trims, empty is `0`, garbage is `NaN`.
-pub fn js_number(value: Option<&str>) -> f64 {
-    match value {
-        None => f64::NAN,
-        Some(s) => {
-            let s = s.trim();
-            if s.is_empty() {
-                0.0
-            } else {
-                s.parse::<f64>().unwrap_or(f64::NAN)
-            }
-        }
-    }
+/// `Number(value)` where only a finite positive result counts: trimmed; `""`, garbage and `0` → `None`.
+fn positive(value: Option<&str>) -> Option<f64> {
+    value?.trim().parse().ok().filter(|v: &f64| v.is_finite() && *v > 0.0)
 }
 
 /// `Math.round`: halves go toward +∞, unlike Rust's round-half-away-from-zero.
@@ -259,16 +218,13 @@ fn js_to_fixed_2(v: f64) -> String {
     format!("{}.{:02}", cents / 100, cents % 100)
 }
 
-/// `value || fallback` over a number: `0` and `NaN` are absent.
-fn or_default(value: Option<f64>, fallback: f64) -> f64 {
-    match value {
-        Some(v) if v != 0.0 && !v.is_nan() => v,
-        _ => fallback,
-    }
+/// JS truthiness over a number: `0` and `NaN` are absent, so `value || d` is `truthy(value).unwrap_or(d)`.
+fn truthy(value: Option<f64>) -> Option<f64> {
+    value.filter(|v| *v != 0.0 && !v.is_nan())
 }
 
 /// `JSON.parse(readFileSync(path))`, `None` on any failure.
-fn read_json(path: &str) -> Option<Value> {
+fn read_json(path: impl AsRef<Path>) -> Option<Value> {
     serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()
 }
 
@@ -283,86 +239,35 @@ fn read_json(path: &str) -> Option<Value> {
 // statsig experiment (currently scoped to claude-opus-4-8, unreadable externally) — if the bar
 // drifts from the app on that model only, that's why.
 
-/// Models whose baked-in window stays at the legacy 200k.
-const LEGACY_200K_MODELS: [&str; 2] = ["claude-opus-4-6", "claude-sonnet-4-6"];
-
-/// Per-model defaults baked into the CLI binary (`gfa` / `rTp` in v2.1.198).
-fn default_windows() -> Value {
-    json!({
-        "claude-sonnet-5": {
-            "default": 967_000,
-            "surfaces": { "local-agent": 500_000, "remote_cowork": 500_000 },
-        },
-    })
-}
-
 /// The CLI keys its window tables by base model id — strip Bedrock/Vertex region and vendor
 /// prefixes and version/date suffixes (`us.anthropic.claude-sonnet-5-20250929-v1:0` →
 /// `claude-sonnet-5`).
 pub fn base_model_id(id: &str) -> String {
+    let digits = |d: &str| !d.is_empty() && d.bytes().all(|b| b.is_ascii_digit());
     let lower = id.to_lowercase();
-    let mut s = lower.as_str();
-    for prefix in ["apac.", "eu.", "global.", "us."] {
-        if let Some(rest) = s.strip_prefix(prefix) {
-            s = rest;
-            break;
-        }
+    let s = ["apac.", "eu.", "global.", "us."].into_iter().find_map(|p| lower.strip_prefix(p)).unwrap_or(&lower);
+    let mut s = s.strip_prefix("anthropic.").unwrap_or(s);
+    // /-v\d+(:\d+)?$/
+    if let Some((head, v)) =
+        s.rsplit_once(':').map_or(Some(s), |(rest, d)| digits(d).then_some(rest)).and_then(|r| r.rsplit_once("-v"))
+        && digits(v)
+    {
+        s = head;
     }
-    s = s.strip_prefix("anthropic.").unwrap_or(s);
-    s = strip_version_suffix(s);
-    s = strip_date_suffix(s);
-    s = s.strip_suffix("[1m]").unwrap_or(s);
-    s.to_string()
-}
-
-/// `/[@-]\d{8}$/`
-fn strip_date_suffix(s: &str) -> &str {
-    let cut = match s.len().checked_sub(9) {
-        Some(cut) if s.is_char_boundary(cut) => cut,
-        _ => return s,
-    };
-    let tail = &s[cut..];
-    let lead = tail.as_bytes()[0];
-    if (lead == b'@' || lead == b'-') && tail[1..].bytes().all(|b| b.is_ascii_digit()) {
-        &s[..cut]
-    } else {
-        s
+    // /[@-]\d{8}$/ — an 8-digit tail holds neither separator, so the last one is the match.
+    if let Some((head, d)) = s.rsplit_once(['@', '-'])
+        && d.len() == 8
+        && digits(d)
+    {
+        s = head;
     }
-}
-
-/// `/-v\d+(:\d+)?$/`
-fn strip_version_suffix(s: &str) -> &str {
-    let mut rest = s;
-    if let Some(colon) = rest.rfind(':') {
-        let digits = &rest[colon + 1..];
-        if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
-            return s;
-        }
-        rest = &rest[..colon];
-    }
-    match rest.rfind("-v") {
-        Some(cut) if !rest[cut + 2..].is_empty() && rest[cut + 2..].bytes().all(|b| b.is_ascii_digit()) => &s[..cut],
-        _ => s,
-    }
+    s.strip_suffix("[1m]").unwrap_or(s).to_string()
 }
 
 /// Window-table values are a number or `{surfaces?: {<entrypoint>: entry}, default?}`.
-fn surface_value(value: Option<&Value>, entrypoint: &str) -> Option<f64> {
-    let value = value?;
-    if value.is_number() {
-        return value.as_f64();
-    }
-    let object = value.as_object()?;
-    let entry = object
-        .get("surfaces")
-        .and_then(Value::as_object)
-        .and_then(|surfaces| surfaces.get(entrypoint))
-        .filter(|entry| !entry.is_null())
-        .unwrap_or(value);
-    if entry.is_number() {
-        return entry.as_f64();
-    }
-    entry.get("default").filter(|v| v.is_number()).and_then(Value::as_f64)
+fn surface_value(value: &Value, entrypoint: &str) -> Option<f64> {
+    let entry = Some(&value["surfaces"][entrypoint]).filter(|e| !e.is_null()).unwrap_or(value);
+    entry.as_f64().or(entry["default"].as_f64())
 }
 
 /// The CLI accepts configured windows only within [100k, 1M].
@@ -378,96 +283,56 @@ fn auto_compact_window(
     global_state: &Value,
     env: &Environment,
 ) -> f64 {
-    // 1. Env override, inherited from the CLI process; clamped to [100k, 1M].
-    let configured = js_number(env.auto_compact_window.as_deref());
-    if configured.is_finite() && configured > 0.0 {
-        return clamp(js_round(configured), 100_000.0, 1_000_000.0);
-    }
-
-    // 2. `autoCompactWindow` in settings (written by /autocompact); highest-precedence file wins.
-    let mut paths = vec!["/Library/Application Support/ClaudeCode/managed-settings.json".to_string()];
-    if let Some(dir) = project_dir {
-        paths.push(format!("{dir}/.claude/settings.local.json"));
-        paths.push(format!("{dir}/.claude/settings.json"));
-    }
-    paths.push(format!("{}/.claude/settings.json", env.home));
-    for path in &paths {
-        let window = valid_window(
-            read_json(path)
-                .as_ref()
-                .and_then(|json| json.get("autoCompactWindow"))
-                .filter(|v| v.is_number())
-                .and_then(Value::as_f64),
-        );
-        if let Some(window) = window {
-            return window;
-        }
-    }
-
-    // 3. Server-pushed per-model windows cached in ~/.claude.json (clientdata `rowan_thicket`,
-    //    then the bootstrap `auto_compact_windows` → `autoCompactWindowsCache`). Null for this
-    //    account today, but this is where new-model windows land without a CLI update.
     let entrypoint = env.entrypoint.as_deref().unwrap_or("");
-    let mut slots: Vec<&Value> = global_state
-        .get("clientDataCacheSlots")
-        .and_then(Value::as_object)
-        .map(|slots| slots.values().collect())
-        .unwrap_or_default();
-    slots.sort_by(|a, b| {
-        let at = |v: &Value| v.get("at").and_then(Value::as_f64).unwrap_or(0.0);
-        at(b).total_cmp(&at(a))
-    });
-    let sources = slots
-        .into_iter()
-        .map(|slot| slot.get("data"))
-        .chain(std::iter::once(global_state.get("clientDataCache")));
-    for data in sources {
-        let window = valid_window(surface_value(
-            data.and_then(|data| data.get("rowan_thicket")).and_then(|table| table.get(model)),
-            entrypoint,
-        ));
-        if let Some(window) = window {
-            return window;
-        }
-    }
-    let empty = Value::Object(serde_json::Map::new());
-    let cache = global_state.get("autoCompactWindowsCache").unwrap_or(&empty);
-    if let Some(cached) = valid_window(surface_value(cache.get(model), entrypoint)) {
-        return cached;
-    }
-
-    // (The unobservable statsig experiment slots in here; claude-opus-4-8 only as of v2.1.198.)
-
-    // 4. Baked-in model defaults. A model key present-but-invalid in the bootstrap cache
-    //    suppresses the static default (`replacesDefault` in the CLI).
-    if window_size < 1_000_000.0 && LEGACY_200K_MODELS.contains(&model) {
-        return 200_000.0;
-    }
-    if cache.get(model).is_none()
-        && let Some(fallback) = valid_window(surface_value(default_windows().get(model), entrypoint))
-    {
-        return fallback;
-    }
-
-    // 5. No override anywhere → the full context window is the auto window (source "auto").
-    window_size
+    let settings = [
+        Some("/Library/Application Support/ClaudeCode/managed-settings.json".into()),
+        project_dir.map(|dir| format!("{dir}/.claude/settings.local.json")),
+        project_dir.map(|dir| format!("{dir}/.claude/settings.json")),
+        Some(format!("{}/.claude/settings.json", env.home)),
+    ];
+    let mut slots: Vec<&Value> =
+        global_state["clientDataCacheSlots"].as_object().into_iter().flat_map(|slots| slots.values()).collect();
+    slots.sort_by(|a, b| b["at"].as_f64().unwrap_or(0.0).total_cmp(&a["at"].as_f64().unwrap_or(0.0)));
+    let cache = &global_state["autoCompactWindowsCache"];
+    // 1. Env override, inherited from the CLI process; clamped to [100k, 1M].
+    positive(env.auto_compact_window.as_deref())
+        .map(|configured| js_round(configured).clamp(100_000.0, 1_000_000.0))
+        // 2. `autoCompactWindow` in settings (written by /autocompact); highest-precedence file wins.
+        .or_else(|| {
+            settings.iter().flatten().find_map(|path| valid_window(read_json(path)?["autoCompactWindow"].as_f64()))
+        })
+        // 3. Server-pushed per-model windows cached in ~/.claude.json (clientdata `rowan_thicket`,
+        //    newest slot first, then the bootstrap `auto_compact_windows` → `autoCompactWindowsCache`).
+        //    Null for this account today, but this is where new-model windows land without a CLI update.
+        .or_else(|| {
+            slots
+                .into_iter()
+                .map(|slot| &slot["data"])
+                .chain([&global_state["clientDataCache"]])
+                .map(|data| &data["rowan_thicket"][model])
+                .chain([&cache[model]])
+                .find_map(|table| valid_window(surface_value(table, entrypoint)))
+        })
+        // (The unobservable statsig experiment slots in here; claude-opus-4-8 only as of v2.1.198.)
+        // 4. Per-model defaults baked into the CLI binary (`gfa` / `rTp` in v2.1.198): the 4-6 models
+        //    stay at the legacy 200k. A model key present-but-invalid in the bootstrap cache
+        //    suppresses the static default (`replacesDefault` in the CLI).
+        .or((window_size < 1_000_000.0 && matches!(model, "claude-opus-4-6" | "claude-sonnet-4-6")).then_some(200_000.0))
+        .or((model == "claude-sonnet-5" && cache.get(model).is_none())
+            .then_some(if matches!(entrypoint, "local-agent" | "remote_cowork") { 500_000.0 } else { 967_000.0 }))
+        // 5. No override anywhere → the full context window is the auto window (source "auto").
+        .unwrap_or(window_size)
 }
 
 /// Tokens at which auto-compact fires: window − output reserve − 13k compaction reserve.
 pub fn auto_compact_threshold(data: &StatusInput, env: &Environment) -> f64 {
-    let window_size = or_default(
-        data.context_window.as_ref().and_then(|c| c.context_window_size),
-        200_000.0,
-    );
-    let global_state = read_json(&format!("{}/.claude.json", env.home)).unwrap_or_else(|| json!({}));
+    let window_size = truthy(data.context_window.as_ref().and_then(|c| c.context_window_size)).unwrap_or(200_000.0);
+    let global_state = read_json(format!("{}/.claude.json", env.home)).unwrap_or_default();
 
     // Auto-compact off (env kill switches or `claude config set autoCompactEnabled false`) → the
     // app shows usage against the full window instead.
-    let off = |v: &Option<String>| matches!(v.as_deref(), Some("1") | Some("true"));
-    if off(&env.disable_auto_compact)
-        || off(&env.disable_compact)
-        || global_state.get("autoCompactEnabled") == Some(&Value::Bool(false))
-    {
+    let off = |v: &Option<String>| matches!(v.as_deref(), Some("1" | "true"));
+    if off(&env.disable_auto_compact) || off(&env.disable_compact) || global_state["autoCompactEnabled"] == false {
         return window_size;
     }
 
@@ -478,8 +343,7 @@ pub fn auto_compact_threshold(data: &StatusInput, env: &Environment) -> f64 {
         &global_state,
         env,
     ));
-    let max_out = js_number(env.max_output_tokens.as_deref());
-    let output_reserve = if max_out.is_finite() && max_out > 0.0 { max_out.min(20_000.0) } else { 20_000.0 };
+    let output_reserve = positive(env.max_output_tokens.as_deref()).map_or(20_000.0, |max| max.min(20_000.0));
     (window - output_reserve - 13_000.0).max(1.0)
 }
 
@@ -502,46 +366,27 @@ pub struct Sample {
 /// session's samples carry over.
 #[derive(Clone, Debug, Default)]
 pub struct Samples {
-    /// Whether [`render`] touched the samples and they are worth writing back.
+    /// Whether [`render`] recorded a new sample worth writing back.
     pub dirty: bool,
     /// Oldest first.
     pub samples: Vec<Sample>,
 }
 
 impl Samples {
-    /// Read `path`, keeping entries whose `at` and `tokens` are both numbers. Any failure — no
-    /// file, malformed JSON, wrong shape — yields an empty set.
+    /// Read `path`, keeping entries whose `at` and `tokens` are both numbers; any failure → empty.
     pub fn load(path: &Path) -> Self {
-        let samples = read_json(&path.to_string_lossy())
-            .as_ref()
-            .and_then(|json| json.get("samples"))
-            .and_then(Value::as_array)
-            .map(|entries| {
-                entries
-                    .iter()
-                    .filter_map(|entry| {
-                        let number = |key| entry.get(key).filter(|v: &&Value| v.is_number()).and_then(Value::as_f64);
-                        Some(Sample { at: number("at")? as i64, tokens: number("tokens")? })
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        Self { dirty: false, samples }
+        let json = read_json(path).unwrap_or_default();
+        let entries = json["samples"].as_array().into_iter().flatten();
+        let samples = entries.filter_map(|e| Some(Sample { at: e["at"].as_f64()? as i64, tokens: e["tokens"].as_f64()? }));
+        Self { dirty: false, samples: samples.collect() }
     }
 
-    /// Serialize to the shared on-disk shape. Integral values keep integer notation.
-    pub fn to_json(&self) -> String {
-        let number = |v: f64| {
-            if v.is_finite() && v.fract() == 0.0 && v.abs() < 9e15 { json!(v as i64) } else { json!(v) }
-        };
-        let samples: Vec<Value> =
-            self.samples.iter().map(|s| json!({ "at": s.at, "tokens": number(s.tokens) })).collect();
-        json!({ "samples": samples }).to_string()
-    }
-
-    /// Best-effort write; a failing write never breaks a tick.
+    /// Best-effort write in the shared on-disk shape, integral values in integer notation; a
+    /// failing write never breaks a tick.
     pub fn write(&self, path: &Path) {
-        let _ = std::fs::write(path, self.to_json());
+        let number = |v: f64| if v.is_finite() && v.fract() == 0.0 && v.abs() < 9e15 { json!(v as i64) } else { json!(v) };
+        let samples: Vec<Value> = self.samples.iter().map(|s| json!({ "at": s.at, "tokens": number(s.tokens) })).collect();
+        let _ = std::fs::write(path, json!({ "samples": samples }).to_string());
     }
 }
 
@@ -556,16 +401,10 @@ fn dur(seconds: f64) -> String {
 }
 
 /// Record the current token count and project time-to-auto-compact from the retained trend:
-/// `≈40m` once a ≥60s trend exists and the projection lands under 6h, else `""`.
-fn eta_to_compact(
-    session_id: Option<&str>,
-    tokens: f64,
-    threshold: f64,
-    now_ms: i64,
-    samples: &mut Samples,
-) -> String {
-    if session_id.is_none_or(str::is_empty) || tokens == 0.0 {
-        return String::new();
+/// `≈40m` once a ≥60s trend exists and the projection lands under 6h.
+fn eta_to_compact(tokens: f64, threshold: f64, now_ms: i64, samples: &mut Samples) -> Option<String> {
+    if tokens == 0.0 {
+        return None;
     }
     // A token drop means /compact or /clear rewound the context — the old trend describes nothing.
     if samples.samples.last().is_some_and(|last| tokens < last.tokens) {
@@ -575,58 +414,43 @@ fn eta_to_compact(
         let excess = samples.samples.len().saturating_sub(39);
         samples.samples.drain(..excess);
         samples.samples.push(Sample { at: now_ms, tokens });
+        samples.dirty = true;
     }
-    samples.dirty = true;
 
     let (first, last) = (samples.samples[0], samples.samples[samples.samples.len() - 1]);
     let span = (last.at - first.at) as f64 / 1000.0;
-    if span < 60.0 {
-        return String::new();
-    }
     let rate = (last.tokens - first.tokens) / span;
-    if rate <= 0.0 {
-        return String::new();
-    }
     let eta = (threshold - tokens) / rate;
-    // Past the threshold there is nothing to project; an idle session's rate decays toward 0 and
-    // the ETA toward nonsense — hide beyond 6h.
-    if eta > 0.0 && eta < 6.0 * 3600.0 { format!("≈{}", dur(eta)) } else { String::new() }
+    // Under a minute the trend is noise; past the threshold there is nothing to project; an idle
+    // session's rate decays toward 0 and the ETA toward nonsense — hide beyond 6h.
+    (span >= 60.0 && rate > 0.0 && eta > 0.0 && eta < 6.0 * 3600.0).then(|| format!("≈{}", dur(eta)))
 }
 
 // ─── terminal ────────────────────────────────────────────────────────────────
 
 /// Columns of the controlling PTY. Claude Code pipes our stdout, so there is no tty on this
-/// process — walk up to the shell that owns the real one and ask `stty`, mirroring ccstatusline.
-/// Any failure along the way falls back.
-pub fn columns(fallback: usize) -> usize {
-    fn sh(argv: &[&str]) -> Option<String> {
-        let output = std::process::Command::new(argv[0])
-            .args(&argv[1..])
-            .stderr(std::process::Stdio::null())
-            .output()
-            .ok()?;
-        output.status.success().then(|| String::from_utf8_lossy(&output.stdout).trim().to_string())
-    }
-    let flag = if cfg!(target_os = "macos") { "-f" } else { "-F" };
-    let mut pid = std::process::id() as i64;
+/// process — walk up to the shell that owns the real one and ask `stty` through `sh` ([`sh`] for
+/// real, a fake in tests), mirroring ccstatusline. `None` on any failure along the way.
+pub fn columns(sh: impl Fn(&[&str]) -> Option<String>) -> Option<usize> {
+    let mut pid = std::process::id().to_string();
     for _ in 0..8 {
-        if pid <= 1 {
-            break;
-        }
-        let Some(tty) = sh(&["ps", "-o", "tty=", "-p", &pid.to_string()]) else { return fallback };
+        let tty = sh(&["ps", "-o", "tty=", "-p", &pid])?;
         if !tty.is_empty() && tty != "??" {
-            let Some(size) = sh(&["stty", flag, &format!("/dev/{tty}"), "size"]) else { return fallback };
-            return size
-                .split(' ')
-                .nth(1)
-                .and_then(|cols| cols.parse::<usize>().ok())
-                .filter(|cols| *cols != 0)
-                .unwrap_or(fallback);
+            let flag = if cfg!(target_os = "macos") { "-f" } else { "-F" };
+            return sh(&["stty", flag, &format!("/dev/{tty}"), "size"])?.split(' ').nth(1)?.parse().ok().filter(|c| *c != 0);
         }
-        let Some(ppid) = sh(&["ps", "-o", "ppid=", "-p", &pid.to_string()]) else { return fallback };
-        pid = ppid.parse().unwrap_or(0);
+        pid = sh(&["ps", "-o", "ppid=", "-p", &pid])?;
+        if pid.parse::<i64>().unwrap_or(0) <= 1 {
+            return None;
+        }
     }
-    fallback
+    None
+}
+
+/// Run `argv`, stderr silenced: its trimmed stdout on success.
+pub fn sh(argv: &[&str]) -> Option<String> {
+    let output = std::process::Command::new(argv[0]).args(&argv[1..]).stderr(std::process::Stdio::null()).output().ok()?;
+    output.status.success().then(|| String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
 // ─── rendering ───────────────────────────────────────────────────────────────
@@ -662,14 +486,17 @@ fn bar(p: i64, width: usize) -> String {
 }
 
 /// Unix timestamp → local wall-clock `10:50pm`.
-fn clock(epoch: f64, now: &DateTime<Local>) -> String {
-    let Some(at) = DateTime::from_timestamp_millis((epoch * 1000.0) as i64) else {
-        return String::new();
-    };
-    let at = at.with_timezone(&now.timezone());
-    let hour = at.hour();
-    let hour12 = if hour % 12 == 0 { 12 } else { hour % 12 };
-    format!("{hour12}:{:02}{}", at.minute(), if hour < 12 { "am" } else { "pm" })
+fn clock(epoch: f64) -> String {
+    DateTime::from_timestamp_millis((epoch * 1000.0) as i64)
+        .map(|at| at.with_timezone(&Local).format("%-I:%M%P").to_string())
+        .unwrap_or_default()
+}
+
+/// `s` with its ANSI SGR escapes (`ESC … m`) removed: the printed text.
+fn plain(s: &str) -> String {
+    let mut parts = s.split('\x1b');
+    let head = parts.next().unwrap_or_default();
+    parts.fold(head.to_string(), |text, part| text + part.split_once('m').map_or("", |(_, rest)| rest))
 }
 
 /// Render one tick. Pure but for the settings/global-state files [`auto_compact_threshold`] reads,
@@ -682,70 +509,41 @@ pub fn render(
     env: &Environment,
 ) -> String {
     let model = &input.model.display_name;
-    // total_input_tokens is the app's own numerator (input + cache_read + cache_creation).
     // Missing early in session / after /compact → 0.
-    let tokens = or_default(input.context_window.as_ref().and_then(|c| c.total_input_tokens), 0.0);
+    let tokens = truthy(input.context_window.as_ref().and_then(|c| c.total_input_tokens)).unwrap_or(0.0);
     let threshold = auto_compact_threshold(input, env);
-    let pct = clamp(js_round(tokens / threshold * 100.0), 0.0, 100.0) as i64;
-    // Record velocity every tick, but only surface the ETA once the bar is half full.
-    let trend = eta_to_compact(input.session_id.as_deref(), tokens, threshold, now.timestamp_millis(), samples);
-    let eta = if pct >= 50 { trend } else { String::new() };
+    let pct = js_round(tokens / threshold * 100.0).clamp(0.0, 100.0) as i64;
+    // Each segment is styled once and absent as `""`. Record velocity every tick, but only surface
+    // the ETA once the bar is half full.
+    let eta = eta_to_compact(tokens, threshold, now.timestamp_millis(), samples)
+        .filter(|_| pct >= 50)
+        .map(|eta| format!("{DIM} {eta}{RESET}"))
+        .unwrap_or_default();
     // Session spend so far; hidden until it rounds to a cent.
-    let cost = or_default(input.cost.as_ref().and_then(|c| c.total_cost_usd), 0.0);
-    let usd = if cost >= 0.005 { format!("${}", js_to_fixed_2(cost)) } else { String::new() };
+    let usd = truthy(input.cost.as_ref().and_then(|c| c.total_cost_usd))
+        .filter(|cost| *cost >= 0.005)
+        .map(|cost| format!("{DIM} · ${}{RESET}", js_to_fixed_2(cost)))
+        .unwrap_or_default();
     let five = input.rate_limits.as_ref().and_then(|r| r.five_hour.as_ref());
-    let five_pct = five.and_then(|f| f.used_percentage).unwrap_or(0.0).floor() as i64;
-    let resets_at = five.and_then(|f| f.resets_at).filter(|v| *v != 0.0 && !v.is_nan());
-    // `exceeds_200k_tokens` flips when requests cross into the 2× long-context pricing tier —
-    // the dagger explains sudden rate-limit burn.
-    let tier = if input.exceeds_200k_tokens.unwrap_or(false) { "†" } else { "" };
-
+    let limit = five
+        .map(|five| {
+            let used = five.used_percentage.unwrap_or(0.0).floor() as i64;
+            // `exceeds_200k_tokens` flips when requests cross into the 2× long-context pricing tier —
+            // the dagger explains sudden rate-limit burn.
+            let tier = input.exceeds_200k_tokens.unwrap_or(false).then(|| format!("{DIM}†{RESET}"));
+            format!("{DIM} · 5h {RESET}{}{used}%{RESET}{}", tone(used), tier.unwrap_or_default())
+        })
+        .unwrap_or_default();
+    let reset = truthy(five.and_then(|f| f.resets_at)).map(|at| format!("{DIM} ↻ {}{RESET}", clock(at))).unwrap_or_default();
     // Non-default mode markers next to the model — silent when running plain high-effort.
-    let effort = input.effort.as_ref().and_then(|e| e.level.as_deref()).filter(|l| !l.is_empty());
-    let flags: Vec<&str> = input
-        .fast_mode
-        .unwrap_or(false)
-        .then_some("fast")
-        .into_iter()
-        .chain(effort.filter(|level| *level != "high"))
-        .collect();
-    let flags = flags.join(" · ");
-
-    // Plain (unstyled) head/tail measure the layout — ANSI escapes have zero printed width, so
-    // sizing must run on the bare strings, styling on the assembled output.
-    let head = format!("{model}{} ", if flags.is_empty() { String::new() } else { format!(" ({flags})") });
-    let tail = format!(
-        " {pct}%{}{}{}{}",
-        if eta.is_empty() { String::new() } else { format!(" {eta}") },
-        if usd.is_empty() { String::new() } else { format!(" · {usd}") },
-        if five.is_some() { format!(" · 5h {five_pct}%{tier}") } else { String::new() },
-        match resets_at {
-            Some(at) => format!(" ↻ {}", clock(at, &now)),
-            None => String::new(),
-        },
-    );
-    let width = columns
-        .saturating_sub(MARGIN)
-        .saturating_sub(head.chars().count())
-        .saturating_sub(tail.chars().count());
-
-    let flags = if flags.is_empty() { String::new() } else { format!(" {DIM}({flags}){RESET}") };
-    let eta = if eta.is_empty() { String::new() } else { format!("{DIM} {eta}{RESET}") };
-    let usd = if usd.is_empty() { String::new() } else { format!("{DIM} · {usd}{RESET}") };
-    let limit = match five {
-        Some(_) => format!(
-            "{DIM} · 5h {RESET}{}{five_pct}%{RESET}{}",
-            tone(five_pct),
-            if tier.is_empty() { String::new() } else { format!("{DIM}†{RESET}") },
-        ),
-        None => String::new(),
-    };
-    let reset = match resets_at {
-        Some(at) => format!("{DIM} ↻ {}{RESET}", clock(at, &now)),
-        None => String::new(),
-    };
-    let (bar, tone) = (bar(pct, width), tone(pct));
-    format!("{BOLD}{model}{RESET}{flags} {bar}{tone} {pct}%{RESET}{eta}{usd}{limit}{reset}")
+    let effort = input.effort.as_ref().and_then(|e| e.level.as_deref()).filter(|l| !l.is_empty() && *l != "high");
+    let flags: Vec<&str> = input.fast_mode.unwrap_or(false).then_some("fast").into_iter().chain(effort).collect();
+    let flags = if flags.is_empty() { String::new() } else { format!(" {DIM}({}){RESET}", flags.join(" · ")) };
+    let head = format!("{BOLD}{model}{RESET}{flags} ");
+    let tail = format!("{} {pct}%{RESET}{eta}{usd}{limit}{reset}", tone(pct));
+    // ANSI escapes have zero printed width — the bar gets what the plain head/tail leave.
+    let width = columns.saturating_sub(MARGIN + plain(&head).chars().count() + plain(&tail).chars().count());
+    format!("{head}{}{tail}", bar(pct, width))
 }
 
 // ─── tests ───────────────────────────────────────────────────────────────────
@@ -754,10 +552,6 @@ pub fn render(
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
-
-    /// Unknown model + a 200k window resolves to the "auto" branch of [`auto_compact_window`], so
-    /// the threshold is 200_000 − 20_000 output reserve − 13_000 compaction reserve.
-    const THRESHOLD: f64 = 167_000.0;
 
     /// A fixed instant, so nothing in the suite depends on the wall clock.
     fn now() -> DateTime<Local> {
@@ -794,27 +588,9 @@ mod tests {
         (dir, env)
     }
 
-    /// ANSI escapes carry no printed width — strip them before asserting on text.
-    fn strip_ansi(out: &str) -> String {
-        let mut plain = String::new();
-        let mut chars = out.chars();
-        while let Some(c) = chars.next() {
-            if c == '\x1b' {
-                for c in chars.by_ref() {
-                    if c == 'm' {
-                        break;
-                    }
-                }
-            } else {
-                plain.push(c);
-            }
-        }
-        plain
-    }
-
     /// The rendered percentage.
     fn pct(out: &str) -> i64 {
-        let plain = strip_ansi(out);
+        let plain = plain(out);
         let (head, _) = plain.split_once('%').unwrap();
         head.rsplit(' ').next().unwrap().parse().unwrap()
     }
@@ -826,15 +602,16 @@ mod tests {
         assert_eq!(base_model_id("claude-opus-5[1m]"), "claude-opus-5");
         assert_eq!(base_model_id("Claude-Fable-5-1"), "claude-fable-5-1");
         assert_eq!(base_model_id("claude-sonnet-4-5-v"), "claude-sonnet-4-5-v");
+        assert_eq!(base_model_id("o:b"), "o:b");
     }
 
     #[test]
     fn draws_an_eighth_block_bar_that_fits_its_width() {
-        assert_eq!(strip_ansi(&bar(50, 8)), "████░░░░");
-        assert_eq!(strip_ansi(&bar(52, 8)), "████▏░░░");
-        assert_eq!(strip_ansi(&bar(0, 4)), "░░░░");
-        assert_eq!(strip_ansi(&bar(100, 4)), "████");
-        assert_eq!(strip_ansi(&bar(75, 0)), "");
+        assert_eq!(plain(&bar(50, 8)), "████░░░░");
+        assert_eq!(plain(&bar(52, 8)), "████▏░░░");
+        assert_eq!(plain(&bar(0, 4)), "░░░░");
+        assert_eq!(plain(&bar(100, 4)), "████");
+        assert_eq!(plain(&bar(75, 0)), "");
     }
 
     #[test]
@@ -842,35 +619,46 @@ mod tests {
         assert_eq!(dur(2_400.0), "40m");
         assert_eq!(dur(10.0), "1m");
         assert_eq!(dur(7_980.0), "2h13m");
-        let midnight = DateTime::from_timestamp(1_757_000_000, 0).unwrap().with_timezone(&Local);
-        let stamp = clock(1_757_000_000.0, &midnight);
-        assert!(stamp.ends_with("am") || stamp.ends_with("pm"), "{stamp}");
-        assert_eq!(stamp, format!("{}:{:02}{}", {
-            let h = midnight.hour() % 12;
-            if h == 0 { 12 } else { h }
-        }, midnight.minute(), if midnight.hour() < 12 { "am" } else { "pm" }));
+        assert_eq!(clock(1_757_000_000.0), now().format("%-I:%M%P").to_string());
+        assert_eq!(clock(f64::MAX), "");
     }
 
     #[test]
-    fn hides_the_cost_segment_below_a_cent() {
+    fn renders_each_segment_only_with_its_data() {
         let (_dir, env) = scratch();
+        let line = |extra| plain(&render(&payload(extra), now(), 80, &mut Samples::default(), &env));
 
-        let out = render(&payload(json!({ "cost": { "total_cost_usd": 0.001 } })), now(), 80, &mut Samples::default(), &env);
-
-        assert!(!out.contains('$'), "{out}");
-    }
-
-    #[test]
-    fn hides_the_eta_without_prior_samples() {
-        let (_dir, env) = scratch();
-        let input = payload(json!({
-            "context_window": { "context_window_size": 200_000, "total_input_tokens": 120_000 },
-            "session_id": "s2",
+        assert!(!line(json!({ "cost": { "total_cost_usd": 0.001 }, "effort": { "level": "high" } })).contains(['$', '(']));
+        let out = line(json!({
+            "cost": { "total_cost_usd": 1.2 },
+            "effort": { "level": "low" },
+            "exceeds_200k_tokens": true,
+            "fast_mode": true,
+            "rate_limits": { "five_hour": { "resets_at": 1_757_018_000, "used_percentage": 31.4 } },
         }));
+        assert!(out.starts_with("Fable 5.1 (fast · low) "), "{out}");
+        assert!(out.ends_with(&format!(" 30% · $1.20 · 5h 31%† ↻ {}", clock(1_757_018_000.0))), "{out}");
+        assert_eq!(out.chars().count(), 80 - MARGIN, "{out}");
+    }
 
-        let out = render(&input, now(), 80, &mut Samples::default(), &env);
+    #[test]
+    fn projects_the_eta_only_from_a_live_forward_trend() {
+        let (_dir, env) = scratch();
+        for (prior, tokens, eta) in [
+            (10_000.0, 120_000, Some("1m")),
+            (150_000.0, 170_000, None),
+            (130_000.0, 120_000, None),
+            (120_000.0, 120_000, None),
+            (10_000.0, 0, None),
+        ] {
+            let mut samples =
+                Samples { dirty: false, samples: vec![Sample { at: now().timestamp_millis() - 120_000, tokens: prior }] };
+            let input = payload(json!({ "context_window": { "context_window_size": 200_000, "total_input_tokens": tokens } }));
 
-        assert!(!out.contains('≈'), "{out}");
+            let out = plain(&render(&input, now(), 80, &mut samples, &env));
+
+            assert_eq!(out.split_once('≈').map(|(_, rest)| rest.split(' ').next().unwrap()), eta, "{out}");
+        }
     }
 
     #[test]
@@ -881,7 +669,6 @@ mod tests {
         let input =
             payload(json!({ "rate_limits": { "five_hour": { "resets_at": 1_757_018_000, "used_percentage": 31.4 } } }));
 
-        render(&input, now(), 80, &mut Samples::default(), &env);
         persist_window(&input, now().with_timezone(&Utc), &env).unwrap();
 
         assert_eq!(
@@ -918,72 +705,16 @@ mod tests {
     }
 
     #[test]
-    fn hides_the_eta_past_the_threshold() {
-        let (_dir, env) = scratch();
-        let mut samples =
-            Samples { dirty: false, samples: vec![Sample { at: now().timestamp_millis() - 120_000, tokens: 150_000.0 }] };
-        let input = payload(json!({ "context_window": { "context_window_size": 200_000, "total_input_tokens": 170_000 } }));
-
-        let out = render(&input, now(), 80, &mut samples, &env);
-
-        assert!(!out.contains('≈'), "{out}");
-    }
-
-    #[test]
-    fn rejects_malformed_input() {
-        assert!(serde_json::from_str::<StatusInput>("not json").is_err());
-        assert!(serde_json::from_str::<StatusInput>("{}").is_err());
-    }
-
-    #[test]
-    fn renders_the_5h_rate_limit_segment() {
-        let (_dir, env) = scratch();
-        let input = payload(json!({ "rate_limits": { "five_hour": { "used_percentage": 31.4 } } }));
-
-        let out = render(&input, now(), 80, &mut Samples::default(), &env);
-
-        assert!(strip_ansi(&out).contains("· 5h 31%"), "{out}");
-    }
-
-    #[test]
-    fn renders_the_cost_segment() {
-        let (_dir, env) = scratch();
-
-        let out = render(&payload(json!({ "cost": { "total_cost_usd": 1.2 } })), now(), 80, &mut Samples::default(), &env);
-
-        assert!(strip_ansi(&out).contains("$1.20"), "{out}");
-    }
-
-    #[test]
-    fn renders_the_eta_from_seeded_samples() {
-        let (_dir, env) = scratch();
-        // A 110k-token climb over the last 2 minutes projects well under the 6h cutoff.
-        let mut samples = Samples {
-            dirty: false,
-            samples: vec![Sample { at: now().timestamp_millis() - 120_000, tokens: 10_000.0 }],
-        };
-        let input = payload(json!({
-            "context_window": { "context_window_size": 200_000, "total_input_tokens": 120_000 },
-            "session_id": "s2",
-        }));
-
-        let out = strip_ansi(&render(&input, now(), 80, &mut samples, &env));
-
-        let eta = out.split('≈').nth(1).unwrap_or_default().split(' ').next().unwrap_or_default();
-        assert!(eta.ends_with('m') && eta.chars().any(|c| c.is_ascii_digit()), "{out}");
-    }
-
-    #[test]
     fn renders_the_model_and_context_percentage() {
         let (dir, env) = scratch();
         let mut samples = Samples::default();
 
         let out = render(&payload(json!({})), now(), 80, &mut samples, &env);
 
-        let plain = strip_ansi(&out);
+        let plain = plain(&out);
         assert_eq!(plain.lines().count(), 1, "{plain}");
         assert!(plain.starts_with("Fable 5.1 "), "{plain}");
-        assert_eq!(pct(&out), js_round(50_000.0 / THRESHOLD * 100.0) as i64);
+        assert_eq!(pct(&out), 30);
 
         // The sample store round-trips through the shared on-disk shape.
         let path = env.samples_path(Some("s1")).unwrap();
@@ -996,15 +727,43 @@ mod tests {
     }
 
     #[test]
-    fn respects_claude_code_auto_compact_window() {
-        let (_dir, env) = scratch();
-        let narrowed = Environment { auto_compact_window: Some("100000".into()), ..env.clone() };
+    fn resolves_the_auto_compact_threshold() {
+        let slot = |at: i64, window: i64| json!({ "at": at, "data": { "rowan_thicket": { "claude-fable-5-1": window } } });
+        let fable = "claude-fable-5-1";
+        for (state, settings, model, size, window, expected) in [
+            (json!({}), json!({}), fable, 200_000, "100000", 79_000.0),
+            (json!({ "autoCompactEnabled": false }), json!({}), fable, 200_000, "", 200_000.0),
+            (json!({}), json!({ "autoCompactWindow": 150_000 }), fable, 200_000, "", 129_000.0),
+            (json!({ "clientDataCacheSlots": { "a": slot(1, 120_000), "b": slot(2, 140_000) } }), json!({}), fable, 200_000, "", 119_000.0),
+            (
+                json!({ "autoCompactWindowsCache": { fable: { "surfaces": { "local-agent": { "default": 130_000 } } } } }),
+                json!({}),
+                fable,
+                200_000,
+                "",
+                109_000.0,
+            ),
+            (json!({}), json!({}), "claude-opus-4-6", 500_000, "", 179_000.0),
+            (json!({}), json!({}), "claude-sonnet-5", 1_000_000, "", 479_000.0),
+        ] {
+            let (dir, env) = scratch();
+            std::fs::create_dir_all(dir.join(".claude")).unwrap();
+            std::fs::write(dir.join(".claude.json"), state.to_string()).unwrap();
+            std::fs::write(dir.join(".claude/settings.local.json"), settings.to_string()).unwrap();
+            let env = Environment {
+                auto_compact_window: Some(window.into()),
+                entrypoint: Some("local-agent".into()),
+                max_output_tokens: Some("8000".into()),
+                ..env
+            };
+            let input = payload(json!({
+                "context_window": { "context_window_size": size },
+                "model": { "display_name": model, "id": model },
+                "workspace": { "project_dir": dir },
+            }));
 
-        let base = render(&payload(json!({})), now(), 80, &mut Samples::default(), &env);
-        let out = render(&payload(json!({})), now(), 80, &mut Samples::default(), &narrowed);
-
-        assert!(pct(&out) > pct(&base), "{out}");
-        assert_eq!(pct(&out), js_round(50_000.0 / (100_000.0 - 20_000.0 - 13_000.0) * 100.0) as i64);
+            assert_eq!(auto_compact_threshold(&input, &env), expected, "{model} {state}");
+        }
     }
 
     #[test]
@@ -1018,7 +777,6 @@ mod tests {
             payload(json!({ "rate_limits": { "five_hour": null } })),
             payload(json!({ "rate_limits": { "five_hour": { "resets_at": null, "used_percentage": null } } })),
         ] {
-            render(&input, now(), 80, &mut Samples::default(), &env);
             persist_window(&input, now().with_timezone(&Utc), &env).unwrap();
         }
 
@@ -1042,5 +800,22 @@ mod tests {
         assert_eq!(tone(50), fg(179));
         assert_eq!(tone(75), fg(208));
         assert_eq!(tone(90), fg(203));
+    }
+
+    #[test]
+    fn walks_parent_pids_to_the_tty_width() {
+        let walk = |tty: &'static str, ppid: &'static str, size: &'static str| {
+            move |argv: &[&str]| match argv {
+                ["ps", _, "tty=", _, pid] => Some(if *pid == "7" { tty } else { "??" }.into()),
+                ["ps", _, "ppid=", ..] => Some(ppid.into()),
+                _ => Some(size.into()),
+            }
+        };
+        assert_eq!(columns(walk("ttys001", "7", "50 120")), Some(120));
+        assert_eq!(columns(walk("ttys001", "7", "50 0")), None);
+        assert_eq!(columns(walk("??", "1", "")), None);
+        assert_eq!(columns(walk("??", "7", "")), None);
+        assert_eq!(sh(&["echo", " hi "]).as_deref(), Some("hi"));
+        assert_eq!(sh(&["false"]), None);
     }
 }

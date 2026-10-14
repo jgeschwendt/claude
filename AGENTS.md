@@ -15,7 +15,9 @@ invariants:
 
 | where | what |
 | --- | --- |
+| .claude-plugin/ | `marketplace.json`: the repo as the local marketplace `jgeschwendt`, listing `plugins/perpetual` |
 | .mise/tasks/ | `link` (symlink entries into `~/.claude`; `--check` only reports) and `save` (commit today's `sync:` and push main) |
+| plugins/ | Claude Code mods — `perpetual` (session hooks, guards, window clock, shift band); its README and `*.test.ts` (`claude plugin test`) |
 | rules/ | house standards, one file per language or practice, read through `~/.claude/rules` |
 | skills/ | personal skills, read through `~/.claude/skills`; `skills/synced/` is Claude Code's, gitignored |
 | src/ | `claude-home` crate — `lib.rs` modules `log`, `statusline`; `src/bin/` holds thin `main`s over them |

@@ -12,8 +12,9 @@ a link with a real file — merge it into the checkout by hand, then re-link.
 
 ```
 jgeschwendt/claude
+├── .claude-plugin/        marketplace.json — the repo as the local marketplace `jgeschwendt`
 ├── .mise/tasks/           link and save — `mise tasks` describes them
-├── plugins/               Claude Code mods, each loaded with `--plugin-dir`
+├── plugins/               Claude Code mods the marketplace lists
 ├── rules/                 house standards for code and docs
 ├── skills/                personal skills, lean and self-contained
 ├── src/                   claude-home crate: statusline, log
@@ -29,7 +30,14 @@ Runtime but load-bearing, in `~/.claude` rather than the repo: `plans/` is what 
 
 ## Mods
 
-`plugins/perpetual` is a Claude Code mod that only observes and displays: a band above the prompt with the current sandman shift and the trail's latest event, a `sandman trail append --kind correction` for every prompt typed at the composer that reads as a correction or repeats an earlier one (never a `claude -p` prompt), and `/shift` and `/trail [n]`, whose output is a transcript line Claude never reads. No marketplace lists it and `settings.json` does not enable it: load it per session with `claude --plugin-dir <checkout>/plugins/perpetual`, or name that folder in `CLAUDE_CODE_PLUGIN_DIRS`. Its README holds the detail; `claude plugin validate plugins/perpetual --strict` and `claude plugin test plugins/perpetual` check it.
+`plugins/perpetual` is the harness's mod: it runs sandman's and docket's session hooks, denies the commands the house rules forbid, writes the five-hour window clock and draws the shift band; its README holds the detail. The repo is a local marketplace, installed once per machine:
+
+```sh
+claude plugin marketplace add ~/.grove/code/jgeschwendt/claude/main
+claude plugin install perpetual@jgeschwendt
+```
+
+A local marketplace is read in place, so a trunk edit to the mod is live from the next session. `claude plugin validate plugins/perpetual --strict` and `claude plugin test plugins/perpetual` check it.
 
 ## The crate
 
@@ -51,3 +59,4 @@ Each statusline tick whose payload carries `rate_limits` also writes the five-ho
 `$XDG_STATE_HOME/claude/window.json` (default `~/.local/state/claude/window.json`; `$CLAUDE_WINDOW_FILE` overrides it).
 The write is monotone: a window not resetting within 6h, or behind the stored live one (an earlier
 `resets_at`, or less used of the same), writes nothing — an idle session never rolls the clock back.
+The perpetual mod writes the same file from `session.measure`, without the monotone check.

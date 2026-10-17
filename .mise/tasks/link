@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Symlink the harness entries into ~/.claude (--check only reports)"
-# Symlink into ~/.claude each entry read through it — by Claude Code, or as a ~/.claude/target/release path.
+# Symlink into ~/.claude each entry Claude Code reads through it.
 #   ok      already linked here           drift   a real file or foreign link; never overwritten
 #   link    was missing, now linked       unlink  a link here for an unlisted entry, removed
 # --check changes nothing (reports missing: / stale: instead); either mode exits 1 on anything but ok.
@@ -19,7 +19,6 @@ esac
 entries=(
 	rules
 	skills
-	target
 	CLAUDE.md
 	settings.json
 	settings.local.json

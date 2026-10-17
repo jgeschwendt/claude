@@ -3,7 +3,7 @@
 What shapes a Claude Code session is tracked and synced; what sessions accrete stays out.
 The repo is the grove root `jgeschwendt/claude`, checked out at `~/.grove/code/jgeschwendt/claude/main`.
 `~/.claude` is not a repo: it holds Claude Code's runtime state plus a symlink into this checkout for
-each entry read through it — `CLAUDE.md`, `rules/`, `settings*.json`, `skills/`, `target/`. `mise run link` re-links (`--check` only reports); a `drift:` line means a writer replaced
+each entry read through it — `CLAUDE.md`, `rules/`, `settings*.json`, `skills/`. `mise run link` re-links (`--check` only reports); a `drift:` line means a writer replaced
 a link with a real file — merge it into the checkout by hand, then re-link.
 
 ## Tracked
@@ -41,14 +41,15 @@ claude plugin install perpetual@jgeschwendt
 
 ## The crate
 
-`statusline` is a Rust binary; `settings.json` wires the harness straight at
-`~/.claude/target/release/statusline`, so a source change is live only once it is rebuilt.
+`statusline` is a Rust binary; `settings.json` runs it from `~/.local/bin/statusline`, where `mise run build`
+installs it. It lives outside `target/`, which mbx redirects into `~/Library/Caches/mbx/` and its gc prunes when the
+disk is tight (that pruning blanked the status bar, 2026-10-17). A source change is live only once rebuilt.
 
 `mise.toml` pins the toolchain (rust, bun) and this repo's own oxfmt/oxlint (npm backend), and carries the tasks:
 
 ```sh
 mise install            # rust, bun, and the pinned oxfmt/oxlint this repo formats with
-mise run build          # cargo build --release → target/release/statusline
+mise run build          # cargo build --release, then install → ~/.local/bin/statusline
 mise run test           # cargo test: unit tests in src/, end-to-end tests in tests/
 ```
 

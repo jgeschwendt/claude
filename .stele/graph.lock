@@ -3,7 +3,7 @@
   "landmarks": {
     "link-never-overwrites": {
       "file": ".mise/tasks/link",
-      "line": 33,
+      "line": 32,
       "node": "/"
     }
   },
@@ -16,11 +16,11 @@
           "enforced_by": null,
           "id": "link-never-overwrites",
           "kind": "invariant",
-          "resolved": ".mise/tasks/link:33",
+          "resolved": ".mise/tasks/link:32",
           "text": "link never overwrites — an entry in ~/.claude that is a real file or a foreign link is reported `drift` and left alone; only missing entries are linked",
           "verified": {
             "digest": null,
-            "sha": "2e25316ab7986769faedc6fd82d035e5cf4427df"
+            "sha": "cfab9076d4e9663fb68f6b1ac867eaaa8ca1ddc2"
           }
         }
       ],

@@ -25,7 +25,7 @@ invariants:
 
 ## Working here
 
-- `settings.json` points the statusline at `~/.claude/target/release/statusline` — a source change is live only after `cargo build --release`.
+- `settings.json` points the statusline at `~/.local/bin/statusline`, which `mise run build` installs — a source change is live only after `mise run build`; never `target/`, which mbx gc prunes.
 
 <!-- @stele -->
 

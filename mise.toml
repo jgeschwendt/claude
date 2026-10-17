@@ -6,8 +6,8 @@ hk = "2.5.0"
 rust = "1.97.1"
 
 [tasks.build]
-description = "Build the statusline binary into target/release/"
-run = "cargo build --release"
+description = "Build the statusline binary and install it to ~/.local/bin (outside the mbx target cache)"
+run = "cargo build --release && install -m 755 target/release/statusline ~/.local/bin/statusline"
 
 [tasks.test]
 description = "Run the crate's unit and integration tests"

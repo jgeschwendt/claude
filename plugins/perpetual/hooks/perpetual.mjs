@@ -211,6 +211,38 @@ async function show($, bin, args, shape = (stdout) => stdout.trim()) {
   return {};
 }
 
+/**
+ * Resolves the open `problem` threads keyed `session:<id>` of sessions absent from Claude Code's live
+ * registry, `~/.claude/sessions/<pid>.json` (`sessionId`): a killed session fires no SessionEnd. Skipped
+ * unless the registry reads and lists this session — else its format changed and absence is no evidence.
+ * Each docket call gets half the hook budget, so the sweep holds SessionStart no longer than a hook.
+ * @param {any} $
+ * @returns {Promise<string[]>} no context
+ */
+async function sweep($) {
+  const dir = `${await homeOf($)}/.claude/sessions`;
+  const live = new Set();
+  for (const { name } of await $.fs.list(dir).catch(() => []))
+    if (name.endsWith(".json")) live.add(parse(await readText($, `${dir}/${name}`))?.sessionId);
+  const init = { timeoutMs: HOOK_MS / 2 };
+  const threads = live.has(await $.session.id())
+    ? (parse(await run($, "docket", ["list", "--json"], init)) ?? [])
+    : [];
+  await Promise.all(
+    threads
+      .filter(
+        (/** @type {{ key: string, kind: string }} */ thread) =>
+          thread.kind === "problem" &&
+          /^session:/.test(thread.key) &&
+          !live.has(thread.key.slice(8)),
+      )
+      .map((/** @type {{ id: string }} */ thread) =>
+        run($, "docket", ["resolve", thread.id, "--reason", "session gone"], init),
+      ),
+  );
+  return [];
+}
+
 /** @param {string} text */
 function tokensOf(text) {
   return new Set(
@@ -294,6 +326,7 @@ export const register = (on) => {
       hook($, "sandman", ["recall", "--hook"], e),
       hook($, "docket", ["--hook"], e),
       hook($, "sandman", ["report", "--hook"], e),
+      sweep($),
     ]),
   );
 

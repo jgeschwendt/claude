@@ -86,6 +86,11 @@ function world(
     const text = files[e.path];
     return text === undefined ? { deny: `ENOENT: ${e.path}` } : { value: text };
   });
+  on("fs.list", ($, e) => {
+    const names = Object.keys(files).filter((path) => path.startsWith(`${e.path}/`));
+    if (!names.length) return { deny: `ENOENT: ${e.path}` };
+    return { value: names.map((path) => ({ name: path.slice(e.path.length + 1) })) as any };
+  });
   on("fs.write", ($, e: any) => {
     writes.push([e.path, e.text]);
     return e.path.includes("/denied/") ? { deny: "EACCES" } : { value: undefined };
@@ -366,6 +371,49 @@ test("SessionEnd runs sandman take and resolves the session's docket threads ins
   ]);
   expect(inits.map((init) => init.timeoutMs)).toEqual([1500, 1500]);
   expect(JSON.parse(inits[0].stdin)).toMatchObject({ reason: "prompt_input_exit" });
+});
+
+test("SessionStart resolves the problem threads of unregistered sessions, only once the registry lists this one", async ($, on) => {
+  const dir = `${HOME}/.claude/sessions`;
+  const files: Record<string, string> = {};
+  const thread = (id: string, kind: string, key: string | null) => ({
+    id,
+    key,
+    kind,
+    state: "open",
+  });
+  const outs: Record<string, object> = {
+    "docket list --json": {
+      stdout: JSON.stringify([
+        thread("t1", "problem", "session:dead"),
+        thread("t2", "problem", "session:live"),
+        thread("t3", "problem", "session:sess-1"),
+        thread("t4", "decision", "session:dead"),
+        thread("t5", "problem", "proposal:x"),
+        thread("t6", "problem", null),
+      ]),
+    },
+  };
+  const { runs } = world(on, files, { outs });
+  const sweeps = async () => {
+    expect(await $.classic.SessionStart({ source: "startup" })).toEqual({
+      additionalContext: ["settings"],
+    });
+    return runs.filter((argv) => argv[1] === "list" || argv[1] === "resolve");
+  };
+  expect(await sweeps()).toEqual([]);
+  files[`${dir}/2.json`] = JSON.stringify({ sessionId: "live" });
+  files[`${dir}/2.abc.key`] = "secret";
+  files[`${dir}/3.json`] = "{";
+  expect(await sweeps()).toEqual([]);
+  files[`${dir}/1.json`] = JSON.stringify({ sessionId: "sess-1" });
+  const swept = [
+    [`${BIN}/docket`, "list", "--json"],
+    [`${BIN}/docket`, "resolve", "t1", "--reason", "session gone"],
+  ];
+  expect(await sweeps()).toEqual(swept);
+  outs["docket list --json"] = { exitCode: 1 };
+  expect(await sweeps()).toEqual([...swept, swept[0]]);
 });
 
 test("the five-hour window is written atomically at start and on each measure", async ($, on) => {

@@ -373,14 +373,15 @@ test("SessionEnd runs sandman take and resolves the session's docket threads ins
   expect(JSON.parse(inits[0].stdin)).toMatchObject({ reason: "prompt_input_exit" });
 });
 
-test("SessionStart resolves the problem threads of unregistered sessions, only once the registry lists this one", async ($, on) => {
+test("SessionStart resolves the notification problems of unregistered sessions, only once the registry lists this one", async ($, on) => {
   const dir = `${HOME}/.claude/sessions`;
   const files: Record<string, string> = {};
-  const thread = (id: string, kind: string, key: string | null) => ({
+  const thread = (id: string, kind: string, key: string | null, body = "waiting") => ({
     id,
     key,
     kind,
-    state: "open",
+    messages: [{ body }],
+    title: "waiting",
   });
   const outs: Record<string, object> = {
     "docket list --json": {
@@ -391,6 +392,7 @@ test("SessionStart resolves the problem threads of unregistered sessions, only o
         thread("t4", "decision", "session:dead"),
         thread("t5", "problem", "proposal:x"),
         thread("t6", "problem", null),
+        thread("t7", "problem", "session:dead", "failed: x\nmore"),
       ]),
     },
   };
@@ -412,7 +414,7 @@ test("SessionStart resolves the problem threads of unregistered sessions, only o
     [`${BIN}/docket`, "resolve", "t1", "--reason", "session gone"],
   ];
   expect(await sweeps()).toEqual(swept);
-  outs["docket list --json"] = { exitCode: 1 };
+  outs["docket list --json"] = { stdout: "{}" };
   expect(await sweeps()).toEqual([...swept, swept[0]]);
 });
 

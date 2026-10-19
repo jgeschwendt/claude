@@ -212,10 +212,12 @@ async function show($, bin, args, shape = (stdout) => stdout.trim()) {
 }
 
 /**
- * Resolves the open `problem` threads keyed `session:<id>` of sessions absent from Claude Code's live
- * registry, `~/.claude/sessions/<pid>.json` (`sessionId`): a killed session fires no SessionEnd. Skipped
- * unless the registry reads and lists this session — else its format changed and absence is no evidence.
- * Each docket call gets half the hook budget, so the sweep holds SessionStart no longer than a hook.
+ * Resolves the open notification `problem` threads (every message the title: docket's Notification) keyed
+ * `session:<id>` of sessions absent from Claude Code's live registry, `~/.claude/sessions/<pid>.json`
+ * (`sessionId`): a killed session fires no SessionEnd. Headless `-p` sessions never register, so a thread
+ * docket's Stop opened for one (a `failed:` message) is left alone. Skipped unless the registry reads and
+ * lists this session — else its format changed and absence is no evidence. The list, then the resolves,
+ * get 5 s each, so with the registry reads the sweep can hold SessionStart ≈10 s.
  * @param {any} $
  * @returns {Promise<string[]>} no context
  */
@@ -226,15 +228,18 @@ async function sweep($) {
     if (name.endsWith(".json")) live.add(parse(await readText($, `${dir}/${name}`))?.sessionId);
   const init = { timeoutMs: HOOK_MS / 2 };
   const threads = live.has(await $.session.id())
-    ? (parse(await run($, "docket", ["list", "--json"], init)) ?? [])
+    ? parse(await run($, "docket", ["list", "--json"], init))
     : [];
   await Promise.all(
-    threads
+    (Array.isArray(threads) ? threads : [])
       .filter(
-        (/** @type {{ key: string, kind: string }} */ thread) =>
+        (
+          /** @type {{ key: string, kind: string, messages: { body: string }[], title: string }} */ thread,
+        ) =>
           thread.kind === "problem" &&
-          /^session:/.test(thread.key) &&
-          !live.has(thread.key.slice(8)),
+          thread.key?.startsWith("session:") &&
+          !live.has(thread.key.slice(8)) &&
+          thread.messages.every((message) => message.body === thread.title),
       )
       .map((/** @type {{ id: string }} */ thread) =>
         run($, "docket", ["resolve", thread.id, "--reason", "session gone"], init),

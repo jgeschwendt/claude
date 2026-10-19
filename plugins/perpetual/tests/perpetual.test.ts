@@ -356,11 +356,14 @@ test("UserPromptSubmit passes docket's plain-text pull as context", async ($, on
   });
 });
 
-test("SessionEnd runs sandman take inside the 1.5 s budget", async ($, on) => {
+test("SessionEnd runs sandman take and resolves the session's docket threads inside the 1.5 s budget", async ($, on) => {
   const { inits, runs } = world(on);
   await $.classic.SessionEnd({ reason: "prompt_input_exit" });
-  expect(runs).toEqual([[`${BIN}/sandman`, "take", "--hook"]]);
-  expect(inits[0].timeoutMs).toBe(1500);
+  expect(runs).toEqual([
+    [`${BIN}/sandman`, "take", "--hook"],
+    [`${BIN}/docket`, "resolve", "--key", "session:sess-1", "--reason", "session ended"],
+  ]);
+  expect(inits.map((init) => init.timeoutMs)).toEqual([1500, 1500]);
   expect(JSON.parse(inits[0].stdin)).toMatchObject({ reason: "prompt_input_exit" });
 });
 

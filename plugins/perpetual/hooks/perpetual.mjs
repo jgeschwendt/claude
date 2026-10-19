@@ -268,9 +268,17 @@ export const register = (on) => {
     beside(next, e, [hook($, "docket", ["--hook"], e)]),
   );
 
-  on("classic.SessionEnd", ($, e, next) =>
-    beside(next, e, [hook($, "sandman", ["take", "--hook"], e, TAKE_MS)]),
-  );
+  // an ended session waits on no one: its idle or permission notification fired after the last Stop,
+  // so docket's Stop never resolved it, and docket's hook has no SessionEnd
+  on("classic.SessionEnd", async ($, e, next) => {
+    const key = `session:${await $.session.id()}`;
+    return beside(next, e, [
+      hook($, "sandman", ["take", "--hook"], e, TAKE_MS),
+      run($, "docket", ["resolve", "--key", key, "--reason", "session ended"], {
+        timeoutMs: TAKE_MS,
+      }),
+    ]);
+  });
 
   on("classic.SessionStart", ($, e, next) =>
     context(next, e, [

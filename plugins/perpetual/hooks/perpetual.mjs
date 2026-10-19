@@ -55,7 +55,14 @@ const TAKE_MS = 1500;
 const TRAIL_DEFAULT_LINES = 10;
 
 /** @type {{ home: string | undefined, isOpened: boolean, last: any, prompts: Set<string>[], shift: any, timer: { cancel(): void } | undefined }} */
-const state = { home: undefined, isOpened: false, last: null, prompts: [], shift: null, timer: undefined };
+const state = {
+  home: undefined,
+  isOpened: false,
+  last: null,
+  prompts: [],
+  shift: null,
+  timer: undefined,
+};
 
 /**
  * Appends one trail event; a failure is logged, never raised.
@@ -213,7 +220,9 @@ function tokensOf(text) {
  * @param {any} $
  */
 async function window($) {
-  const five = (await $.session.usage()).rateLimits.find((/** @type {{ kind: string }} */ limit) => limit.kind === "five_hour");
+  const five = (await $.session.usage()).rateLimits.find(
+    (/** @type {{ kind: string }} */ limit) => limit.kind === "five_hour",
+  );
   const resetsAt = Date.parse(five?.resetsAt ?? "");
   if (Number.isNaN(resetsAt) || typeof five.percentUsed !== "number") return;
   const root = (await $.env.get("XDG_STATE_HOME")) || `${await homeOf($)}/.local/state`;
@@ -273,7 +282,9 @@ export const register = (on) => {
 
   on("classic.Stop", ($, e, next) => beside(next, e, [hook($, "docket", ["--hook"], e)]));
 
-  on("classic.UserPromptSubmit", ($, e, next) => context(next, e, [hook($, "docket", ["--hook"], e)]));
+  on("classic.UserPromptSubmit", ($, e, next) =>
+    context(next, e, [hook($, "docket", ["--hook"], e)]),
+  );
 
   on("command.run", { command: "docket" }, ($) => show($, "docket", ["list"]));
 
@@ -303,7 +314,8 @@ export const register = (on) => {
     state.prompts.push(tokens);
     const head = e.text.slice(0, 200);
     if (isRepeat) await append($, "correction", `repeated instruction: ${head}`);
-    else if (CORRECTION.some((pattern) => pattern.test(e.text))) await append($, "correction", head);
+    else if (CORRECTION.some((pattern) => pattern.test(e.text)))
+      await append($, "correction", head);
     return next(e);
   }).catch(($, e, next) => next(e)); // observe-only: a failed capture never holds the prompt
 

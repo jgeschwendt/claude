@@ -6,13 +6,13 @@ The harness's Claude Code mod: it runs the session hooks that `settings.json` us
 
 - **Session hooks** — each binary runs from `$HOME/.local/bin` through `$.process.run`, with the settings hook's stdin JSON (the `classic.<Event>` event's `e`) on stdin, and its output read as a command hook's: a JSON reply's `hookSpecificOutput.additionalContext`, else plain stdout. A missing binary, a timeout or a non-zero exit is a dim `$.ui.log` line and adds nothing; no exit code blocks.
 
-  | event | runs | returns |
-  | --- | --- | --- |
-  | `classic.SessionStart` | `sandman recall --hook`, `docket --hook`, `sandman report --hook`, concurrently, 10 s each | the chain's result plus each one's context, in that order, as `additionalContext` |
-  | `classic.UserPromptSubmit` | `docket --hook`, 10 s | docket's pull as `additionalContext` |
-  | `classic.Stop` | `docket --hook`, 10 s | the chain's result untouched |
-  | `classic.Notification` (`permission_prompt`, `idle_prompt`, `agent_needs_input`) | `docket --hook`, 10 s | the chain's result untouched |
-  | `classic.SessionEnd` | `sandman take --hook`, 1.5 s — the SessionEnd budget | the chain's result untouched |
+  | event                                                                            | runs                                                                                       | returns                                                                           |
+  | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+  | `classic.SessionStart`                                                           | `sandman recall --hook`, `docket --hook`, `sandman report --hook`, concurrently, 10 s each | the chain's result plus each one's context, in that order, as `additionalContext` |
+  | `classic.UserPromptSubmit`                                                       | `docket --hook`, 10 s                                                                      | docket's pull as `additionalContext`                                              |
+  | `classic.Stop`                                                                   | `docket --hook`, 10 s                                                                      | the chain's result untouched                                                      |
+  | `classic.Notification` (`permission_prompt`, `idle_prompt`, `agent_needs_input`) | `docket --hook`, 10 s                                                                      | the chain's result untouched                                                      |
+  | `classic.SessionEnd`                                                             | `sandman take --hook`, 1.5 s — the SessionEnd budget                                       | the chain's result untouched                                                      |
 
   A `classic.*` hook's result carries `additionalContext` on SessionStart, UserPromptSubmit and Stop, not on Notification or SessionEnd (verified 2026-10-14 · Claude Code 2.1.296 `ClassicResultFields`). Under managed settings an installed mod's `classic.*` hooks do not run (verified 2026-10-14 · `claude plugin validate`).
 

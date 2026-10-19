@@ -377,12 +377,9 @@ impl Samples {
 
 /// Seconds → compact duration (`2h13m`, `40m`).
 fn dur(seconds: f64) -> String {
-    let hours = (seconds / 3600.0).floor();
-    if hours != 0.0 {
-        format!("{}h{}m", hours as i64, ((seconds % 3600.0) / 60.0).floor() as i64)
-    } else {
-        format!("{}m", js_round(seconds / 60.0).max(1.0) as i64)
-    }
+    // Round to minutes before splitting, so 59.9m reads `1h0m`, never `60m`.
+    let minutes = js_round(seconds / 60.0).max(1.0) as i64;
+    if minutes < 60 { format!("{minutes}m") } else { format!("{}h{}m", minutes / 60, minutes % 60) }
 }
 
 /// Record the current token count and project time-to-auto-compact from the retained trend:
@@ -420,7 +417,8 @@ pub fn columns(sh: impl Fn(&[&str]) -> Option<String>) -> Option<usize> {
     let mut pid = std::process::id().to_string();
     for _ in 0..8 {
         let tty = sh(&["ps", "-o", "tty=", "-p", &pid])?;
-        if !tty.is_empty() && tty != "??" {
+        // No controlling tty: `??` on macOS, `?` from procps.
+        if !tty.is_empty() && !tty.starts_with('?') {
             let flag = if cfg!(target_os = "macos") { "-f" } else { "-F" };
             return sh(&["stty", flag, &format!("/dev/{tty}"), "size"])?.split(' ').nth(1)?.parse().ok().filter(|c| *c != 0);
         }
@@ -584,6 +582,7 @@ mod tests {
         assert_eq!(dur(2_400.0), "40m");
         assert_eq!(dur(10.0), "1m");
         assert_eq!(dur(7_980.0), "2h13m");
+        assert_eq!(dur(3_590.0), "1h0m");
         assert_eq!(clock(1_757_000_000.0), now().format("%-I:%M%P").to_string());
         assert_eq!(clock(f64::MAX), "");
     }
@@ -748,17 +747,18 @@ mod tests {
 
     #[test]
     fn walks_parent_pids_to_the_tty_width() {
-        let walk = |tty: &'static str, ppid: &'static str, size: &'static str| {
+        let walk = |tty: &'static str, ppid: &'static str, size: &'static str, none: &'static str| {
             move |argv: &[&str]| match argv {
-                ["ps", _, "tty=", _, pid] => Some(if *pid == "7" { tty } else { "??" }.into()),
+                ["ps", _, "tty=", _, pid] => Some(if *pid == "7" { tty } else { none }.into()),
                 ["ps", _, "ppid=", ..] => Some(ppid.into()),
                 _ => (argv[2] == "/dev/ttys001").then(|| size.into()),
             }
         };
-        assert_eq!(columns(walk("ttys001", "7", "50 120")), Some(120));
-        assert_eq!(columns(walk("ttys001", "7", "50 0")), None);
-        assert_eq!(columns(walk("??", "1", "")), None);
-        assert_eq!(columns(walk("??", "7", "")), None);
+        assert_eq!(columns(walk("ttys001", "7", "50 120", "??")), Some(120));
+        assert_eq!(columns(walk("ttys001", "7", "50 120", "?")), Some(120));
+        assert_eq!(columns(walk("ttys001", "7", "50 0", "??")), None);
+        assert_eq!(columns(walk("??", "1", "", "??")), None);
+        assert_eq!(columns(walk("??", "7", "", "??")), None);
         assert_eq!(sh(&["echo", " hi "]).as_deref(), Some("hi"));
         assert_eq!(sh(&["false"]), None);
     }

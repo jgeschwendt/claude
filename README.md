@@ -13,7 +13,7 @@ a link with a real file — merge it into the checkout by hand, then re-link.
 ```
 jgeschwendt/claude
 ├── .claude-plugin/        marketplace.json — the repo as the local marketplace `jgeschwendt`
-├── .mise/tasks/           link and save — `mise tasks` describes them
+├── .mise/tasks/           link — `mise tasks` describes it
 ├── plugins/               Claude Code mods the marketplace lists
 ├── rules/                 house standards for code and docs
 ├── skills/                personal skills, lean and self-contained

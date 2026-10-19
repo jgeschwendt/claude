@@ -3,7 +3,7 @@ bun = "1.4.2"
 hk = "2.5.0"
 "npm:oxfmt" = "0.67.0"
 "npm:oxlint" = "1.82.0"
-rust = "1.97.1"
+rust = { components = ["clippy"], version = "1.97.1" }
 
 [tasks.build]
 description = "Build the statusline binary and install it to ~/.local/bin (outside the mbx target cache)"

@@ -1,6 +1,6 @@
 {
   "name": "perpetual",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "The harness's session hooks (sandman recall/report/take, docket), house-rule guards, the five-hour window clock and the sandman shift band.",
   "author": { "name": "jgeschwendt" }
 }

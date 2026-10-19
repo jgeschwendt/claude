@@ -17,9 +17,11 @@ jobs:
         with:
           fetch-depth: 0
       - uses: jdx/mise-action@v2
+      - run: cargo clippy --all-targets -- -D warnings
       - run: mise run test
       # stele graph gate (check → emit --check). NEVER `stele build` in CI: it is
       # the sole writer of .stele/graph.lock and would launder a stale lock green.
-      - run: curl -fsSL https://raw.githubusercontent.com/jgeschwendt/stele/main/scripts/install.sh | bash -s v0.3.0
+      # The installer comes from the tag it installs, never a moving branch.
+      - run: curl -fsSL https://raw.githubusercontent.com/jgeschwendt/stele/v0.3.0/scripts/install.sh | bash -s v0.3.0
       - run: ~/.local/bin/stele check
       - run: ~/.local/bin/stele emit --check

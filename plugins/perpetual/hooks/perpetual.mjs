@@ -11,26 +11,31 @@ const CORRECTION = [
   /\bwrong\b/i,
 ];
 
-/** a command word at the start of a shell command: line start, after `;`, `&`, `|`, `(`, `{` or `$(` */
-const AT = String.raw`(?:^|[;&|({]|\$\()\s*`;
-/** `git` and its global options, then the subcommand */
-const GIT = String.raw`${AT}git(?:\s+-[Cc]\s+\S+|\s+--[\w-]+(?:=\S+)?)*\s+`;
+/**
+ * a command word at a command position: line start, or after `;`, `&`, `|`, `(`, `{` or `$(`, then any
+ * `then`/`do`/`else`, a wrapper (`sudo`, `env`, `command`, `exec`, `nohup`, `time`, `xargs`) or `VAR=value`
+ */
+const AT = String.raw`(?:^|[;&|({]|\$\()\s*(?:(?:then|do|else|sudo|env|command|exec|nohup|time|xargs)\s+|\w+=\S*\s+)*`;
+/** the rest of one command: up to a separator or the end of the line */
+const ARGS = String.raw`[^;&|\n]*`;
+/** `git` and its global options (`-C <path>`, quoted or not, `-c k=v`, `-P`, `--opt[=| ]value`), then the subcommand */
+const GIT = String.raw`${AT}git(?:\s+-[Cc]\s+(?:"[^"]*"|'[^']*'|\S+)|\s+-[a-zA-Z]\b|\s+--[\w-]+(?:=\S+|\s+\S+)?)*\s+`;
 /** Bash commands the house rules forbid, each with the rule that forbids it */
 const GUARDS = /** @type {[string, string][]} */ ([
   [
-    String.raw`${AT}pkill\b[^;&|]*\s-[a-z]*f`,
+    String.raw`${AT}pkill\b${ARGS}\s(?:-[a-z]*f|--full\b)`,
     "pkill -f matches every process's full argv — kill by resolved PID: `lsof -ti :<port>` or `pgrep -x <name>`, inspect, then `kill <pid>`",
   ],
   [
-    String.raw`${GIT}checkout\b[^;&|]*\s--(?:\s|$)`,
+    String.raw`${GIT}checkout\b${ARGS}\s--(?:\s|$)`,
     "never mutate to inspect — `git checkout --` discards every uncommitted change to the path, co-resident work included; undo your own edit by re-editing",
   ],
   [
-    String.raw`${GIT}reset\b[^;&|]*\s--hard\b`,
+    String.raw`${GIT}reset\b${ARGS}\s--hard\b`,
     "never mutate to inspect — `git reset --hard` discards the working tree; commit, or fast-forward with `git update-ref`",
   ],
   [
-    String.raw`${GIT}push\b[^;&|]*\s(?:--force(?:-with-lease)?(?:=\S*)?|-f)(?=\s|$)`,
+    String.raw`${GIT}push\b${ARGS}\s(?:--force(?:-with-lease)?(?:=\S*)?|-[a-zA-Z]*f[a-zA-Z]*|\+\S+)(?=\s|$)`,
     "never force-push — push a new branch or a new commit instead",
   ],
   [
@@ -87,8 +92,8 @@ function clockOf(handoffBy, now) {
   if (!handoffBy) return undefined;
   const due = Date.parse(handoffBy);
   if (Number.isNaN(due)) return handoffBy;
-  const minutes = Math.floor((due - now) / 60000);
-  if (minutes <= 0) return "handoff due";
+  if (due <= now) return "handoff due";
+  const minutes = Math.ceil((due - now) / 60000);
   const h = Math.floor(minutes / 60);
   return h > 0 ? `${h}h${String(minutes % 60).padStart(2, "0")}m left` : `${minutes}m left`;
 }

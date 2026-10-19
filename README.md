@@ -37,7 +37,7 @@ claude plugin marketplace add ~/.grove/code/jgeschwendt/claude/main
 claude plugin install perpetual@jgeschwendt
 ```
 
-`settings.json` enables it (`enabledPlugins`). A local marketplace is read in place, so a trunk edit to the mod is live from the next session. `claude plugin validate plugins/perpetual --strict` and `claude plugin test plugins/perpetual` check it.
+`settings.json` enables it (`enabledPlugins`). The install is a versioned copy under `~/.claude/plugins/cache/`, so a mod change bumps its `plugin.json` `version` and goes live after `claude plugin update perpetual@jgeschwendt` on a pulled trunk. `claude plugin validate plugins/perpetual --strict` and `claude plugin test plugins/perpetual` check it.
 
 ## The crate
 

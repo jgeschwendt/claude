@@ -154,6 +154,7 @@ test("band clocks: minutes, due, unparseable; truncated to the body width", asyn
   await start($);
   expect(await draw("2026-10-09T12:45:15Z")).toBe("⟳ s · 45m left");
   expect(await draw("2026-10-09T11:00:00Z")).toBe("⟳ s · handoff due");
+  expect(await draw("2026-10-09T12:01:00Z")).toBe("⟳ s · 1m left");
   expect(await draw("tonight")).toBe("⟳ s · tonight");
   expect(await draw("tonight", 8)).toBe("⟳ s · t…");
 });
@@ -426,6 +427,18 @@ test("guards deny the house-forbidden commands and trail each denial", async ($,
     ["git stash", /never `git stash`/],
     ["git stash pop", /never `git stash`/],
     ["git clean -fd", /git clean/],
+    ["pkill --full node", /pkill -f matches every process/],
+    ["git push -fu origin main", /never force-push/],
+    ["git push origin +main", /never force-push/],
+    ["GIT_DIR=/r/.git git push -f", /never force-push/],
+    ["env git push -f", /never force-push/],
+    ["sudo git clean -fdx", /git clean/],
+    ["if true; then git reset --hard; fi", /git reset --hard/],
+    ["for r in a b; do git clean -fd; done", /git clean/],
+    ['git -C "/r/my dir" stash', /never `git stash`/],
+    ["git --git-dir /r/.git stash", /never `git stash`/],
+    ["git -P stash", /never `git stash`/],
+    ["git --no-pager stash", /never `git stash`/],
   ] as const;
   for (const [command, reason] of denied) {
     const out: any = await $.tool.call({ tool: "Bash", command });
@@ -445,6 +458,11 @@ test("guards deny the house-forbidden commands and trail each denial", async ($,
     "pkill node",
     "git reset HEAD~1",
     'git commit -m "never git stash"',
+    "git checkout main\nls -- src",
+    "git push origin main\nls -f",
+    "git reset HEAD~1\ngrep --hard x",
+    "pkill -x node\nls -f",
+    "git push --follow-tags origin main",
   ])
     expect(await $.tool.call({ tool: "Bash", command })).toMatchObject({ result: "ran" });
   expect(runs).toHaveLength(denied.length);

@@ -41,7 +41,12 @@ function world(
     outs = {},
     rateLimits = [],
     slow = [],
-  }: { env?: Record<string, string>; outs?: Record<string, { exitCode?: number; stderr?: string; stdout?: string } | "deny">; rateLimits?: object[] | (() => object[]); slow?: string[] } = {},
+  }: {
+    env?: Record<string, string>;
+    outs?: Record<string, { exitCode?: number; stderr?: string; stdout?: string } | "deny">;
+    rateLimits?: object[] | (() => object[]);
+    slow?: string[];
+  } = {},
 ) {
   const inits: any[] = [];
   const logs: string[] = [];
@@ -62,7 +67,16 @@ function world(
     ["session.id", () => ({ value: "sess-1" })],
     ["session.measure", ($: any, e: any) => ({ changed: e.changed })],
     ["session.start", () => ({ cwd: "/work" })],
-    ["session.usage", () => ({ value: { context: {}, rateLimits: typeof rateLimits === "function" ? rateLimits() : rateLimits, startedAt: 0 } })],
+    [
+      "session.usage",
+      () => ({
+        value: {
+          context: {},
+          rateLimits: typeof rateLimits === "function" ? rateLimits() : rateLimits,
+          startedAt: 0,
+        },
+      }),
+    ],
     ["tool.call", () => ({ result: "ran" })],
     ["ui.render", () => ({ children: ["engine"], props: {}, type: "Text" })],
   ] as const)
@@ -128,7 +142,11 @@ test("band clocks: minutes, due, unparseable; truncated to the body width", asyn
   const draw = async (handoff_by: string, bodyColumns = 200) => {
     files[file] = JSON.stringify({ handoff_by, shift: "s" });
     await clock.advance(15000);
-    const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns }, surface: "terminal" });
+    const ui = await $.ui.mount({
+      ...BAND,
+      props: { ...BAND.props, bodyColumns },
+      surface: "terminal",
+    });
     const text = (await ui.find({ type: "Text", text: /^⟳/ }))?.text;
     await ui.unmount();
     return text;
@@ -176,7 +194,9 @@ test("a correction carries SANDMAN_SHIFT when set", async ($, on) => {
 
 test("a plain prompt, or one not typed at the composer, appends nothing", async ($, on) => {
   const { runs } = world(on);
-  expect(await submit($, "add a band above the prompt")).toEqual({ text: "add a band above the prompt" });
+  expect(await submit($, "add a band above the prompt")).toEqual({
+    text: "add a band above the prompt",
+  });
   await submit($, "stop everything", { kind: "plugin", name: "other" });
   await submit($, "never mind that", { kind: "task-notification" });
   expect(runs).toEqual([]);
@@ -203,13 +223,23 @@ test("a long prompt, a `# ` brief, or a --bg session's opening prompt appends no
 });
 
 test("a failed sandman call is logged and the prompt goes on", async ($, on) => {
-  const { logs } = world(on, {}, { outs: { "sandman trail append --kind correction --rationale stop that --ref session:sess-1": "deny" } });
+  const { logs } = world(
+    on,
+    {},
+    {
+      outs: {
+        "sandman trail append --kind correction --rationale stop that --ref session:sess-1": "deny",
+      },
+    },
+  );
   expect(await submit($, "stop that")).toEqual({ text: "stop that" });
   expect(logs.join("\n")).toMatch(/^perpetual: sandman trail append failed: /);
 });
 
 test("headless: neither the band nor the capture runs", async ($, on) => {
-  const { reads, runs } = world(on, { [`${HOME}/.sandman/shifts/current.json`]: JSON.stringify(SHIFT) });
+  const { reads, runs } = world(on, {
+    [`${HOME}/.sandman/shifts/current.json`]: JSON.stringify(SHIFT),
+  });
   await start($, false);
   expect(reads).toEqual([]);
   await submit($, "never spawn an unpinned agent", { kind: "sdk" });
@@ -219,13 +249,17 @@ test("headless: neither the band nor the capture runs", async ($, on) => {
 
 test("/trail 5, /shift and /docket log their binary's output and answer nothing", async ($, on) => {
   const lines = Array.from({ length: 12 }, (_, i) => `event ${i + 1}`).join("\n");
-  const { logs, runs } = world(on, {}, {
-    outs: {
-      "docket list": { stdout: "" },
-      "sandman shift status": { stdout: "shift bootstrap-2026-10-09\n" },
-      "sandman trail log": { stdout: lines + "\n" },
+  const { logs, runs } = world(
+    on,
+    {},
+    {
+      outs: {
+        "docket list": { stdout: "" },
+        "sandman shift status": { stdout: "shift bootstrap-2026-10-09\n" },
+        "sandman trail log": { stdout: lines + "\n" },
+      },
     },
-  });
+  );
   await start($);
   expect(await command($, "trail", "5")).toEqual({});
   expect(await command($, "trail", "x")).toEqual({});
@@ -248,14 +282,18 @@ test("/trail 5, /shift and /docket log their binary's output and answer nothing"
 test("SessionStart runs recall, docket and report at once and adds their context in order", async ($, on) => {
   const reply = (additionalContext: string) =>
     JSON.stringify({ hookSpecificOutput: { additionalContext, hookEventName: "SessionStart" } });
-  const { clock, inits, runs } = world(on, {}, {
-    outs: {
-      "docket --hook": { stdout: "## threads waiting on you\n" },
-      "sandman recall --hook": { stdout: reply("## Long-term index") },
-      "sandman report --hook": { stdout: reply("# Reports") },
+  const { clock, inits, runs } = world(
+    on,
+    {},
+    {
+      outs: {
+        "docket --hook": { stdout: "## threads waiting on you\n" },
+        "sandman recall --hook": { stdout: reply("## Long-term index") },
+        "sandman report --hook": { stdout: reply("# Reports") },
+      },
+      slow: ["docket --hook", "sandman recall --hook", "sandman report --hook"],
     },
-    slow: ["docket --hook", "sandman recall --hook", "sandman report --hook"],
-  });
+  );
   const out = $.classic.SessionStart({ source: "startup" });
   await clock.settle();
   expect(runs).toEqual([
@@ -268,18 +306,27 @@ test("SessionStart runs recall, docket and report at once and adds their context
     additionalContext: ["settings", "## Long-term index", "## threads waiting on you", "# Reports"],
   });
   expect(inits.map((init) => init.timeoutMs)).toEqual([10000, 10000, 10000]);
-  expect(JSON.parse(inits[0].stdin)).toMatchObject({ hook_event_name: "SessionStart", source: "startup" });
+  expect(JSON.parse(inits[0].stdin)).toMatchObject({
+    hook_event_name: "SessionStart",
+    source: "startup",
+  });
 });
 
 test("a missing, failing or contextless hook binary is a log line and adds nothing", async ($, on) => {
-  const { logs } = world(on, {}, {
-    outs: {
-      "docket --hook": "deny",
-      "sandman recall --hook": { exitCode: 1, stderr: "boom\nmore" },
-      "sandman report --hook": { stdout: '{"suppressOutput":true}' },
+  const { logs } = world(
+    on,
+    {},
+    {
+      outs: {
+        "docket --hook": "deny",
+        "sandman recall --hook": { exitCode: 1, stderr: "boom\nmore" },
+        "sandman report --hook": { stdout: '{"suppressOutput":true}' },
+      },
     },
+  );
+  expect(await $.classic.SessionStart({ source: "startup" })).toEqual({
+    additionalContext: ["settings"],
   });
-  expect(await $.classic.SessionStart({ source: "startup" })).toEqual({ additionalContext: ["settings"] });
   expect(logs).toEqual([
     "perpetual: sandman recall --hook exited 1: boom",
     expect.stringMatching(/^perpetual: docket --hook failed: /),
@@ -289,7 +336,9 @@ test("a missing, failing or contextless hook binary is a log line and adds nothi
 test("UserPromptSubmit adds docket's pull; Stop and permission notifications run docket", async ($, on) => {
   const { inits, runs } = world(on, {}, { outs: { "docket --hook": { stdout: "{bad}" } } });
   expect(await $.classic.UserPromptSubmit({ prompt: "hi" })).toEqual({});
-  expect(await $.classic.Stop({ last_assistant_message: "result: done", stop_hook_active: false })).toEqual({});
+  expect(
+    await $.classic.Stop({ last_assistant_message: "result: done", stop_hook_active: false }),
+  ).toEqual({});
   await $.classic.Notification({ message: "needs you", notification_type: "permission_prompt" });
   await $.classic.Notification({ message: "signed in", notification_type: "auth_success" });
   expect(runs).toEqual(Array(3).fill([`${BIN}/docket`, "--hook"]));
@@ -316,7 +365,11 @@ test("SessionEnd runs sandman take inside the 1.5 s budget", async ($, on) => {
 });
 
 test("the five-hour window is written atomically at start and on each measure", async ($, on) => {
-  const { runs, writes } = world(on, {}, { rateLimits: [{ kind: "seven_day", percentUsed: 9 }, FIVE] });
+  const { runs, writes } = world(
+    on,
+    {},
+    { rateLimits: [{ kind: "seven_day", percentUsed: 9 }, FIVE] },
+  );
   await start($, false);
   const path = `${HOME}/.local/state/claude/window.json`;
   expect(writes).toEqual([
@@ -331,15 +384,27 @@ test("the five-hour window is written atomically at start and on each measure", 
 });
 
 test("the window goes under $XDG_STATE_HOME; a failed write is logged", async ($, on) => {
-  const { logs, writes } = world(on, {}, { env: { XDG_STATE_HOME: "/denied" }, rateLimits: [FIVE] });
+  const { logs, writes } = world(
+    on,
+    {},
+    { env: { XDG_STATE_HOME: "/denied" }, rateLimits: [FIVE] },
+  );
   await $.session.measure({ changed: ["rateLimits"], context: {} as any, rateLimits: [] });
   expect(writes[0]?.[0]).toBe("/denied/claude/window.json.sess-1.tmp");
   expect(logs).toEqual([expect.stringMatching(/^perpetual: window.json write failed: /)]);
 });
 
 test("$CLAUDE_WINDOW_FILE names the window file; no window is written without both figures", async ($, on) => {
-  const usage = [[FIVE], [{ kind: "five_hour", percentUsed: 3 }], [{ ...FIVE, percentUsed: undefined }]];
-  const { writes } = world(on, {}, { env: { CLAUDE_WINDOW_FILE: "/w.json" }, rateLimits: () => usage.shift()! });
+  const usage = [
+    [FIVE],
+    [{ kind: "five_hour", percentUsed: 3 }],
+    [{ ...FIVE, percentUsed: undefined }],
+  ];
+  const { writes } = world(
+    on,
+    {},
+    { env: { CLAUDE_WINDOW_FILE: "/w.json" }, rateLimits: () => usage.shift()! },
+  );
   for (let i = 0; i < 3; i += 1)
     await $.session.measure({ changed: ["rateLimits"], context: {} as any, rateLimits: [] });
   expect(writes.map(([path]) => path)).toEqual(["/w.json.sess-1.tmp"]);
@@ -362,7 +427,13 @@ test("guards deny the house-forbidden commands and trail each denial", async ($,
   for (const [command, reason] of denied) {
     const out: any = await $.tool.call({ tool: "Bash", command });
     expect(JSON.stringify(out)).toMatch(reason);
-    expect(runs.at(-1)?.slice(0, 5)).toEqual([`${BIN}/sandman`, "trail", "append", "--kind", "guard"]);
+    expect(runs.at(-1)?.slice(0, 5)).toEqual([
+      `${BIN}/sandman`,
+      "trail",
+      "append",
+      "--kind",
+      "guard",
+    ]);
   }
   for (const command of [
     "git stash list",
@@ -378,10 +449,16 @@ test("guards deny the house-forbidden commands and trail each denial", async ($,
 
 test("a .yml path is denied to Write and Edit; .yaml goes through", async ($, on) => {
   const { runs } = world(on);
-  const out: any = await $.tool.call({ tool: "Write", content: "", file_path: "/r/.github/ci.yml" });
+  const out: any = await $.tool.call({
+    tool: "Write",
+    content: "",
+    file_path: "/r/.github/ci.yml",
+  });
   expect(JSON.stringify(out)).toMatch(/YAML files end in `.yaml`/);
   expect(runs).toHaveLength(1);
-  expect(await $.tool.call({ tool: "Edit", file_path: "/r/ci.yaml", new_string: "b", old_string: "a" })).toMatchObject({
+  expect(
+    await $.tool.call({ tool: "Edit", file_path: "/r/ci.yaml", new_string: "b", old_string: "a" }),
+  ).toMatchObject({
     result: "ran",
   });
 });

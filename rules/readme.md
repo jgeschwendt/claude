@@ -1,3 +1,0 @@
-# README
-
-- **A README is a cover, as short as it can be, and it never drifts.** The name, one or two sentences of what the thing is, the link to its docs page (`docs/index.html` on Pages, proxied at gigantic.dev/<project>/), the license line. Everything operational — how it deploys, env vars, proxy rules, commands, how to add a project — lives in `AGENTS.md`, the contract agents read, and the design and plan live on the page. When a README is touched, move what has accumulated there; a README section that would need updating when the code changes belongs somewhere else. (since 2026-10-19 · gigantic.dev: "most belongs in AGENT.md, README.md should be as short as possible, its a cover, it shouldn't drift")

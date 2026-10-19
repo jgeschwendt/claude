@@ -12,6 +12,10 @@ Out of scope: pipeline-owned markdown (`~/.sandman/memories/` banks, their `MEMO
 - **Living docs describe what exists today.** Migrations, predecessors, retired designs, and the decision process live in git history and plans — never in documentation. A "what X was, and where it went" section is a deletion, not a record. (since 2026-07-27 · orrery atlas recut — "Remove anything about the migration … that's git history.")
 - **A feature is not done until its end-to-end flow is in the repo's living docs.** Trigger, components crossed, data path, configuration — into whatever the repo designates (stele AGENTS.md nodes and docs/ where adopted, the README elsewhere); a stub being wired up counts. (since 2026-07 · grove)
 
+## Where things live
+
+- **A README is a cover, as short as it can be, and it never drifts.** The name, one or two sentences of what the thing is, the link to its docs page (`docs/index.html` on Pages, proxied at gigantic.dev/<project>/), the license line. Everything operational — how it deploys, env vars, proxy rules, commands, how to add a project — lives in `AGENTS.md`, the contract agents read; the design and the plan live on the page. A README section that would need updating when the code changes belongs somewhere else: move it when the README is next touched. (since 2026-10-19 · gigantic.dev: "most belongs in AGENT.md, README.md should be as short as possible, its a cover, it shouldn't drift")
+
 ## Machine portability
 
 - **Tracked `~/.claude` files sync to every machine — write them machine-neutral.** No host-local facts: bound addresses/ports, cron/launchd wiring, clone paths, absolute paths outside `~/.claude`. Point at the owning repo (portable name or URL) and let its docs carry the machine wiring. (since 2026-07-20 · README.md hardcoded the orrery dashboard address + hourly sweep coupling)

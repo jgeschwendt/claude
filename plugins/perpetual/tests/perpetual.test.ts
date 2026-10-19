@@ -359,7 +359,7 @@ test("UserPromptSubmit passes docket's plain-text pull as context", async ($, on
 
 test("SessionEnd runs sandman take and resolves the session's docket threads inside the 1.5 s budget", async ($, on) => {
   const { inits, runs } = world(on);
-  await $.classic.SessionEnd({ reason: "prompt_input_exit" });
+  await $.classic.SessionEnd({ reason: "prompt_input_exit", session_id: "sess-1" });
   expect(runs).toEqual([
     [`${BIN}/sandman`, "take", "--hook"],
     [`${BIN}/docket`, "resolve", "--key", "session:sess-1", "--reason", "session ended"],
@@ -439,6 +439,7 @@ test("guards deny the house-forbidden commands and trail each denial", async ($,
     ["git --git-dir /r/.git stash", /never `git stash`/],
     ["git -P stash", /never `git stash`/],
     ["git --no-pager stash", /never `git stash`/],
+    ["git --work-tree /x checkout -- f", /git checkout --/],
   ] as const;
   for (const [command, reason] of denied) {
     const out: any = await $.tool.call({ tool: "Bash", command });
@@ -463,6 +464,11 @@ test("guards deny the house-forbidden commands and trail each denial", async ($,
     "git reset HEAD~1\ngrep --hard x",
     "pkill -x node\nls -f",
     "git push --follow-tags origin main",
+    "git --no-pager show stash@{0}",
+    "git --no-pager diff stash@{0} -- f",
+    "git --no-pager grep clean",
+    "git --no-pager log --grep stash",
+    `git ${"--a ".repeat(5000)}`,
   ])
     expect(await $.tool.call({ tool: "Bash", command })).toMatchObject({ result: "ran" });
   expect(runs).toHaveLength(denied.length);

@@ -18,8 +18,12 @@ const CORRECTION = [
 const AT = String.raw`(?:^|[;&|({]|\$\()\s*(?:(?:then|do|else|sudo|env|command|exec|nohup|time|xargs)\s+|\w+=\S*\s+)*`;
 /** the rest of one command: up to a separator or the end of the line */
 const ARGS = String.raw`[^;&|\n]*`;
-/** `git` and its global options (`-C <path>`, quoted or not, `-c k=v`, `-P`, `--opt[=| ]value`), then the subcommand */
-const GIT = String.raw`${AT}git(?:\s+-[Cc]\s+(?:"[^"]*"|'[^']*'|\S+)|\s+-[a-zA-Z]\b|\s+--[\w-]+(?:=\S+|\s+\S+)?)*\s+`;
+/**
+ * `git` and its global options, then the subcommand: `-C <path>`, quoted or not, `-c k=v`, a lone letter (`-P`), a
+ * value-taking long option with `=` or a separate value (`--git-dir <dir>`), any other long option with `=` only — a
+ * separate value for every `--opt` would read `git --no-pager show stash@{0}` as `stash`, and backtrack exponentially
+ */
+const GIT = String.raw`${AT}git(?:\s+-[Cc]\s+(?:"[^"]*"|'[^']*'|\S+)|\s+-[abd-zABD-Z]\b|\s+--(?:git-dir|work-tree|namespace|exec-path|super-prefix|config-env)(?:=|\s+(?!-))\S+|\s+--[\w-]+(?:=\S+)?)*\s+`;
 /** Bash commands the house rules forbid, each with the rule that forbids it */
 const GUARDS = /** @type {[string, string][]} */ ([
   [
@@ -275,8 +279,8 @@ export const register = (on) => {
 
   // an ended session waits on no one: its idle or permission notification fired after the last Stop,
   // so docket's Stop never resolved it, and docket's hook has no SessionEnd
-  on("classic.SessionEnd", async ($, e, next) => {
-    const key = `session:${await $.session.id()}`;
+  on("classic.SessionEnd", ($, e, next) => {
+    const key = `session:${e.session_id}`;
     return beside(next, e, [
       hook($, "sandman", ["take", "--hook"], e, TAKE_MS),
       run($, "docket", ["resolve", "--key", key, "--reason", "session ended"], {

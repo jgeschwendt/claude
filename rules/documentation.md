@@ -14,6 +14,7 @@ Out of scope: pipeline-owned markdown (`~/.sandman/memories/` banks, their `MEMO
 
 ## Where things live
 
+- **A contract is a page too — `docs/<name>.html` beside `docs/index.html`, linked from it, proxied at gigantic.dev/<project>/<name>.html.** No `docs/*.md`: the format specs, protocol contracts and guides that used to stay as markdown (BANK-FORMAT.md, MCP.md, SPEC.md, GUIDE.md) convert to pages with one `<section id>` per heading, and code, AGENTS and prompts cite them as `docs/<name>.html#<section>`. Routine definitions (`docs/routines/*.md`, a cloud routine's `README.md`) are runner input, not docs, and stay. (since 2026-10-19 · sandman: "lets make these files part of the gh pages site: docs/BANK-FORMAT.md and docs/MCP.md. no more md docs")
 - **A README is a cover, as short as it can be, and it never drifts.** The name, one or two sentences of what the thing is, the link to its docs page (`docs/index.html` on Pages, proxied at gigantic.dev/<project>/), the license line. Everything operational — how it deploys, env vars, proxy rules, commands, how to add a project — lives in `AGENTS.md`, the contract agents read; the design and the plan live on the page. A README section that would need updating when the code changes belongs somewhere else: move it when the README is next touched. (since 2026-10-19 · gigantic.dev: "most belongs in AGENT.md, README.md should be as short as possible, its a cover, it shouldn't drift")
 
 ## Machine portability

@@ -341,7 +341,7 @@ test("SessionStart resolves the notification problems of unregistered sessions, 
   expect(inits.filter((init) => !init.stdin)).toEqual(Array(3).fill({ timeoutMs: 5000 }));
 });
 
-test("the five-hour window is written atomically at a headless start and on each measure with both figures, to ~/.local/state, else $XDG_STATE_HOME (a failed write logged), else $CLAUDE_WINDOW_FILE", async ($, on) => {
+test("the five-hour window is written atomically at a headless start and on each measure with both figures, to $CLAUDE_WINDOW_FILE, else $XDG_STATE_HOME (a failed write logged), else ~/.local/state", async ($, on) => {
   const usage = [
     [{ kind: "seven_day", percentUsed: 9 }, FIVE],
     [],

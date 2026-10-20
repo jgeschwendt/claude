@@ -165,7 +165,15 @@ test("a correction prompt at the composer appends its first 200 characters to th
 
 test("every correction, and a repeat of three or more words, appends within 5 s carrying SANDMAN_SHIFT", async ($, on) => {
   const { inits, runs } = world(on, {}, { env: { SANDMAN_SHIFT: "s1" } });
-  const corrections = ["that is wrong", "No.", "dont", "I said so", "not what I meant", "stop"];
+  const corrections = [
+    "that is wrong",
+    "No.",
+    "no way",
+    "dont",
+    "I said so",
+    "not what I meant",
+    "stop",
+  ];
   const repeats = ["Let's go, now!", "Stop: bump Node 22, please!"];
   const said = ["let's go", "let's go", "let's go now", "bump node 22 please"];
   for (const text of [...corrections, ...said, ...repeats]) await submit($, text);
@@ -174,7 +182,7 @@ test("every correction, and a repeat of three or more words, appends within 5 s 
       (rationale) => `${rationale} --ref session:sess-1 --shift s1`,
     ),
   );
-  expect(inits).toEqual(Array(8).fill({ timeoutMs: 5000 }));
+  expect(inits).toEqual(Array(9).fill({ timeoutMs: 5000 }));
 });
 
 test("/trail 5, /shift and /docket log their binary's output and answer nothing", async ($, on) => {
@@ -387,6 +395,7 @@ test("guards deny the house-forbidden commands and .yml writes, trailing each de
     "YAML files end in": ["/r/.github/ci.YML", "/r/a.yml"],
     "git checkout --": [
       "cd x && git checkout -- src/a.rs",
+      "git checkout HEAD --",
       "git -C /r checkout HEAD -- .",
       "git --work-tree /x checkout -- f",
     ],
@@ -404,6 +413,7 @@ test("guards deny the house-forbidden commands and .yml writes, trailing each de
       'git -C "/r/my dir" stash',
       "git --git-dir /r/.git stash",
       "git -P stash",
+      "git -Z stash",
       "git --no-pager stash",
       "git -c a=b -C '/r/x y' --namespace n --super-prefix s --config-env k=v stash",
       `git ${"-P ".repeat(99)}stash`,
@@ -415,6 +425,7 @@ test("guards deny the house-forbidden commands and .yml writes, trailing each de
       "git push -fu origin main",
       "git push origin +main",
       "GIT_DIR=/r/.git git push -f",
+      "A= git push -f",
       "env git push -f",
       "if x; then :; else xargs time nohup exec command git push -f x; fi",
     ],
@@ -442,6 +453,7 @@ test("guards deny the house-forbidden commands and .yml writes, trailing each de
     "git checkout main\nls -- src",
     "git push origin main\nls -f",
     "git push origin main & ls -f",
+    "echo git push -f",
     "git reset HEAD~1\ngrep --hard x",
     "pkill -x node\nls -f",
     "git push --follow-tags --force-if-includes origin main",

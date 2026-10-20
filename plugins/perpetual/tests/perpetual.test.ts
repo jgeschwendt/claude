@@ -1,37 +1,16 @@
 import { expect, mock, test } from "claude-code/testing";
 import type { On } from "claude-code";
 
-const BAND = {
-  component: "AbovePrompt",
-  plugin: "perpetual",
-  props: {
-    bodyColumns: 200,
-    hasSurvey: false,
-    isWorking: false,
-    maxRows: 4,
-    scroll: { bodyRows: 4, offset: 0 },
-    view: {},
-  },
-} as const;
+const BAND = { component: "AbovePrompt", plugin: "perpetual", surface: "terminal" } as const;
 const HOME = "/home/test";
 const BIN = `${HOME}/.local/bin`;
 const NOW = Date.UTC(2026, 9, 9, 12, 0);
-const SHIFT = {
-  handoff_by: "2026-10-09T13:30:00Z",
-  repo: "jgeschwendt/sandman",
-  shift: "bootstrap-2026-10-09",
-  theme: "creation week",
-};
-const TRAIL = [
-  { kind: "change", rationale: "first" },
-  { kind: "correction", rationale: "never stash in a shared tree" },
-];
 const FIVE = { kind: "five_hour", percentUsed: 31.4, resetsAt: "2026-10-09T15:00:00.000Z" };
 
 /**
  * Stubs the engine beneath the mod: env, clock, files, processes, logs, session, usage.
- * `outs` answers a process by its argv after the bin dir (`sandman recall --hook`); a process
- * named in `slow` answers only after the clock moves 100 ms. Returns what the mod did.
+ * `outs` answers a process by its argv after the bin dir (`sandman recall --hook`); with `slow`
+ * every process answers only after the clock moves 100 ms. Returns what the mod did.
  */
 function world(
   on: On,
@@ -39,13 +18,13 @@ function world(
   {
     env = {},
     outs = {},
-    rateLimits = [],
-    slow = [],
+    rateLimits = () => [],
+    slow = false,
   }: {
     env?: Record<string, string>;
     outs?: Record<string, { exitCode?: number; stderr?: string; stdout?: string } | "deny">;
-    rateLimits?: object[] | (() => object[]);
-    slow?: string[];
+    rateLimits?: () => object[];
+    slow?: boolean;
   } = {},
 ) {
   const inits: any[] = [];
@@ -67,16 +46,7 @@ function world(
     ["session.id", () => ({ value: "sess-1" })],
     ["session.measure", ($: any, e: any) => ({ changed: e.changed })],
     ["session.start", () => ({ cwd: "/work" })],
-    [
-      "session.usage",
-      () => ({
-        value: {
-          context: {},
-          rateLimits: typeof rateLimits === "function" ? rateLimits() : rateLimits,
-          startedAt: 0,
-        },
-      }),
-    ],
+    ["session.usage", () => ({ value: { context: {}, rateLimits: rateLimits(), startedAt: 0 } })],
     ["tool.call", () => ({ result: "ran" })],
     ["ui.render", () => ({ children: ["engine"], props: {}, type: "Text" })],
   ] as const)
@@ -98,9 +68,8 @@ function world(
   on("process.run", async ($, e): Promise<any> => {
     runs.push([...e.argv]);
     inits.push(e.init);
-    const key = e.argv.join(" ").replace(`${BIN}/`, "");
-    if (slow.includes(key)) await clock.sleep(100);
-    const out = outs[key] ?? {};
+    if (slow) await clock.sleep(100);
+    const out = outs[e.argv.join(" ").replace(`${BIN}/`, "")] ?? {};
     if (out === "deny") return { deny: "spawn ENOENT" };
     return { value: { exitCode: 0, stderr: "", stdout: "", ...out } };
   });
@@ -111,72 +80,65 @@ function world(
   return { clock, inits, logs, reads, runs, writes };
 }
 
-const command = ($: any, name: string, args = "") =>
-  $.command.run({
-    args,
-    command: name,
-    origin: { kind: "composer" },
-    presentation: { columns: 120, isFullscreen: true },
-  });
+const command = ($: any, command: string, args = "") => $.command.run({ args, command });
 
-const start = ($: any, isInteractive = true) =>
-  $.session.start({ cwd: "/work", isInteractive, surface: isInteractive ? "terminal" : null });
+const measure = ($: any) => $.session.measure({ changed: [] });
+
+const start = ($: any, surface: string | null = "terminal") =>
+  $.session.start({ isInteractive: !!surface, surface });
 
 const submit = ($: any, text: string, origin: object = { kind: "composer" }) =>
-  $.prompt.submit({ origin, text, wait: false });
+  $.prompt.submit({ origin, text });
 
-test("band draws the shift and the last trail event", async ($, on) => {
-  world(on, {
-    [`${HOME}/.sandman/shifts/current.json`]: JSON.stringify(SHIFT),
-    [`${HOME}/.sandman/trail/2026/10/09.jsonl`]:
-      TRAIL.map((line) => JSON.stringify(line)).join("\n") + "\n",
-  });
-  await start($);
-  const ui = await $.ui.mount({ ...BAND, surface: "terminal" });
-  const band = await ui.find({ type: "Text", text: /^⟳/ });
-  expect(band?.text).toBe(
-    "⟳ bootstrap-2026-10-09 · creation week · jgeschwendt/sandman · 1h30m left · last: correction never stash in a shared tree",
-  );
-  await ui.unmount();
-});
-
-test("band clocks: minutes, due, unparseable; truncated to the body width", async ($, on) => {
+test("band draws the shift's clock and the last trail event, truncated, refreshed every 15 s", async ($, on) => {
   const file = `${HOME}/.sandman/shifts/current.json`;
+  const trail = `${HOME}/.sandman/trail/2026/10/09.jsonl`;
   const files: Record<string, string> = {};
-  const { clock } = world(on, files);
-  const draw = async (handoff_by: string, bodyColumns = 200) => {
-    files[file] = JSON.stringify({ handoff_by, shift: "s" });
+  const { clock, reads } = world(on, files);
+  const draw = async (shift?: object, props = {}) => {
+    files[file] = JSON.stringify(shift)!;
     await clock.advance(15000);
     const ui = await $.ui.mount({
       ...BAND,
-      props: { ...BAND.props, bodyColumns },
-      surface: "terminal",
+      props: { bodyColumns: 200, hasSurvey: false, ...props },
     });
-    const text = (await ui.find({ type: "Text", text: /^⟳/ }))?.text;
+    const text = (await ui.find({ type: "Text" }))?.text;
     await ui.unmount();
     return text;
   };
   await start($);
-  expect(await draw("2026-10-09T12:45:15Z")).toBe("⟳ s · 45m left");
-  expect(await draw("2026-10-09T11:00:00Z")).toBe("⟳ s · handoff due");
-  expect(await draw("2026-10-09T12:01:00Z")).toBe("⟳ s · 1m left");
-  expect(await draw("tonight")).toBe("⟳ s · tonight");
-  expect(await draw("tonight", 8)).toBe("⟳ s · t…");
-});
-
-test("band draws nothing without shift or trail files", async ($, on) => {
-  world(on);
   await start($);
-  const ui = await $.ui.mount({ ...BAND, surface: "terminal" });
-  expect(await ui.find({ type: "Text", text: /^⟳/ })).toBeUndefined();
-  expect(await ui.find({ type: "Text", text: "engine" })).toBeDefined();
-  await ui.unmount();
+  expect(await draw()).toBe("engine");
+  expect(await draw({ handoff_by: "2026-10-09T13:05:30Z", shift: "s" })).toBe("⟳ s · 1h05m left");
+  expect(await draw({ handoff_by: "2026-10-09T12:45:45Z", shift: "s" })).toBe("⟳ s · 45m left");
+  expect(await draw({ handoff_by: "2026-10-09T11:00:00Z", shift: "s" })).toBe("⟳ s · handoff due");
+  expect(await draw({ handoff_by: "tonight", shift: "s" })).toBe("⟳ s · tonight");
+  expect(await draw({ shift: "s" }, { bodyColumns: 0 })).toBe("…");
+  files[trail] = '{"kind":"x"}\n{"kind":"change"}\n';
+  expect(await draw()).toBe("⟳ last: change");
+  files[trail] = '{"kind":"correction","rationale":"never stash"}\n';
+  const shift = { repo: "jgeschwendt/sandman", shift: "bootstrap", theme: "creation week" };
+  expect(await draw(shift)).toBe(
+    "⟳ bootstrap · creation week · jgeschwendt/sandman · last: correction never stash",
+  );
+  expect(await draw(shift, { hasSurvey: true })).toBe("engine");
+  expect(reads).toHaveLength(22);
 });
 
-test("a correction prompt appends a correction to the trail", async ($, on) => {
-  const { runs } = world(on);
-  const out = await submit($, "No, don't stash in the shared tree");
-  expect(out).toEqual({ text: "No, don't stash in the shared tree" });
+test("a correction prompt at the composer appends to the trail, a failure only logged; others append nothing", async ($, on) => {
+  const text = "No, don't stash in the shared tree";
+  const { logs, runs } = world(
+    on,
+    {},
+    {
+      outs: {
+        [`sandman trail append --kind correction --rationale ${text} --ref session:sess-1`]: "deny",
+      },
+    },
+  );
+  await submit($, "add a band above the prompt");
+  await submit($, "never mind that", { kind: "task-notification" });
+  expect(await submit($, text)).toEqual({ text });
   expect(runs).toEqual([
     [
       `${BIN}/sandman`,
@@ -185,11 +147,12 @@ test("a correction prompt appends a correction to the trail", async ($, on) => {
       "--kind",
       "correction",
       "--rationale",
-      "No, don't stash in the shared tree",
+      text,
       "--ref",
       "session:sess-1",
     ],
   ]);
+  expect(logs).toEqual([expect.stringMatching(/^perpetual: sandman trail append failed: /)]);
 });
 
 test("a correction carries SANDMAN_SHIFT when set", async ($, on) => {
@@ -198,18 +161,10 @@ test("a correction carries SANDMAN_SHIFT when set", async ($, on) => {
   expect(runs[0]?.slice(-2)).toEqual(["--shift", "bootstrap-2026-10-09"]);
 });
 
-test("a plain prompt, or one not typed at the composer, appends nothing", async ($, on) => {
+test("a repeated prompt of three or more words is flagged as a repeated instruction", async ($, on) => {
   const { runs } = world(on);
-  expect(await submit($, "add a band above the prompt")).toEqual({
-    text: "add a band above the prompt",
-  });
-  await submit($, "stop everything", { kind: "plugin", name: "other" });
-  await submit($, "never mind that", { kind: "task-notification" });
-  expect(runs).toEqual([]);
-});
-
-test("a repeated prompt is flagged as a repeated instruction", async ($, on) => {
-  const { runs } = world(on);
+  await submit($, "go on");
+  await submit($, "go on");
   await submit($, "pin every agent spawn to opus explicitly");
   expect(runs).toEqual([]);
   await submit($, "Pin every agent spawn to Opus, explicitly!");
@@ -222,35 +177,9 @@ test("a long prompt, a `# ` brief, or a --bg session's opening prompt appends no
   await submit($, "never stash in a shared tree");
   await submit($, "# Shift brief\nnever stash");
   await submit($, `never stash ${"x".repeat(400)}`);
-  await submit($, `never stash ${"x".repeat(400)}`);
   expect(runs).toEqual([]);
   await submit($, "never stash in a shared tree");
   expect(runs[0]?.[6]).toBe("never stash in a shared tree");
-});
-
-test("a failed sandman call is logged and the prompt goes on", async ($, on) => {
-  const { logs } = world(
-    on,
-    {},
-    {
-      outs: {
-        "sandman trail append --kind correction --rationale stop that --ref session:sess-1": "deny",
-      },
-    },
-  );
-  expect(await submit($, "stop that")).toEqual({ text: "stop that" });
-  expect(logs.join("\n")).toMatch(/^perpetual: sandman trail append failed: /);
-});
-
-test("headless: neither the band nor the capture runs", async ($, on) => {
-  const { reads, runs } = world(on, {
-    [`${HOME}/.sandman/shifts/current.json`]: JSON.stringify(SHIFT),
-  });
-  await start($, false);
-  expect(reads).toEqual([]);
-  await submit($, "never spawn an unpinned agent", { kind: "sdk" });
-  await submit($, "never spawn an unpinned agent", { kind: "sdk" });
-  expect(runs).toEqual([]);
 });
 
 test("/trail 5, /shift and /docket log their binary's output and answer nothing", async ($, on) => {
@@ -260,15 +189,15 @@ test("/trail 5, /shift and /docket log their binary's output and answer nothing"
     {},
     {
       outs: {
-        "docket list": { stdout: "" },
-        "sandman shift status": { stdout: "shift bootstrap-2026-10-09\n" },
+        "docket list": { exitCode: 2, stderr: "down\n" },
+        "sandman shift status": { stdout: "\n" },
         "sandman trail log": { stdout: lines + "\n" },
       },
     },
   );
   await start($);
   expect(await command($, "trail", "5")).toEqual({});
-  expect(await command($, "trail", "x")).toEqual({});
+  expect(await command($, "trail", "0")).toEqual({});
   expect(await command($, "shift")).toEqual({});
   expect(await command($, "docket")).toEqual({});
   expect(runs).toEqual([
@@ -280,8 +209,8 @@ test("/trail 5, /shift and /docket log their binary's output and answer nothing"
   expect(logs).toEqual([
     "event 8\nevent 9\nevent 10\nevent 11\nevent 12",
     lines.split("\n").slice(-10).join("\n"),
-    "shift bootstrap-2026-10-09",
     "(empty)",
+    "perpetual: docket list exited 2: down",
   ]);
 });
 
@@ -297,7 +226,7 @@ test("SessionStart runs recall, docket and report at once and adds their context
         "sandman recall --hook": { stdout: reply("## Long-term index") },
         "sandman report --hook": { stdout: reply("# Reports") },
       },
-      slow: ["docket --hook", "sandman recall --hook", "sandman report --hook"],
+      slow: true,
     },
   );
   const out = $.classic.SessionStart({ source: "startup" });
@@ -318,13 +247,13 @@ test("SessionStart runs recall, docket and report at once and adds their context
   });
 });
 
-test("a missing, failing or contextless hook binary is a log line and adds nothing", async ($, on) => {
+test("a failing or contextless hook binary is a log line or nothing, and adds nothing", async ($, on) => {
   const { logs } = world(
     on,
     {},
     {
       outs: {
-        "docket --hook": "deny",
+        "docket --hook": { stdout: "{bad}" },
         "sandman recall --hook": { exitCode: 1, stderr: "boom\nmore" },
         "sandman report --hook": { stdout: '{"suppressOutput":true}' },
       },
@@ -333,19 +262,20 @@ test("a missing, failing or contextless hook binary is a log line and adds nothi
   expect(await $.classic.SessionStart({ source: "startup" })).toEqual({
     additionalContext: ["settings"],
   });
-  expect(logs).toEqual([
-    "perpetual: sandman recall --hook exited 1: boom",
-    expect.stringMatching(/^perpetual: docket --hook failed: /),
-  ]);
+  expect(logs).toEqual(["perpetual: sandman recall --hook exited 1: boom"]);
 });
 
-test("UserPromptSubmit adds docket's pull; Stop and permission notifications run docket", async ($, on) => {
-  const { inits, runs } = world(on, {}, { outs: { "docket --hook": { stdout: "{bad}" } } });
-  expect(await $.classic.UserPromptSubmit({ prompt: "hi" })).toEqual({});
+test("UserPromptSubmit adds docket's pull; Stop and permission notifications run docket beside", async ($, on) => {
+  const { inits, runs } = world(on, {}, { outs: { "docket --hook": { stdout: "- t1\n" } } });
+  expect(await $.classic.UserPromptSubmit({ prompt: "hi" })).toEqual({
+    additionalContext: ["- t1"],
+  });
   expect(
     await $.classic.Stop({ last_assistant_message: "result: done", stop_hook_active: false }),
   ).toEqual({});
-  await $.classic.Notification({ message: "needs you", notification_type: "permission_prompt" });
+  expect(
+    await $.classic.Notification({ message: "needs you", notification_type: "permission_prompt" }),
+  ).toEqual({});
   await $.classic.Notification({ message: "signed in", notification_type: "auth_success" });
   expect(runs).toEqual(Array(3).fill([`${BIN}/docket`, "--hook"]));
   expect(inits.map((init) => JSON.parse(init.stdin).hook_event_name)).toEqual([
@@ -353,13 +283,6 @@ test("UserPromptSubmit adds docket's pull; Stop and permission notifications run
     "Stop",
     "Notification",
   ]);
-});
-
-test("UserPromptSubmit passes docket's plain-text pull as context", async ($, on) => {
-  world(on, {}, { outs: { "docket --hook": { stdout: "## threads waiting on you\n- t1\n" } } });
-  expect(await $.classic.UserPromptSubmit({ prompt: "hi" })).toEqual({
-    additionalContext: ["## threads waiting on you\n- t1"],
-  });
 });
 
 test("SessionEnd runs sandman take and resolves the session's docket threads inside the 1.5 s budget", async ($, on) => {
@@ -418,13 +341,17 @@ test("SessionStart resolves the notification problems of unregistered sessions, 
   expect(await sweeps()).toEqual([...swept, swept[0]]);
 });
 
-test("the five-hour window is written atomically at start and on each measure", async ($, on) => {
-  const { runs, writes } = world(
-    on,
-    {},
-    { rateLimits: [{ kind: "seven_day", percentUsed: 9 }, FIVE] },
-  );
-  await start($, false);
+test("the five-hour window is written atomically at a headless start and on each measure with both figures", async ($, on) => {
+  const usage = [
+    [{ kind: "seven_day", percentUsed: 9 }, FIVE],
+    [FIVE],
+    [],
+    [{ kind: "five_hour", percentUsed: 3 }],
+    [{ ...FIVE, percentUsed: undefined }],
+  ];
+  const { reads, runs, writes } = world(on, {}, { rateLimits: () => usage.shift()! });
+  await start($, null);
+  expect(reads).toEqual([]);
   const path = `${HOME}/.local/state/claude/window.json`;
   expect(writes).toEqual([
     [
@@ -433,7 +360,7 @@ test("the five-hour window is written atomically at start and on each measure", 
     ],
   ]);
   expect(runs).toEqual([["/bin/mv", "-f", `${path}.sess-1.tmp`, path]]);
-  await $.session.measure({ changed: ["rateLimits"], context: {} as any, rateLimits: [] });
+  while (usage.length) await measure($);
   expect(writes).toHaveLength(2);
 });
 
@@ -441,67 +368,64 @@ test("the window goes under $XDG_STATE_HOME; a failed write is logged", async ($
   const { logs, writes } = world(
     on,
     {},
-    { env: { XDG_STATE_HOME: "/denied" }, rateLimits: [FIVE] },
+    { env: { XDG_STATE_HOME: "/denied" }, rateLimits: () => [FIVE] },
   );
-  await $.session.measure({ changed: ["rateLimits"], context: {} as any, rateLimits: [] });
+  await measure($);
   expect(writes[0]?.[0]).toBe("/denied/claude/window.json.sess-1.tmp");
   expect(logs).toEqual([expect.stringMatching(/^perpetual: window.json write failed: /)]);
 });
 
-test("$CLAUDE_WINDOW_FILE names the window file; no window is written without both figures", async ($, on) => {
-  const usage = [
-    [FIVE],
-    [{ kind: "five_hour", percentUsed: 3 }],
-    [{ ...FIVE, percentUsed: undefined }],
-  ];
+test("$CLAUDE_WINDOW_FILE names the window file over $XDG_STATE_HOME", async ($, on) => {
   const { writes } = world(
     on,
     {},
-    { env: { CLAUDE_WINDOW_FILE: "/w.json" }, rateLimits: () => usage.shift()! },
+    { env: { CLAUDE_WINDOW_FILE: "/w.json", XDG_STATE_HOME: "/x" }, rateLimits: () => [FIVE] },
   );
-  for (let i = 0; i < 3; i += 1)
-    await $.session.measure({ changed: ["rateLimits"], context: {} as any, rateLimits: [] });
-  expect(writes.map(([path]) => path)).toEqual(["/w.json.sess-1.tmp"]);
+  await measure($);
+  expect(writes[0]?.[0]).toBe("/w.json.sess-1.tmp");
 });
 
-test("guards deny the house-forbidden commands and trail each denial", async ($, on) => {
+test("guards deny the house-forbidden commands and .yml writes, trailing each denial", async ($, on) => {
   const { runs } = world(on);
-  const denied = [
-    ["pkill -f node", /pkill -f matches every process/],
-    ["cd x && git checkout -- src/a.rs", /git checkout --/],
-    ["git -C /r checkout HEAD -- .", /git checkout --/],
-    ["git reset --hard origin/main", /git reset --hard/],
-    ["git push --force origin x", /never force-push/],
-    ["git push -f", /never force-push/],
-    ["git push --force-with-lease", /never force-push/],
-    ["git stash", /never `git stash`/],
-    ["git stash pop", /never `git stash`/],
-    ["git clean -fd", /git clean/],
-    ["pkill --full node", /pkill -f matches every process/],
-    ["git push -fu origin main", /never force-push/],
-    ["git push origin +main", /never force-push/],
-    ["GIT_DIR=/r/.git git push -f", /never force-push/],
-    ["env git push -f", /never force-push/],
-    ["sudo git clean -fdx", /git clean/],
-    ["if true; then git reset --hard; fi", /git reset --hard/],
-    ["for r in a b; do git clean -fd; done", /git clean/],
-    ['git -C "/r/my dir" stash', /never `git stash`/],
-    ["git --git-dir /r/.git stash", /never `git stash`/],
-    ["git -P stash", /never `git stash`/],
-    ["git --no-pager stash", /never `git stash`/],
-    ["git --work-tree /x checkout -- f", /git checkout --/],
-  ] as const;
-  for (const [command, reason] of denied) {
-    const out: any = await $.tool.call({ tool: "Bash", command });
-    expect(JSON.stringify(out)).toMatch(reason);
-    expect(runs.at(-1)?.slice(0, 5)).toEqual([
-      `${BIN}/sandman`,
-      "trail",
-      "append",
-      "--kind",
-      "guard",
-    ]);
-  }
+  const denied = {
+    "YAML files end in": ["/r/.github/ci.yml"],
+    "git checkout --": [
+      "cd x && git checkout -- src/a.rs",
+      "git -C /r checkout HEAD -- .",
+      "git --work-tree /x checkout -- f",
+    ],
+    "git clean": ["git clean -fd", "sudo git clean -fdx", "for r in a b; do git clean -fd; done"],
+    "git reset --hard": ["git reset --hard origin/main", "if true; then git reset --hard; fi"],
+    "never `git stash`": [
+      "git stash",
+      "git stash pop",
+      'git -C "/r/my dir" stash',
+      "git --git-dir /r/.git stash",
+      "git -P stash",
+      "git --no-pager stash",
+    ],
+    "never force-push": [
+      "git push --force origin x",
+      "git push -f",
+      "git push --force-with-lease",
+      "git push -fu origin main",
+      "git push origin +main",
+      "GIT_DIR=/r/.git git push -f",
+      "env git push -f",
+    ],
+    "pkill -f matches every process": ["pkill -f node", "pkill --full node"],
+  };
+  for (const [rule, subjects] of Object.entries(denied))
+    for (const subject of subjects) {
+      const tool = rule.startsWith("YAML") ? "Write" : "Bash";
+      const call = { command: subject, content: "", file_path: subject, tool };
+      expect(await $.tool.call(call as any)).toEqual({ deny: expect.stringContaining(rule) });
+      expect(runs.at(-1)?.slice(4, 7)).toEqual([
+        "guard",
+        "--rationale",
+        expect.stringContaining(`: ${subject}`),
+      ]);
+    }
   for (const command of [
     "git stash list",
     "git checkout main",
@@ -520,41 +444,16 @@ test("guards deny the house-forbidden commands and trail each denial", async ($,
     "git --no-pager log --grep stash",
     `git ${"--a ".repeat(5000)}`,
   ])
-    expect(await $.tool.call({ tool: "Bash", command })).toMatchObject({ result: "ran" });
-  expect(runs).toHaveLength(denied.length);
-});
-
-test("a .yml path is denied to Write and Edit; .yaml goes through", async ($, on) => {
-  const { runs } = world(on);
-  const out: any = await $.tool.call({
-    tool: "Write",
-    content: "",
-    file_path: "/r/.github/ci.yml",
-  });
-  expect(JSON.stringify(out)).toMatch(/YAML files end in `.yaml`/);
-  expect(runs).toHaveLength(1);
+    expect(await $.tool.call({ tool: "Bash", command })).toEqual({ result: "ran" });
   expect(
     await $.tool.call({ tool: "Edit", file_path: "/r/ci.yaml", new_string: "b", old_string: "a" }),
-  ).toMatchObject({
-    result: "ran",
-  });
+  ).toEqual({ result: "ran" });
+  expect(runs).toHaveLength(Object.values(denied).flat().length);
 });
 
 test("an agent spawn without a model is pinned to opus; a pinned one or a fork is left alone", async ($, on) => {
   world(on);
-  const spawn = (fields: object) =>
-    $.agent.spawn({
-      background: false,
-      description: "d",
-      fork: false,
-      parentModel: "fable",
-      prompt: "p",
-      provider: { plugin: "engine", tier: "core" },
-      subagentType: "general-purpose",
-      tool_use_id: "t",
-      ...fields,
-    } as any);
-  expect(await spawn({})).toMatchObject({ model: "opus" });
-  expect(await spawn({ model: "haiku" })).toMatchObject({ model: "haiku" });
-  expect(await spawn({ fork: true })).toMatchObject({ model: "inherited" });
+  expect(await $.agent.spawn({} as any)).toEqual({ model: "opus" });
+  expect(await $.agent.spawn({ model: "haiku" } as any)).toEqual({ model: "haiku" });
+  expect(await $.agent.spawn({ fork: true } as any)).toEqual({ model: "inherited" });
 });

@@ -1,15 +1,7 @@
 // perpetual: the harness's session hooks, guards and window clock, plus the shift band.
 
 /** prompts that read as the person correcting the session */
-const CORRECTION = [
-  /^no[,.! ]/i,
-  /\bdon'?t\b/i,
-  /\bi said\b/i,
-  /\bnever\b/i,
-  /\bnot what i\b/i,
-  /\bstop\b/i,
-  /\bwrong\b/i,
-];
+const CORRECTION = /^no[,.! ]|\bdon'?t\b|\bi said\b|\bnever\b|\bnot what i\b|\bstop\b|\bwrong\b/i;
 
 /**
  * a command word at a command position: line start, or after `;`, `&`, `|`, `(`, `{` or `$(`, then any
@@ -51,27 +43,11 @@ const GUARDS = /** @type {[string, string][]} */ ([
     "never mutate to inspect — `git clean` deletes untracked files, co-resident work included",
   ],
 ]).map(([pattern, reason]) => /** @type {const} */ ([new RegExp(pattern, "m"), reason]));
-/** the notification types docket opens a thread for */
-const NOTIFY = ["agent_needs_input", "idle_prompt", "permission_prompt"];
-
 const HOOK_MS = 10000;
-/** past this many characters a prompt is a brief or a pasted document, not a correction */
-const PROMPT_MAX = 400;
-const REFRESH_MS = 15000;
-const REPEAT_JACCARD = 0.8;
-const REPEAT_MIN_TOKENS = 3;
 const TAKE_MS = 1500;
-const TRAIL_DEFAULT_LINES = 10;
 
-/** @type {{ home: string | undefined, isOpened: boolean, last: any, prompts: Set<string>[], shift: any, timer: { cancel(): void } | undefined }} */
-const state = {
-  home: undefined,
-  isOpened: false,
-  last: null,
-  prompts: [],
-  shift: null,
-  timer: undefined,
-};
+/** @type {{ home?: string, isOpened?: boolean, last?: any, prompts: Set<string>[], shift?: any, timer?: { cancel(): void } }} */
+const state = { prompts: [] };
 
 /**
  * Appends one trail event; a failure is logged, never raised.
@@ -93,7 +69,6 @@ async function append($, kind, rationale) {
  * @param {number} now
  */
 function clockOf(handoffBy, now) {
-  if (!handoffBy) return undefined;
   const due = Date.parse(handoffBy);
   if (Number.isNaN(due)) return handoffBy;
   if (due <= now) return "handoff due";
@@ -114,9 +89,9 @@ function clockOf(handoffBy, now) {
  */
 async function hook($, bin, args, e, timeoutMs = HOOK_MS) {
   const out = (await run($, bin, args, { stdin: JSON.stringify(e), timeoutMs }))?.trim();
-  if (!out) return [];
-  if (!/^\{[^]*\}$/.test(out)) return [out];
-  const context = parse(out)?.hookSpecificOutput?.additionalContext;
+  const context = /^\{[^]*\}$/.test(out ?? "")
+    ? parse(out)?.hookSpecificOutput?.additionalContext
+    : out;
   return typeof context === "string" && context ? [context] : [];
 }
 
@@ -126,20 +101,8 @@ async function homeOf($) {
   return state.home;
 }
 
-/**
- * Jaccard similarity of two token sets.
- * @param {Set<string>} a
- * @param {Set<string>} b
- */
-function jaccard(a, b) {
-  let shared = 0;
-  for (const token of a) if (b.has(token)) shared += 1;
-  return shared / (a.size + b.size - shared);
-}
-
 /** @param {string | undefined} text */
 function parse(text) {
-  if (!text) return null;
   try {
     const value = JSON.parse(text);
     return value && typeof value === "object" ? value : null;
@@ -148,18 +111,8 @@ function parse(text) {
   }
 }
 
-/**
- * Reads a file's text, or `undefined` when it is missing or unreadable.
- * @param {any} $
- * @param {string} path
- */
-async function readText($, path) {
-  try {
-    return await $.fs.read(path);
-  } catch {
-    return undefined;
-  }
-}
+/** @type {($: any, path: string) => Promise<string | undefined>} a file's text, or `undefined` when unreadable */
+const readText = ($, path) => $.fs.read(path).catch(() => undefined);
 
 /**
  * Re-reads the shift file and today's trail tail, then asks for a redraw.
@@ -167,9 +120,9 @@ async function readText($, path) {
  */
 async function refresh($) {
   const home = await homeOf($);
-  const day = new Date(await $.clock.now()).toISOString().slice(0, 10).split("-");
+  const day = new Date(await $.clock.now()).toISOString().slice(0, 10).replaceAll("-", "/");
   const shiftText = await readText($, `${home}/.sandman/shifts/current.json`);
-  const trailText = await readText($, `${home}/.sandman/trail/${day[0]}/${day[1]}/${day[2]}.jsonl`);
+  const trailText = await readText($, `${home}/.sandman/trail/${day}.jsonl`);
   state.shift = parse(shiftText);
   state.last = parse(trailText?.trimEnd().split("\n").at(-1));
   $.ui.invalidate("ui.render");
@@ -195,7 +148,6 @@ async function run($, bin, args, init) {
   } catch (error) {
     $.ui.log(`perpetual: ${name} failed: ${error}`);
   }
-  return undefined;
 }
 
 /**
@@ -233,30 +185,15 @@ async function sweep($) {
   await Promise.all(
     (Array.isArray(threads) ? threads : [])
       .filter(
-        (
-          /** @type {{ key: string, kind: string, messages: { body: string }[], title: string }} */ thread,
-        ) =>
+        (thread) =>
           thread.kind === "problem" &&
           thread.key?.startsWith("session:") &&
           !live.has(thread.key.slice(8)) &&
           thread.messages.every((message) => message.body === thread.title),
       )
-      .map((/** @type {{ id: string }} */ thread) =>
-        run($, "docket", ["resolve", thread.id, "--reason", "session gone"], init),
-      ),
+      .map((thread) => run($, "docket", ["resolve", thread.id, "--reason", "session gone"], init)),
   );
   return [];
-}
-
-/** @param {string} text */
-function tokensOf(text) {
-  return new Set(
-    text
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}\s']/gu, " ")
-      .split(/\s+/)
-      .filter(Boolean),
-  );
 }
 
 /**
@@ -266,9 +203,7 @@ function tokensOf(text) {
  * @param {any} $
  */
 async function window($) {
-  const five = (await $.session.usage()).rateLimits.find(
-    (/** @type {{ kind: string }} */ limit) => limit.kind === "five_hour",
-  );
+  const five = (await $.session.usage()).rateLimits.find((limit) => limit.kind === "five_hour");
   const resetsAt = Date.parse(five?.resetsAt ?? "");
   if (Number.isNaN(resetsAt) || typeof five.percentUsed !== "number") return;
   const root = (await $.env.get("XDG_STATE_HOME")) || `${await homeOf($)}/.local/state`;
@@ -310,8 +245,11 @@ async function context(next, e, runs) {
 export const register = (on) => {
   on("agent.spawn", ($, e, next) => next(e.model || e.fork ? e : { ...e, model: "opus" }));
 
-  on("classic.Notification", { notification_type: NOTIFY }, ($, e, next) =>
-    beside(next, e, [hook($, "docket", ["--hook"], e)]),
+  // the notification types docket opens a thread for
+  on(
+    "classic.Notification",
+    { notification_type: ["agent_needs_input", "idle_prompt", "permission_prompt"] },
+    ($, e, next) => beside(next, e, [hook($, "docket", ["--hook"], e)]),
   );
 
   // an ended session waits on no one: its idle or permission notification fired after the last Stop,
@@ -346,8 +284,8 @@ export const register = (on) => {
   on("command.run", { command: "shift" }, ($) => show($, "sandman", ["shift", "status"]));
 
   on("command.run", { command: "trail" }, ($, e) => {
-    const n = Number.parseInt(e.args.trim(), 10);
-    const count = Number.isInteger(n) && n > 0 ? n : TRAIL_DEFAULT_LINES;
+    const n = Number.parseInt(e.args, 10);
+    const count = n > 0 ? n : 10;
     return show($, "sandman", ["trail", "log"], (stdout) =>
       stdout.trimEnd().split("\n").slice(-count).join("\n"),
     );
@@ -360,17 +298,27 @@ export const register = (on) => {
     if (e.origin.kind !== "composer") return next(e);
     const isOpening = !state.isOpened;
     state.isOpened = true;
-    if (e.text.length > PROMPT_MAX || e.text.startsWith("# ")) return next(e);
+    // past 400 characters a prompt is a brief or a pasted document, not a correction
+    if (e.text.length > 400 || e.text.startsWith("# ")) return next(e);
     if (isOpening && (await $.env.get("CLAUDE_CODE_SESSION_KIND")) === "bg") return next(e);
-    const tokens = tokensOf(e.text);
+    const tokens = new Set(
+      e.text
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}\s']/gu, " ")
+        .split(/\s+/)
+        .filter(Boolean),
+    );
+    // a repeat: three or more tokens, Jaccard ≥ 0.8 with an earlier prompt
     const isRepeat =
-      tokens.size >= REPEAT_MIN_TOKENS &&
-      state.prompts.some((seen) => jaccard(seen, tokens) >= REPEAT_JACCARD);
+      tokens.size >= 3 &&
+      state.prompts.some((seen) => {
+        const shared = [...seen].filter((token) => tokens.has(token)).length;
+        return shared / (seen.size + tokens.size - shared) >= 0.8;
+      });
     state.prompts.push(tokens);
     const head = e.text.slice(0, 200);
     if (isRepeat) await append($, "correction", `repeated instruction: ${head}`);
-    else if (CORRECTION.some((pattern) => pattern.test(e.text)))
-      await append($, "correction", head);
+    else if (CORRECTION.test(e.text)) await append($, "correction", head);
     return next(e);
   }).catch(($, e, next) => next(e)); // observe-only: a failed capture never holds the prompt
 
@@ -387,7 +335,7 @@ export const register = (on) => {
     if (e.isInteractive && e.surface !== null) {
       await refresh($);
       state.timer?.cancel();
-      state.timer = $.clock.every(REFRESH_MS, () => refresh($));
+      state.timer = $.clock.every(15000, () => refresh($));
     }
     return next(e);
   });
@@ -414,7 +362,7 @@ export const register = (on) => {
       shift?.theme,
       shift?.repo,
       clockOf(shift?.handoff_by, await $.clock.now()),
-      last ? `last: ${[last.kind, last.rationale].filter(Boolean).join(" ")}` : undefined,
+      last && `last: ${[last.kind, last.rationale].filter(Boolean).join(" ")}`,
     ].filter(Boolean);
     const width = Math.max(1, e.props.bodyColumns);
     let line = `⟳ ${parts.join(" · ")}`.replace(/\s+/g, " ");

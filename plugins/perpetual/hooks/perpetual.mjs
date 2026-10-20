@@ -59,6 +59,7 @@ async function append($, kind, rationale) {
 
 /** Minutes until `handoff_by`, as `1h05m left` or `handoff due` once past; unparseable, itself. */
 function clockOf(handoffBy, now) {
+  if (!handoffBy) return undefined;
   const due = Date.parse(handoffBy);
   if (Number.isNaN(due)) return handoffBy;
   if (due <= now) return "handoff due";

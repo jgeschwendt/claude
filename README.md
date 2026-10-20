@@ -60,4 +60,4 @@ Each statusline tick whose payload carries `rate_limits` also writes the five-ho
 `$XDG_STATE_HOME/claude/window.json` (default `~/.local/state/claude/window.json`; `$CLAUDE_WINDOW_FILE` overrides it).
 The write is monotone: a window not resetting within 6h, or behind the stored live one (an earlier
 `resets_at`, or less used of the same), writes nothing — an idle session never rolls the clock back.
-The perpetual mod writes the same file from `session.measure`, without the monotone check.
+The perpetual mod writes the same file at `session.start` and on `session.measure`, without the monotone check.

@@ -118,6 +118,7 @@ test("band draws the shift's clock and the last trail event, truncated, refreshe
   expect(await draw({ handoff_by: "tonight", shift: "s" }, { bodyColumns: 13 })).toBe(
     "⟳ s · tonight",
   );
+  expect(await draw({ handoff_by: 0, shift: "s" })).toBe("⟳ s");
   expect(await draw({ shift: "s" }, { bodyColumns: 0 })).toBe("…");
   files[trail] = '{"kind":"x"}\n{"kind":"change"}\n';
   expect(await draw()).toBe("⟳ last: change");
@@ -128,11 +129,12 @@ test("band draws the shift's clock and the last trail event, truncated, refreshe
   );
   expect(drawn).toEqual({ dimColor: true, wrap: "truncate-end" });
   expect(await draw(shift, { hasSurvey: true })).toBe("engine");
-  expect(reads).toHaveLength(22);
+  expect(reads).toHaveLength(24);
 });
 
 test("a correction prompt at the composer appends its first 200 characters to the trail, a failure only logged; another origin, a long or `# ` prompt or a --bg session's opening prompt appends nothing", async ($, on) => {
-  const text = "No, don't stash in the shared tree";
+  const text = "Please, don't stash in the shared tree";
+  const opening = "never stash in a shared tree";
   const brief = `#1 never stash ${"x".repeat(385)}`;
   const { logs, runs } = world(
     on,
@@ -145,14 +147,15 @@ test("a correction prompt at the composer appends its first 200 characters to th
     },
   );
   await submit($, "never mind that", { kind: "task-notification" });
-  await submit($, "never stash in a shared tree");
+  await submit($, opening);
   await submit($, "add a band above the prompt");
   await submit($, "# Shift brief\nnever stash");
-  await submit($, `never stash ${"x".repeat(389)}`);
+  await submit($, opening.padEnd(401));
   expect(await submit($, text)).toEqual({ text });
   await submit($, brief);
+  await submit($, opening);
   expect(runs.map((argv) => argv.join(" "))).toEqual(
-    [text, brief.slice(0, 200)].map(
+    [text, brief.slice(0, 200), opening].map(
       (rationale) =>
         `${BIN}/sandman trail append --kind correction --rationale ${rationale} --ref session:sess-1`,
     ),
@@ -163,8 +166,8 @@ test("a correction prompt at the composer appends its first 200 characters to th
 test("every correction, and a repeat of three or more words, appends within 5 s carrying SANDMAN_SHIFT", async ($, on) => {
   const { inits, runs } = world(on, {}, { env: { SANDMAN_SHIFT: "s1" } });
   const corrections = ["that is wrong", "No.", "dont", "I said so", "not what I meant", "stop"];
-  const repeats = ["Let's go, now!", "Bump to Node 22, please!"];
-  const said = ["let's go", "let's go", "let's go now", "bump to node 22"];
+  const repeats = ["Let's go, now!", "Stop: bump Node 22, please!"];
+  const said = ["let's go", "let's go", "let's go now", "bump node 22 please"];
   for (const text of [...corrections, ...said, ...repeats]) await submit($, text);
   expect(runs.map((argv) => argv.slice(6).join(" "))).toEqual(
     [...corrections, ...repeats.map((text) => `repeated instruction: ${text}`)].map(
@@ -211,12 +214,12 @@ test("/trail 5, /shift and /docket log their binary's output and answer nothing"
   ]);
 });
 
-test("SessionStart runs recall, docket and report at once and adds their context in order", async ($, on) => {
+test("SessionStart runs recall, docket, report and the sweep at once and adds their context in order", async ($, on) => {
   const reply = (additionalContext: string) =>
     JSON.stringify({ hookSpecificOutput: { additionalContext, hookEventName: "SessionStart" } });
   const { clock, inits, runs } = world(
     on,
-    {},
+    { [`${HOME}/.claude/sessions/1.json`]: '{"sessionId":"sess-1"}' },
     {
       outs: {
         "docket --hook": { stdout: "## threads waiting on you\n" },
@@ -232,12 +235,13 @@ test("SessionStart runs recall, docket and report at once and adds their context
     [`${BIN}/sandman`, "recall", "--hook"],
     [`${BIN}/docket`, "--hook"],
     [`${BIN}/sandman`, "report", "--hook"],
+    [`${BIN}/docket`, "list", "--json"],
   ]);
   await clock.advance(100);
   expect(await out).toEqual({
     additionalContext: ["settings", "## Long-term index", "## threads waiting on you", "# Reports"],
   });
-  expect(inits.map((init) => init.timeoutMs)).toEqual([10000, 10000, 10000]);
+  expect(inits.map((init) => init.timeoutMs)).toEqual([10000, 10000, 10000, 5000]);
   expect(JSON.parse(inits[0].stdin)).toMatchObject({
     hook_event_name: "SessionStart",
     source: "startup",
@@ -270,25 +274,31 @@ test("UserPromptSubmit adds docket's pull; Stop and permission notifications run
   expect(
     await $.classic.Stop({ last_assistant_message: "result: done", stop_hook_active: false }),
   ).toEqual({});
-  expect(
-    await $.classic.Notification({ message: "needs you", notification_type: "permission_prompt" }),
-  ).toEqual({});
-  await $.classic.Notification({ message: "signed in", notification_type: "auth_success" });
-  expect(runs).toEqual(Array(3).fill([`${BIN}/docket`, "--hook"]));
+  for (const notification_type of [
+    "agent_needs_input",
+    "auth_success",
+    "idle_prompt",
+    "permission_prompt",
+  ])
+    expect(await $.classic.Notification({ message: "m", notification_type })).toEqual({});
+  expect(runs).toEqual(Array(5).fill([`${BIN}/docket`, "--hook"]));
   expect(inits.map((init) => JSON.parse(init.stdin).hook_event_name)).toEqual([
     "UserPromptSubmit",
     "Stop",
-    "Notification",
+    ...Array(3).fill("Notification"),
   ]);
 });
 
 test("SessionEnd runs sandman take and resolves the session's docket threads inside the 1.5 s budget", async ($, on) => {
-  const { inits, runs } = world(on);
-  await $.classic.SessionEnd({ reason: "prompt_input_exit", session_id: "sess-1" });
+  const { clock, inits, runs } = world(on, {}, { slow: true });
+  const out = $.classic.SessionEnd({ reason: "prompt_input_exit", session_id: "sess-1" });
+  await clock.settle();
   expect(runs).toEqual([
     [`${BIN}/sandman`, "take", "--hook"],
     [`${BIN}/docket`, "resolve", "--key", "session:sess-1", "--reason", "session ended"],
   ]);
+  await clock.advance(100);
+  await out;
   expect(inits.map((init) => init.timeoutMs)).toEqual([1500, 1500]);
   expect(JSON.parse(inits[0].stdin)).toMatchObject({ reason: "prompt_input_exit" });
 });
@@ -300,7 +310,7 @@ test("SessionStart resolves the notification problems of unregistered sessions, 
     id,
     key,
     kind,
-    messages: [{ body }],
+    messages: [{ body: "waiting" }, { body }],
     title: "waiting",
   });
   const outs: Record<string, object> = {
@@ -374,7 +384,7 @@ test("the five-hour window is written atomically at a headless start and on each
 test("guards deny the house-forbidden commands and .yml writes, trailing each denial", async ($, on) => {
   const { runs } = world(on);
   const denied = {
-    "YAML files end in": ["/r/.github/ci.YML"],
+    "YAML files end in": ["/r/.github/ci.YML", "/r/a.yml"],
     "git checkout --": [
       "cd x && git checkout -- src/a.rs",
       "git -C /r checkout HEAD -- .",
@@ -390,6 +400,7 @@ test("guards deny the house-forbidden commands and .yml writes, trailing each de
     "never `git stash`": [
       "git stash",
       "git stash pop",
+      "x=$(git stash)",
       'git -C "/r/my dir" stash',
       "git --git-dir /r/.git stash",
       "git -P stash",
@@ -411,7 +422,7 @@ test("guards deny the house-forbidden commands and .yml writes, trailing each de
   };
   for (const [rule, subjects] of Object.entries(denied))
     for (const subject of subjects) {
-      const tool = rule.startsWith("YAML") ? "Write" : "Bash";
+      const tool = { YML: "Write", yml: "Edit" }[subject.slice(-3)] ?? "Bash";
       const call = { command: subject, content: "", file_path: subject, tool };
       const { deny } = await $.tool.call(call as any);
       expect(deny).toContain(rule);
@@ -430,6 +441,7 @@ test("guards deny the house-forbidden commands and .yml writes, trailing each de
     'git commit -m "never git stash"',
     "git checkout main\nls -- src",
     "git push origin main\nls -f",
+    "git push origin main & ls -f",
     "git reset HEAD~1\ngrep --hard x",
     "pkill -x node\nls -f",
     "git push --follow-tags --force-if-includes origin main",

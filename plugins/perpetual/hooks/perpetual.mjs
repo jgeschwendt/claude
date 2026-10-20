@@ -4,7 +4,7 @@
 const CORRECTION = /^no[,.! ]|\bdon'?t\b|\bi said\b|\bnever\b|\bnot what i\b|\bstop\b|\bwrong\b/i;
 
 /**
- * a command word at a command position: line start, or after `;`, `&`, `|`, `(`, `{` or `$(`, then any
+ * a command word at a command position: line start, or after `;`, `&`, `|`, `(` or `{`, then any
  * `then`/`do`/`else`, a wrapper (`sudo`, `env`, `command`, `exec`, `nohup`, `time`, `xargs`) or `VAR=value`
  */
 const AT = String.raw`(?:^|[;&|({])\s*(?:(?:then|do|else|sudo|env|command|exec|nohup|time|xargs)\s+|\w+=\S*\s+)*`;
@@ -57,7 +57,7 @@ async function append($, kind, rationale) {
   await run($, "sandman", argv, { timeoutMs: 5000 });
 }
 
-/** Minutes until `handoff_by`, as `1h05m left`, or `handoff due` once past. */
+/** Minutes until `handoff_by`, as `1h05m left` or `handoff due` once past; unparseable, itself. */
 function clockOf(handoffBy, now) {
   const due = Date.parse(handoffBy);
   if (Number.isNaN(due)) return handoffBy;
@@ -246,7 +246,6 @@ export const register = (on) => {
     if (e.origin.kind !== "composer") return next(e);
     const isOpening = !state.isOpened;
     state.isOpened = true;
-    // past 400 characters a prompt is a brief or a pasted document, not a correction
     if (e.text.length > 400 || e.text.startsWith("# ")) return next(e);
     if (isOpening && (await $.env.get("CLAUDE_CODE_SESSION_KIND")) === "bg") return next(e);
     const tokens = new Set(e.text.toLowerCase().match(/[\p{L}\p{N}']+/gu));

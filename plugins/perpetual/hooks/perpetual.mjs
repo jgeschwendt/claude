@@ -7,7 +7,7 @@ const CORRECTION = /^no[,.! ]|\bdon'?t\b|\bi said\b|\bnever\b|\bnot what i\b|\bs
  * a command word at a command position: line start, or after `;`, `&`, `|`, `(`, `{` or `$(`, then any
  * `then`/`do`/`else`, a wrapper (`sudo`, `env`, `command`, `exec`, `nohup`, `time`, `xargs`) or `VAR=value`
  */
-const AT = String.raw`(?:^|[;&|({]|\$\()\s*(?:(?:then|do|else|sudo|env|command|exec|nohup|time|xargs)\s+|\w+=\S*\s+)*`;
+const AT = String.raw`(?:^|[;&|({])\s*(?:(?:then|do|else|sudo|env|command|exec|nohup|time|xargs)\s+|\w+=\S*\s+)*`;
 /** the rest of one command: up to a separator or the end of the line */
 const ARGS = String.raw`[^;&|\n]*`;
 /**
@@ -15,9 +15,9 @@ const ARGS = String.raw`[^;&|\n]*`;
  * value-taking long option with `=` or a separate value (`--git-dir <dir>`), any other long option with `=` only — a
  * separate value for every `--opt` would read `git --no-pager show stash@{0}` as `stash`, and backtrack exponentially
  */
-const GIT = String.raw`${AT}git(?:\s+-[Cc]\s+(?:"[^"]*"|'[^']*'|\S+)|\s+-[abd-zABD-Z]\b|\s+--(?:git-dir|work-tree|namespace|exec-path|super-prefix|config-env)(?:=|\s+(?!-))\S+|\s+--[\w-]+(?:=\S+)?)*\s+`;
+const GIT = String.raw`${AT}git(?:\s+-[Cc]\s+(?:"[^"]*"|'[^']*'|\S+)|\s+-[abd-zABD-Z]\b|\s+--(?:git-dir|work-tree|namespace|super-prefix|config-env)(?:=|\s+(?!-))\S+|\s+--[\w-]+(?:=\S+)?)*\s+`;
 /** Bash commands the house rules forbid, each with the rule that forbids it */
-const GUARDS = /** @type {[string, string][]} */ ([
+const GUARDS = [
   [
     String.raw`${AT}pkill\b${ARGS}\s(?:-[a-z]*f|--full\b)`,
     "pkill -f matches every process's full argv — kill by resolved PID: `lsof -ti :<port>` or `pgrep -x <name>`, inspect, then `kill <pid>`",
@@ -42,19 +42,13 @@ const GUARDS = /** @type {[string, string][]} */ ([
     String.raw`${GIT}clean\b`,
     "never mutate to inspect — `git clean` deletes untracked files, co-resident work included",
   ],
-]).map(([pattern, reason]) => /** @type {const} */ ([new RegExp(pattern, "m"), reason]));
+].map(([pattern, reason]) => [new RegExp(pattern, "m"), reason]);
 const HOOK_MS = 10000;
 const TAKE_MS = 1500;
 
-/** @type {{ home?: string, isOpened?: boolean, last?: any, prompts: Set<string>[], shift?: any, timer?: { cancel(): void } }} */
 const state = { prompts: [] };
 
-/**
- * Appends one trail event; a failure is logged, never raised.
- * @param {any} $
- * @param {string} kind
- * @param {string} rationale
- */
+/** Appends one trail event; a failure is logged, never raised. */
 async function append($, kind, rationale) {
   const argv = ["trail", "append", "--kind", kind, "--rationale", rationale];
   argv.push("--ref", `session:${await $.session.id()}`);
@@ -63,11 +57,7 @@ async function append($, kind, rationale) {
   await run($, "sandman", argv, { timeoutMs: 5000 });
 }
 
-/**
- * Minutes until `handoff_by`, as `1h05m left`, or `handoff due` once past.
- * @param {string | undefined} handoffBy
- * @param {number} now
- */
+/** Minutes until `handoff_by`, as `1h05m left`, or `handoff due` once past. */
 function clockOf(handoffBy, now) {
   const due = Date.parse(handoffBy);
   if (Number.isNaN(due)) return handoffBy;
@@ -80,28 +70,15 @@ function clockOf(handoffBy, now) {
 /**
  * Runs a settings-hook binary on the event's stdin JSON, as a command hook would, and resolves
  * to the context it adds: `hookSpecificOutput.additionalContext` of a JSON reply, or plain stdout.
- * @param {any} $
- * @param {string} bin
- * @param {string[]} args
- * @param {object} e
- * @param {number} timeoutMs
- * @returns {Promise<string[]>}
  */
 async function hook($, bin, args, e, timeoutMs = HOOK_MS) {
   const out = (await run($, bin, args, { stdin: JSON.stringify(e), timeoutMs }))?.trim();
-  const context = /^\{[^]*\}$/.test(out ?? "")
-    ? parse(out)?.hookSpecificOutput?.additionalContext
-    : out;
+  const context = /^\{[^]*\}$/.test(out) ? parse(out)?.hookSpecificOutput?.additionalContext : out;
   return typeof context === "string" && context ? [context] : [];
 }
 
-/** @param {any} $ */
-async function homeOf($) {
-  state.home ??= (await $.env.get("HOME")) ?? "";
-  return state.home;
-}
+const homeOf = async ($) => (state.home ??= (await $.env.get("HOME")) ?? "");
 
-/** @param {string | undefined} text */
 function parse(text) {
   try {
     const value = JSON.parse(text);
@@ -111,30 +88,20 @@ function parse(text) {
   }
 }
 
-/** @type {($: any, path: string) => Promise<string | undefined>} a file's text, or `undefined` when unreadable */
-const readText = ($, path) => $.fs.read(path).catch(() => undefined);
-
-/**
- * Re-reads the shift file and today's trail tail, then asks for a redraw.
- * @param {any} $
- */
+/** Re-reads the shift file and today's trail tail, then asks for a redraw. */
 async function refresh($) {
   const home = await homeOf($);
   const day = new Date(await $.clock.now()).toISOString().slice(0, 10).replaceAll("-", "/");
-  const shiftText = await readText($, `${home}/.sandman/shifts/current.json`);
-  const trailText = await readText($, `${home}/.sandman/trail/${day}.jsonl`);
+  const shiftText = await $.fs.read(`${home}/.sandman/shifts/current.json`).catch(() => "");
+  const trailText = await $.fs.read(`${home}/.sandman/trail/${day}.jsonl`).catch(() => "");
   state.shift = parse(shiftText);
-  state.last = parse(trailText?.trimEnd().split("\n").at(-1));
+  state.last = parse(trailText.trimEnd().split("\n").at(-1));
   $.ui.invalidate("ui.render");
 }
 
 /**
  * Runs `~/.local/bin/<bin>`; resolves to its stdout, or `undefined` after a dim log line when it
  * cannot start, times out or exits non-zero. Never raises: no binary may break a session.
- * @param {any} $
- * @param {string} bin
- * @param {string[]} args
- * @param {object} [init]
  */
 async function run($, bin, args, init) {
   const name = [bin, ...args.slice(0, 2)].join(" ");
@@ -150,13 +117,7 @@ async function run($, bin, args, init) {
   }
 }
 
-/**
- * Runs a binary for a command and logs what it printed.
- * @param {any} $
- * @param {string} bin
- * @param {string[]} args
- * @param {(stdout: string) => string} shape
- */
+/** Runs a binary for a command and logs what it printed. */
 async function show($, bin, args, shape = (stdout) => stdout.trim()) {
   const stdout = await run($, bin, args);
   if (stdout !== undefined) $.ui.log(shape(stdout) || "(empty)");
@@ -169,19 +130,17 @@ async function show($, bin, args, shape = (stdout) => stdout.trim()) {
  * (`sessionId`): a killed session fires no SessionEnd. Headless `-p` sessions never register, so a thread
  * docket's Stop opened for one (a `failed:` message) is left alone. Skipped unless the registry reads and
  * lists this session — else its format changed and absence is no evidence. The list, then the resolves,
- * get 5 s each, so with the registry reads the sweep can hold SessionStart ≈10 s.
- * @param {any} $
- * @returns {Promise<string[]>} no context
+ * get 5 s each, so with the registry reads the sweep can hold SessionStart ≈10 s; it adds no context.
  */
 async function sweep($) {
   const dir = `${await homeOf($)}/.claude/sessions`;
   const live = new Set();
   for (const { name } of await $.fs.list(dir).catch(() => []))
-    if (name.endsWith(".json")) live.add(parse(await readText($, `${dir}/${name}`))?.sessionId);
+    if (name.endsWith(".json"))
+      live.add(parse(await $.fs.read(`${dir}/${name}`).catch(() => ""))?.sessionId);
+  if (!live.has(await $.session.id())) return [];
   const init = { timeoutMs: HOOK_MS / 2 };
-  const threads = live.has(await $.session.id())
-    ? parse(await run($, "docket", ["list", "--json"], init))
-    : [];
+  const threads = parse(await run($, "docket", ["list", "--json"], init));
   await Promise.all(
     (Array.isArray(threads) ? threads : [])
       .filter(
@@ -200,11 +159,10 @@ async function sweep($) {
  * Persists the five-hour window to `$CLAUDE_WINDOW_FILE`, else `$XDG_STATE_HOME/claude/window.json`,
  * else `~/.local/state/claude/window.json`, for `sandman shift clock`: written to a per-session `.tmp`
  * then renamed with `mv`, since `$.fs.write` is not atomic. Skipped without both figures.
- * @param {any} $
  */
 async function window($) {
   const five = (await $.session.usage()).rateLimits.find((limit) => limit.kind === "five_hour");
-  const resetsAt = Date.parse(five?.resetsAt ?? "");
+  const resetsAt = Date.parse(five?.resetsAt);
   if (Number.isNaN(resetsAt) || typeof five.percentUsed !== "number") return;
   const root = (await $.env.get("XDG_STATE_HOME")) || `${await homeOf($)}/.local/state`;
   const path = (await $.env.get("CLAUDE_WINDOW_FILE")) || `${root}/claude/window.json`;
@@ -219,22 +177,12 @@ async function window($) {
   }
 }
 
-/**
- * Runs side-effect hooks beside the chain beneath and returns its result untouched.
- * @param {any} next
- * @param {any} e
- * @param {Promise<unknown>[]} runs
- */
+/** Runs side-effect hooks beside the chain beneath and returns its result untouched. */
 async function beside(next, e, runs) {
   return (await Promise.all([next(e), ...runs]))[0];
 }
 
-/**
- * Runs context hooks beside the chain beneath and adds what they print, in order.
- * @param {any} next
- * @param {any} e
- * @param {Promise<string[]>[]} runs
- */
+/** Runs context hooks beside the chain beneath and adds what they print, in order. */
 async function context(next, e, runs) {
   const [result, ...contexts] = await Promise.all([next(e), ...runs]);
   const additionalContext = [...(result.additionalContext ?? []), ...contexts.flat()];
@@ -301,13 +249,7 @@ export const register = (on) => {
     // past 400 characters a prompt is a brief or a pasted document, not a correction
     if (e.text.length > 400 || e.text.startsWith("# ")) return next(e);
     if (isOpening && (await $.env.get("CLAUDE_CODE_SESSION_KIND")) === "bg") return next(e);
-    const tokens = new Set(
-      e.text
-        .toLowerCase()
-        .replace(/[^\p{L}\p{N}\s']/gu, " ")
-        .split(/\s+/)
-        .filter(Boolean),
-    );
+    const tokens = new Set(e.text.toLowerCase().match(/[\p{L}\p{N}']+/gu));
     // a repeat: three or more tokens, Jaccard ≥ 0.8 with an earlier prompt
     const isRepeat =
       tokens.size >= 3 &&
@@ -325,14 +267,14 @@ export const register = (on) => {
   on("session.measure", async ($, e, next) => (await window($), next(e)));
 
   on("session.start", async ($, e, next) => {
-    for (const [name, description, argumentHint] of /** @type {[string, string, string?][]} */ ([
+    for (const [name, description, argumentHint] of [
       ["docket", "Lists the docket's threads (log only)."],
       ["shift", "Shows the current sandman shift (log only)."],
       ["trail", "Shows the last n trail events, 10 by default (log only).", "[n]"],
-    ]))
+    ])
       await $.command.register({ argumentHint, description, immediate: true, name });
     await window($);
-    if (e.isInteractive && e.surface !== null) {
+    if (e.isInteractive) {
       await refresh($);
       state.timer?.cancel();
       state.timer = $.clock.every(15000, () => refresh($));

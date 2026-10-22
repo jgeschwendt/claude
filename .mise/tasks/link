@@ -3,7 +3,9 @@
 # Symlink into ~/.claude each entry Claude Code reads through it.
 #   ok      already linked here           drift   a real file or foreign link; never overwritten
 #   link    was missing, now linked       unlink  a link here for an unlisted entry, removed
-# --check changes nothing (reports missing: / stale: instead); either mode exits 1 on anything but ok.
+#   behind  the user-scope perpetual install is an older copy than the trunk's plugin.json
+# --check changes nothing (reports missing: / stale: instead); the perpetual line only reports, in
+# either mode; either mode exits 1 on anything but ok.
 set -euo pipefail
 
 check=0
@@ -53,5 +55,18 @@ for dest in "$home"/* "$home"/.[!.]*; do
 		echo "unlink: $entry"
 	fi
 done
+
+# the mod runs from a versioned copy under plugins/cache, so a trunk change is live only after an update
+want="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$repo/plugins/perpetual/.claude-plugin/plugin.json")"
+have="$(jq -r '.plugins["perpetual@jgeschwendt"][]? | select(.scope == "user") | .version' "$home/plugins/installed_plugins.json" 2>/dev/null || true)"
+if [[ "$have" == "$want" ]]; then
+	echo "ok: perpetual $want"
+elif [[ -n "$have" ]]; then
+	echo "behind: perpetual $have → $want (claude plugin update perpetual@jgeschwendt)"
+	status=1
+else
+	echo "missing: perpetual (claude plugin install perpetual@jgeschwendt)"
+	status=1
+fi
 
 exit "$status"

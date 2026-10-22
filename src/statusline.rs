@@ -412,17 +412,20 @@ fn eta_to_compact(tokens: f64, threshold: f64, now_ms: i64, samples: &mut Sample
 
 /// Columns of the controlling PTY. Claude Code pipes our stdout, so there is no tty on this
 /// process — walk up to the shell that owns the real one and ask `stty` through `sh` ([`sh`] for
-/// real, a fake in tests), mirroring ccstatusline. `None` on any failure along the way.
+/// real, a fake in tests), mirroring ccstatusline. One `ps` per level reads both the tty and the
+/// parent, so a tty-less `--bg` session spawns half the processes per tick. `None` on any failure
+/// along the way.
 pub fn columns(sh: impl Fn(&[&str]) -> Option<String>) -> Option<usize> {
     let mut pid = std::process::id().to_string();
     for _ in 0..8 {
-        let tty = sh(&["ps", "-o", "tty=", "-p", &pid])?;
+        let row = sh(&["ps", "-o", "tty=", "-o", "ppid=", "-p", &pid])?;
+        let (tty, ppid) = row.split_once(' ')?;
         // No controlling tty: `??` on macOS, `?` from procps.
-        if !tty.is_empty() && !tty.starts_with('?') {
+        if !tty.starts_with('?') {
             let flag = if cfg!(target_os = "macos") { "-f" } else { "-F" };
             return sh(&["stty", flag, &format!("/dev/{tty}"), "size"])?.split(' ').nth(1)?.parse().ok().filter(|c| *c != 0);
         }
-        pid = sh(&["ps", "-o", "ppid=", "-p", &pid])?;
+        pid = ppid.trim().into();
         if pid.parse::<i64>().unwrap_or(0) <= 1 {
             return None;
         }
@@ -747,18 +750,25 @@ mod tests {
 
     #[test]
     fn walks_parent_pids_to_the_tty_width() {
+        let spawns = std::cell::Cell::new(0);
         let walk = |tty: &'static str, ppid: &'static str, size: &'static str, none: &'static str| {
-            move |argv: &[&str]| match argv {
-                ["ps", _, "tty=", _, pid] => Some(if *pid == "7" { tty } else { none }.into()),
-                ["ps", _, "ppid=", ..] => Some(ppid.into()),
-                _ => (argv[2] == "/dev/ttys001").then(|| size.into()),
+            let spawns = &spawns;
+            move |argv: &[&str]| {
+                spawns.set(spawns.get() + 1);
+                match argv {
+                    ["ps", "-o", "tty=", "-o", "ppid=", "-p", pid] => Some(format!("{}{ppid}", if *pid == "7" { tty } else { none })),
+                    _ => (argv[2] == "/dev/ttys001").then(|| size.into()),
+                }
             }
         };
-        assert_eq!(columns(walk("ttys001", "7", "50 120", "??")), Some(120));
-        assert_eq!(columns(walk("ttys001", "7", "50 120", "?")), Some(120));
-        assert_eq!(columns(walk("ttys001", "7", "50 0", "??")), None);
-        assert_eq!(columns(walk("??", "1", "", "??")), None);
-        assert_eq!(columns(walk("??", "7", "", "??")), None);
+        assert_eq!(columns(walk("ttys001", "    7", "50 120", "??")), Some(120));
+        assert_eq!(columns(walk("ttys001", "    7", "50 120", "?")), Some(120));
+        assert_eq!(columns(walk("ttys001", "    7", "50 0", "??")), None);
+        assert_eq!(columns(walk("??", "    1", "", "??")), None);
+        assert_eq!(columns(walk("??", "", "", "??")), None);
+        spawns.set(0);
+        assert_eq!(columns(walk("??", "    7", "", "??")), None);
+        assert_eq!(spawns.get(), 8);
         assert_eq!(sh(&["echo", " hi "]).as_deref(), Some("hi"));
         assert_eq!(sh(&["false"]), None);
     }

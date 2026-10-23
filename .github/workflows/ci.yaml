@@ -15,16 +15,18 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-        # Full history: stele freshness walks verified.sha..HEAD.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        # Full history: stele freshness walks verified.sha..HEAD. No step pushes,
+        # so the token is not left in .git/config.
         with:
           fetch-depth: 0
+          persist-credentials: false
       # The actions' code is pinned by commit (tag in the trailing comment), and mise
       # and stele by sha256: either asset replaced under its tag fails the job. sha256
       # here is the extracted mise binary's, the bare `mise-v<version>-linux-x64` line
       # of that release's SHASUMS256.txt. The tools `mise install` then fetches for
       # mise.toml carry no hash here (no mise.lock).
-      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
           sha256: fe6dd17e68e09682b31d2e7bb7bb755d22636ac1af5d94621e300f2ca9e9fe8a
           version: 2026.10.17

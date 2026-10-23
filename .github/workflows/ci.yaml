@@ -6,22 +6,26 @@ on:
   pull_request:
   merge_group:
 
+permissions:
+  contents: read
+
 # `check` is the required status check on main (ruleset `main`); renaming the
 # job renames the check and stalls every PR and the merge queue.
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         # Full history: stele freshness walks verified.sha..HEAD.
         with:
           fetch-depth: 0
-      - uses: jdx/mise-action@v2
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
       - run: mise x -- cargo clippy --all-targets -- -D warnings
       - run: mise run test
       # stele graph gate (check → emit --check). NEVER `stele build` in CI: it is
       # the sole writer of .stele/graph.lock and would launder a stale lock green.
-      # The installer comes from the tag it installs, never a moving branch.
-      - run: curl -fsSL https://raw.githubusercontent.com/jgeschwendt/stele/v0.3.0/scripts/install.sh | bash -s v0.3.0
+      # The installer comes from the commit v0.3.0 tags, never a moving ref; actions
+      # are pinned the same way, their tag in the trailing comment.
+      - run: curl -fsSL https://raw.githubusercontent.com/jgeschwendt/stele/c7882176f321809064205db5b6474827834c5a34/scripts/install.sh | bash -s v0.3.0
       - run: ~/.local/bin/stele check
       - run: ~/.local/bin/stele emit --check

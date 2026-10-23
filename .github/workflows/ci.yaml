@@ -19,14 +19,22 @@ jobs:
         # Full history: stele freshness walks verified.sha..HEAD.
         with:
           fetch-depth: 0
+      # The actions' code is pinned by commit (tag in the trailing comment) and
+      # every binary they or we download by sha256: a release asset replaced under
+      # its tag fails the job. sha256 here is the extracted mise binary's, the bare
+      # `mise-v<version>-linux-x64` line of that release's SHASUMS256.txt.
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          sha256: fe6dd17e68e09682b31d2e7bb7bb755d22636ac1af5d94621e300f2ca9e9fe8a
+          version: 2026.10.17
       - run: mise x -- cargo clippy --all-targets -- -D warnings
       - run: mise run test
       # stele graph gate (check → emit --check). NEVER `stele build` in CI: it is
       # the sole writer of .stele/graph.lock and would launder a stale lock green.
-      # The installer script comes from the commit v0.3.0 tags and the actions' code
-      # from commits (tag in the trailing comment); what they download (the v0.3.0
-      # release assets, the latest mise) is still fetched by name.
-      - run: curl -fsSL https://raw.githubusercontent.com/jgeschwendt/stele/c7882176f321809064205db5b6474827834c5a34/scripts/install.sh | bash -s v0.3.0
+      - run: |
+          curl -fsSLO https://github.com/jgeschwendt/stele/releases/download/v0.3.0/stele-x86_64-linux.tar.gz
+          echo "32bdb9542a86a56f8a023c99965eab7934e44eadbe35bd8aeab7d90e5e8bf30d  stele-x86_64-linux.tar.gz" | sha256sum -c
+          mkdir -p ~/.local/bin && tar -xzf stele-x86_64-linux.tar.gz -C ~/.local/bin stele
+        working-directory: ${{ runner.temp }}
       - run: ~/.local/bin/stele check
       - run: ~/.local/bin/stele emit --check

@@ -1,16 +1,18 @@
 //! End-to-end checks on the `statusline` binary: the CLI must always get a line and a zero exit,
 //! whatever the payload.
 
+use std::ffi::OsStr;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-/// Run the binary with `HOME`/`TMPDIR` pointed at `dir`, so the sample store, the debug log and the
-/// window clock (via the `HOME` fallback) land there and no real settings feed the threshold.
+/// Run the binary in `dir` with `TMPDIR` there and `HOME` at `home` (`dir` itself, or `""`), so the sample store, the
+/// debug log and the window clock (via the `HOME` fallback) land there and no real settings feed the threshold.
 /// Returns `(exit code, stdout)`.
-fn run(dir: &Path, payload: impl AsRef<[u8]>) -> (i32, String) {
+fn run(dir: &Path, home: impl AsRef<OsStr>, payload: impl AsRef<[u8]>) -> (i32, String) {
     let mut child = Command::new(env!("CARGO_BIN_EXE_statusline"))
-        .env("HOME", dir)
+        .current_dir(dir)
+        .env("HOME", home)
         .env("TMPDIR", dir)
         .env_remove("CLAUDE_CODE_AUTO_COMPACT_WINDOW")
         .env_remove("CLAUDE_CODE_ENTRYPOINT")
@@ -41,7 +43,7 @@ fn logs_the_error_and_prints_a_blank_line_for_malformed_stdin() {
     let dir = scratch("malformed");
 
     for (payload, error) in [(&b"not json"[..], "SyntaxError"), (b"\xff", "valid UTF-8")] {
-        assert_eq!(run(&dir, payload), (0, "\n".into()));
+        assert_eq!(run(&dir, &dir, payload), (0, "\n".into()));
         let log = std::fs::read_to_string(dir.join(".claude/logs/statusline.log")).unwrap();
         assert!(log.contains(error), "{log}");
     }
@@ -63,13 +65,13 @@ fn renders_a_line_and_persists_the_window_clock() {
     // A directory in the file's place fails the rename: the tick still exits 0, logs the warning
     // and leaves no temp file behind.
     std::fs::create_dir_all(&file).unwrap();
-    assert_eq!(run(&dir, &payload).0, 0);
+    assert_eq!(run(&dir, &dir, &payload).0, 0);
     let log = std::fs::read_to_string(dir.join(".claude/logs/statusline.log")).unwrap();
     assert!(log.contains("window: "), "{log}");
     assert_eq!(std::fs::read_dir(file.parent().unwrap()).unwrap().count(), 1, "temp file left behind");
     std::fs::remove_dir(&file).unwrap();
 
-    let (code, out) = run(&dir, &payload);
+    let (code, out) = run(&dir, &dir, &payload);
     assert_eq!(code, 0);
     assert_eq!(out.lines().count(), 1, "{out:?}");
     assert!(out.contains("Fable 5.1") && out.contains("30%"), "{out:?}");
@@ -81,4 +83,8 @@ fn renders_a_line_and_persists_the_window_clock() {
     assert_eq!(window["five_hour"], serde_json::json!({ "resets_at": resets_at, "used_percentage": 31.4 }));
     assert_eq!(window["session_id"], "it-2");
     assert!(chrono::DateTime::parse_from_rfc3339(window["at"].as_str().unwrap()).is_ok(), "{window}");
+    // An empty HOME disables the clock rather than writing it under the working directory.
+    std::fs::remove_file(&file).unwrap();
+    assert_eq!(run(&dir, "", &payload).0, 0);
+    assert!(!file.exists());
 }

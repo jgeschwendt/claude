@@ -12,13 +12,17 @@ const W = String.raw`[\\'"]?(?:[\w./~-]*\/)?`;
  */
 const V = String.raw`(?:"[^"]*"|'[^']*'|\`[^\`]*\`|\([^()]*\)|\{[^{}]*\}|[^\s;&|(){}\`"'])`;
 /** a statement keyword or a wrapper that runs the command after it, shells (`bash -c`) and `eval` included */
-const PRE = String.raw`(?:if|elif|while|until|then|do|else|!|${W}(?:sudo|env|command|exec|eval|nice|nohup|time|timeout|xargs|mise\s+(?:x|exec)|(?:ba|da|k|z)?sh))(?=\s)`;
+const PRE = String.raw`(?:if|elif|while|until|then|do|else|!|${W}(?:builtin|command|doas|env|eval|exec|mise\s+(?:x|exec)|nice|nohup|(?:ba|da|k|z)?sh|sudo|time|timeout|xargs))(?=\s)`;
+/** a `tool@version` word (`mise x node@22 --`): never a value, so it parses one way */
+const TOOL = String.raw`(?![-\d])[\w./:+-]+@${V}*`;
 /**
- * a command word at a command position: line start, or after `;`, `&`, `|`, `(` or `{`, then any
- * `VAR=value` or PRE, a PRE taking options (`--`, `-u me`: a value is never a PRE, a `VAR=`, nor
- * leads with `-` or a digit, so each word parses one way) and bare numbers (`timeout 5`)
+ * a command word at a command position: line start, after `;`, `&`, `|`, `(` or `{`, or after `find`'s
+ * `-exec`/`-execdir`/`-ok`/`-okdir`, then any `VAR=value` or PRE, a PRE taking options (`--`, `-u me`: a
+ * value is never a PRE, a `VAR=`, a TOOL, nor leads with `-` or a digit, and `--` takes none, so each word parses one way;
+ * an option is never `-exec`, so each run of options ends at the next one, which starts its own),
+ * TOOLs and bare numbers (`timeout 5`)
  */
-const AT = String.raw`(?:^|[;&|({])\s*(?:${PRE}(?:[^\S\n]+(?:-${V}+(?:[^\S\n]+(?![-\d]|${PRE}|\w+=)${V}+)?|\d${V}*))*[^\S\n]+|\w+=${V}*[^\S\n]+)*${W}`;
+const AT = String.raw`(?:^|[;&|({]|\s-(?:exec|ok)(?:dir)?(?=\s))\s*(?:${PRE}(?:[^\S\n]+(?:-(?!(?:exec|ok)(?:dir)?\s)(?:-(?=\s)|(?!-\s)${V}+(?:[^\S\n]+(?![-\d]|${PRE}|${TOOL}|\w+=)${V}+)?)|${TOOL}|\d${V}*))*[^\S\n]+|\w+=${V}*[^\S\n]+)*${W}`;
 /** the rest of one command: up to a separator or the end of the line */
 const ARGS = String.raw`[^;&|\n]*`;
 /**

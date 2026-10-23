@@ -38,6 +38,7 @@
 use chrono::{DateTime, Local, SecondsFormat, Utc};
 use serde::Deserialize;
 use serde_json::{Value, json};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 // ─── payload ─────────────────────────────────────────────────────────────────
@@ -145,9 +146,10 @@ impl Environment {
         }
     }
 
-    /// Rolling sample file for `session_id`; `None` when the payload carries no session.
+    /// Rolling sample file for `session_id`; `None` when the payload carries no session, or one that
+    /// is not `[A-Za-z0-9_-]+` (a UUID in practice) and so could name a path outside tmpdir.
     pub fn samples_path(&self, session_id: Option<&str>) -> Option<PathBuf> {
-        let id = session_id.filter(|s| !s.is_empty())?;
+        let id = session_id.filter(|s| !s.is_empty() && s.bytes().all(|b| b.is_ascii_alphanumeric() || b"-_".contains(&b)))?;
         Some(PathBuf::from(format!("{}/claude-statusline-{id}.json", self.tmp)))
     }
 }
@@ -184,12 +186,16 @@ pub fn persist_window(input: &StatusInput, now: DateTime<Utc>, env: &Environment
         "session_id": input.session_id,
     });
     let fail = |e: std::io::Error| format!("window: {}: {e}", path.display());
-    std::fs::create_dir_all(path.parent().unwrap_or(Path::new(""))).map_err(fail)?;
+    std::fs::create_dir_all(path.parent().unwrap_or(Path::new("")))
+        .and_then(|()| replace(path, body.to_string() + "\n")).map_err(fail)
+}
+
+/// Write `body` to a sibling temp file and rename it over `path`: atomic, and a planted symlink at
+/// `path` is replaced rather than written through.
+fn replace(path: &Path, body: String) -> std::io::Result<()> {
     let tmp = path.with_file_name(format!(".{}.{}.tmp", path.file_name().unwrap_or_default().display(), std::process::id()));
-    std::fs::write(&tmp, body.to_string() + "\n")
-        .and_then(|()| std::fs::rename(&tmp, path))
+    std::fs::write(&tmp, body).and_then(|()| std::fs::rename(&tmp, path))
         .inspect_err(|_| drop(std::fs::remove_file(&tmp)))
-        .map_err(fail)
 }
 
 // ─── JavaScript semantics ────────────────────────────────────────────────────
@@ -209,9 +215,15 @@ fn truthy(value: Option<f64>) -> Option<f64> {
     value.filter(|v| *v != 0.0 && !v.is_nan())
 }
 
-/// `JSON.parse(readFileSync(path))`, `None` on any failure.
+/// `JSON.parse(readFileSync(path))`, `None` on any failure. Paths come from the payload's project
+/// dir, so only a regular file (symlinks followed) of at most 1 MiB counts: a planted `/dev/zero`,
+/// tty or FIFO would otherwise exhaust memory or block the tick.
 fn read_json(path: impl AsRef<Path>) -> Option<Value> {
-    serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()
+    const CAP: u64 = 1 << 20;
+    let mut bytes = vec![];
+    let file = std::fs::metadata(&path).ok().filter(|m| m.is_file()).and_then(|_| std::fs::File::open(&path).ok())?;
+    file.take(CAP + 1).read_to_end(&mut bytes).ok().filter(|&n| n as u64 <= CAP)?;
+    serde_json::from_slice(&bytes).ok()
 }
 
 // ─── auto-compact threshold ──────────────────────────────────────────────────
@@ -372,7 +384,7 @@ impl Samples {
     pub fn write(&self, path: &Path) {
         let number = |v: f64| if v.fract() == 0.0 && v.abs() < 9e15 { json!(v as i64) } else { json!(v) };
         let samples: Vec<Value> = self.samples.iter().map(|s| json!({ "at": s.at, "tokens": number(s.tokens) })).collect();
-        let _ = std::fs::write(path, json!({ "samples": samples }).to_string());
+        let _ = replace(path, json!({ "samples": samples }).to_string());
     }
 }
 
@@ -706,10 +718,14 @@ mod tests {
         let kept: Vec<i64> = samples.samples.iter().map(|s| s.at).collect();
         assert_eq!(kept, (2..42).map(|i| at(15 * i).timestamp_millis()).collect::<Vec<_>>());
         // The store round-trips through the shared on-disk shape, integer notation pinned.
-        assert_eq!(env.samples_path(Some("")), None);
+        assert_eq!([env.samples_path(Some("")), env.samples_path(Some("a/../b"))], [None, None]);
         let path = env.samples_path(Some("s1")).unwrap();
+        // A planted symlink is replaced, never written through.
+        std::fs::write(path.with_extension("target"), "").unwrap();
+        std::os::unix::fs::symlink(path.with_extension("target"), &path).unwrap();
         samples.write(&path);
         let bytes = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(std::fs::read_to_string(path.with_extension("target")).unwrap(), "");
         Samples::load(&path).write(&path);
         assert!(samples.dirty && bytes == std::fs::read_to_string(&path).unwrap(), "{bytes}");
         assert!(bytes.starts_with(&format!(r#"{{"samples":[{{"at":{},"tokens":50000}}"#, kept[0])), "{bytes}");
@@ -731,6 +747,9 @@ mod tests {
             (json!({}), json!({}), fable, 200_000, "1", 200_000.0),
             (json!({}), json!({}), fable, 200_000, "true", 200_000.0),
             (json!({}), json!({ "autoCompactWindow": 150_000 }), fable, 200_000, "", 129_000.0),
+            // Device and oversized settings read as absent: a planted /dev/zero must not exhaust memory.
+            (json!({}), json!("/dev/zero"), fable, 200_000, "", 179_000.0),
+            (json!({}), json!({ "autoCompactWindow": 150_000, "pad": " ".repeat(1 << 20) }), fable, 200_000, "", 179_000.0),
             (json!({ "clientDataCacheSlots": { "a": slot(1, 120_000), "b": slot(2, 140_000) } }), json!({}), fable, 200_000, "", 119_000.0),
             (
                 json!({ "autoCompactWindowsCache": { fable: { "surfaces": { "local-agent": { "default": 130_000 } } } } }),
@@ -745,7 +764,12 @@ mod tests {
             (json!({ "autoCompactWindowsCache": { "claude-sonnet-5": 0 } }), json!({}), "claude-sonnet-5", 1_000_000, "", 979_000.0),
         ] {
             std::fs::write(dir.join(".claude.json"), state.to_string()).unwrap();
-            std::fs::write(dir.join(".claude/settings.local.json"), settings.to_string()).unwrap();
+            let local = dir.join(".claude/settings.local.json");
+            drop(std::fs::remove_file(&local));
+            match settings.as_str() {
+                Some(target) => std::os::unix::fs::symlink(target, &local).unwrap(),
+                None => std::fs::write(&local, settings.to_string()).unwrap(),
+            }
             let env = Environment {
                 auto_compact_window: Some(window.into()),
                 disable_compact: Some(window.into()),

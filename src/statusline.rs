@@ -165,15 +165,16 @@ impl Environment {
 pub fn persist_window(input: &StatusInput, now: DateTime<Utc>, env: &Environment) -> Result<(), String> {
     let five = input.rate_limits.as_ref().and_then(|l| l.five_hour.as_ref());
     let (Some(path), Some((resets_at, used))) =
-        (&env.window_file, five.and_then(|f| Some((f.resets_at? as i64, f.used_percentage?))))
+        (&env.window_file, five.and_then(|f| f.resets_at.zip(f.used_percentage)))
     else {
         return Ok(());
     };
+    let resets_at = resets_at as i64;
     // The reader's bound: a live window resets within 6h. Outside it a payload is never written and
     // a stored window never blocks one, so a corrupt file heals on the next good tick.
     let live = |resets_at: i64| (1..=6 * 3600).contains(&resets_at.saturating_sub(now.timestamp()));
     let prior = read_json(path)
-        .and_then(|v| Some((v["five_hour"]["resets_at"].as_i64()?, v["five_hour"]["used_percentage"].as_f64()?)));
+        .and_then(|v| v["five_hour"]["resets_at"].as_i64().zip(v["five_hour"]["used_percentage"].as_f64()));
     if !live(resets_at) || prior.is_some_and(|prior| live(prior.0) && prior > (resets_at, used)) {
         return Ok(());
     }
@@ -422,8 +423,8 @@ pub fn columns(sh: impl Fn(&[&str]) -> Option<String>) -> Option<usize> {
         let (tty, ppid) = row.split_once(' ')?;
         // No controlling tty: `??` on macOS, `?` from procps.
         if !tty.starts_with('?') {
-            let flag = if cfg!(target_os = "macos") { "-f" } else { "-F" };
-            return sh(&["stty", flag, &format!("/dev/{tty}"), "size"])?.split(' ').nth(1)?.parse().ok().filter(|c| *c != 0);
+            const FLAG: &str = if cfg!(target_os = "macos") { "-f" } else { "-F" };
+            return sh(&["stty", FLAG, &format!("/dev/{tty}"), "size"])?.split(' ').nth(1)?.parse().ok().filter(|c| *c != 0);
         }
         pid = ppid.trim().into();
         if pid.parse::<i64>().unwrap_or(0) <= 1 {
@@ -548,8 +549,7 @@ mod tests {
             "model": { "display_name": "Fable 5.1", "id": "claude-fable-5-1" },
             "session_id": "s1",
         });
-        let (Value::Object(base), Value::Object(extra)) = (&mut json, extra) else { unreachable!() };
-        base.extend(extra);
+        json.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
         serde_json::from_value(json).unwrap()
     }
 
@@ -667,6 +667,8 @@ mod tests {
             ),
         );
         assert_eq!(std::fs::read_dir(file.parent().unwrap()).unwrap().count(), 1, "temp file left behind");
+        let blocked = Environment { window_file: Some(file.join("window.json")), ..Environment::default() };
+        assert!(persist_window(&input, now().with_timezone(&Utc), &blocked).unwrap_err().starts_with("window: "));
     }
 
     #[test]
@@ -682,7 +684,7 @@ mod tests {
         let write = |resets_at: i64, used: f64| write_five(json!({ "resets_at": resets_at, "used_percentage": used }));
 
         assert_eq!(write_five(Value::Null), None, "a payload without a window was written");
-        assert_eq!(write_five(json!({ "resets_at": null, "used_percentage": null })), None, "a null window was written");
+        assert_eq!(write_five(json!({ "resets_at": 1_757_018_000 })), None, "a partial window was written");
         assert_eq!(write(1_757_000_000, 10.0), None, "a window resetting now was written");
         assert_eq!(write(1_791_773_097_000, 10.0), None, "a millisecond resets_at was written");
         std::fs::write(&file, r#"{"five_hour":{"resets_at":4102444800,"used_percentage":99.0}}"#).unwrap();
@@ -711,6 +713,10 @@ mod tests {
         Samples::load(&path).write(&path);
         assert!(samples.dirty && bytes == std::fs::read_to_string(&path).unwrap(), "{bytes}");
         assert!(bytes.starts_with(&format!(r#"{{"samples":[{{"at":{},"tokens":50000}}"#, kept[0])), "{bytes}");
+        // Entries missing a number are dropped; fractional tokens keep their decimals.
+        std::fs::write(&path, r#"{"samples":[{"at":1},{"tokens":2},{"at":3,"tokens":4.5}]}"#).unwrap();
+        Samples::load(&path).write(&path);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), r#"{"samples":[{"at":3,"tokens":4.5}]}"#);
     }
 
     #[test]
@@ -722,6 +728,8 @@ mod tests {
         for (state, settings, model, size, window, expected) in [
             (json!({}), json!({}), fable, 200_000, " 50000 ", 79_000.0),
             (json!({ "autoCompactEnabled": false }), json!({}), fable, 200_000, "", 200_000.0),
+            (json!({}), json!({}), fable, 200_000, "1", 200_000.0),
+            (json!({}), json!({}), fable, 200_000, "true", 200_000.0),
             (json!({}), json!({ "autoCompactWindow": 150_000 }), fable, 200_000, "", 129_000.0),
             (json!({ "clientDataCacheSlots": { "a": slot(1, 120_000), "b": slot(2, 140_000) } }), json!({}), fable, 200_000, "", 119_000.0),
             (
@@ -740,6 +748,7 @@ mod tests {
             std::fs::write(dir.join(".claude/settings.local.json"), settings.to_string()).unwrap();
             let env = Environment {
                 auto_compact_window: Some(window.into()),
+                disable_compact: Some(window.into()),
                 entrypoint: Some("local-agent".into()),
                 home: env.home.clone(),
                 max_output_tokens: Some("8000".into()),
@@ -779,6 +788,8 @@ mod tests {
         assert_eq!(columns(walk("ttys001", "    7", "50 120", "??")), Some(120));
         assert_eq!(columns(walk("ttys001", "    7", "50 120", "?")), Some(120));
         assert_eq!(columns(walk("ttys001", "    7", "50 0", "??")), None);
+        assert_eq!(columns(walk("ttys001", "    7", "50", "??")), None);
+        assert_eq!(columns(walk("ttys002", "    7", "50 120", "??")), None);
         assert_eq!(columns(walk("??", "    1", "", "??")), None);
         assert_eq!(columns(walk("??", "", "", "??")), None);
         spawns.set(0);

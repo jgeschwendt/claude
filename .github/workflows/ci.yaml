@@ -24,8 +24,9 @@ jobs:
       - run: mise run test
       # stele graph gate (check → emit --check). NEVER `stele build` in CI: it is
       # the sole writer of .stele/graph.lock and would launder a stale lock green.
-      # The installer comes from the commit v0.3.0 tags, never a moving ref; actions
-      # are pinned the same way, their tag in the trailing comment.
+      # The installer script comes from the commit v0.3.0 tags and the actions' code
+      # from commits (tag in the trailing comment); what they download (the v0.3.0
+      # release assets, the latest mise) is still fetched by name.
       - run: curl -fsSL https://raw.githubusercontent.com/jgeschwendt/stele/c7882176f321809064205db5b6474827834c5a34/scripts/install.sh | bash -s v0.3.0
       - run: ~/.local/bin/stele check
       - run: ~/.local/bin/stele emit --check

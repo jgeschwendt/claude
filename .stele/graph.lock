@@ -20,13 +20,13 @@
           "text": "link never overwrites — an entry in ~/.claude that is a real file or a foreign link is reported `drift` and left alone; only missing entries are linked",
           "verified": {
             "digest": null,
-            "sha": "f39c2c6266668a51faebc43942d2c401a3fa111d"
+            "sha": "ec172d157fdde482e0d9cf53288356a94726c48c"
           }
         }
       ],
       "commands": {
         "lint": "cargo clippy --all-targets -- -D warnings",
-        "test": "cargo test"
+        "test": "cargo test && claude plugin test plugins/perpetual"
       },
       "contains": [],
       "declared": {

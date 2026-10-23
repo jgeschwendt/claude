@@ -5,7 +5,7 @@ kind: system
 purpose: Claude Code harness — global config, rules and skills, plus the Rust statusline; `mise run link` symlinks each entry into ~/.claude.
 commands:
   lint: cargo clippy --all-targets -- -D warnings
-  test: cargo test
+  test: cargo test && claude plugin test plugins/perpetual
 invariants:
   - claim: link never overwrites — an entry in ~/.claude that is a real file or a foreign link is reported `drift` and left alone; only missing entries are linked
     anchor: ※ link-never-overwrites

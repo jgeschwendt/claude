@@ -11,17 +11,14 @@ const W = String.raw`[\\'"]?(?:[\w./~-]*\/)?`;
  * spaceless line (minified JS, a query string) is scanned once, not once per `;`
  */
 const V = String.raw`(?:"[^"]*"|'[^']*'|\`[^\`]*\`|\([^()]*\)|\{[^{}]*\}|[^\s;&|(){}\`"'])`;
-/**
- * a statement keyword or a wrapper that runs the command after it, shells (`bash -c`) and `eval` included; `mise x`
- * through its `--` when one ends the line's words, tool specs (`node@22`) and all
- */
-const PRE = String.raw`(?:if|elif|while|until|then|do|else|!|${W}(?:sudo|env|command|exec|eval|nice|nohup|time|timeout|xargs|mise\s+(?:x|exec)(?:(?:[^\S\n]+(?!--\s)${V}+)*[^\S\n]+--)?|(?:ba|da|k|z)?sh))(?=\s)`;
+/** a statement keyword or a wrapper that runs the command after it, shells (`bash -c`) and `eval` included */
+const PRE = String.raw`(?:if|elif|while|until|then|do|else|!|${W}(?:sudo|env|command|exec|eval|nice|nohup|time|timeout|xargs|mise\s+(?:x|exec)|(?:ba|da|k|z)?sh))(?=\s)`;
 /**
  * a command word at a command position: line start, or after `;`, `&`, `|`, `(` or `{`, then any
  * `VAR=value` or PRE, a PRE taking options (`--`, `-u me`: a value is never a PRE, a `VAR=`, nor
  * leads with `-` or a digit, so each word parses one way) and bare numbers (`timeout 5`)
  */
-const AT = String.raw`(?:^|[;&|({])\s*(?:${PRE}(?:\s+(?:-${V}+(?:\s+(?![-\d]|${PRE}|\w+=)${V}+)?|\d${V}*))*\s+|\w+=${V}*\s+)*${W}`;
+const AT = String.raw`(?:^|[;&|({])\s*(?:${PRE}(?:[^\S\n]+(?:-${V}+(?:[^\S\n]+(?![-\d]|${PRE}|\w+=)${V}+)?|\d${V}*))*[^\S\n]+|\w+=${V}*[^\S\n]+)*${W}`;
 /** the rest of one command: up to a separator or the end of the line */
 const ARGS = String.raw`[^;&|\n]*`;
 /**
@@ -37,7 +34,7 @@ const GUARDS = [
     "pkill -f matches every process's full argv — kill by resolved PID: `lsof -ti :<port>` or `pgrep -x <name>`, inspect, then `kill <pid>`",
   ],
   [
-    String.raw`${GIT}(?:checkout\b${ARGS}\s(?:(?:--(?:f\w*)?|\.)(?=[\s'";&|)]|$)|-[dlmpqt]*f)|switch\b${ARGS}\s(?:--(?:di[\w-]*|force(?![\w-]))|-[dmqt]*f)|restore\b(?:${ARGS}\s(?:--w\w*|-[mpqS]*W)|(?!${ARGS}\s(?:--st\w*|-[mpqW]*S))))`,
+    String.raw`${GIT}(?:checkout\b${ARGS}\s(?:(?:--(?:f\w*)?|\.)(?=[\s'";&|)]|$)|-[dlmpqt]*f)|switch\b${ARGS}\s(?:--(?:di[\w-]*|force(?![\w-]))|-[dmqt]*f)|restore(?![\w-])(?!\s+(?:-h|--help)\b)(?:${ARGS}\s(?:--w\w*|-[mpqS]*W)|(?!${ARGS}\s(?:--st\w*|-[mpqW]*S))))`,
     "never mutate to inspect — `git checkout --`/`.`/`-f`, `git switch -f` and a worktree `git restore` discard every uncommitted change to the path, co-resident work included; undo your own edit by re-editing",
   ],
   [

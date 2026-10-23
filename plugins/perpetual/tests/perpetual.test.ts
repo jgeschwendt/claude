@@ -399,6 +399,7 @@ test("guards deny the house-forbidden commands and .yml writes, trailing each de
       "git -C /r checkout HEAD -- .",
       "git --work-tree /x checkout -- f",
       "xargs -0 git checkout -- f",
+      "xargs -I{} git checkout -- {}",
     ],
     "git clean": [
       "git clean -fd",
@@ -420,7 +421,9 @@ test("guards deny the house-forbidden commands and .yml writes, trailing each de
       "git stash",
       "git stash pop",
       "x=$(git stash)",
-      "echo `git stash`",
+      'FOO="a b" git stash',
+      "X=$(date +%s) Y=`id` git stash",
+      "git -C $(pwd) -C ${HOME}/r stash",
       "if git stash; then :; fi",
       "while git stash; do :; done",
       "! git stash",
@@ -449,6 +452,7 @@ test("guards deny the house-forbidden commands and .yml writes, trailing each de
       "git push -fu origin main",
       "git push origin +main",
       "GIT_DIR=/r/.git git push -f",
+      'GIT_SSH_COMMAND="ssh -i k" git push -f origin x',
       "A= git push -f",
       "env git push -f",
       "if x; then :; else xargs time nohup exec command git push -f x; fi",
@@ -502,6 +506,12 @@ test("guards deny the house-forbidden commands and .yml writes, trailing each de
     "git reset --h",
     "sudo echo git stash",
     `${"A=x sudo -u env -c k=v ".repeat(2000)}${" ".repeat(9999)}`,
+    `git ${"--git-dir=a ".repeat(99)}checkout x`,
+    `cat > a.js <<'EOF'\n${";a=b(c)&&d||e;x='".repeat(9999)}\nEOF`,
+    "git commit -m 'guard: block `git stash` push'",
+    "git commit -F - <<'EOF'\nperpetual: deny `git clean`\nEOF",
+    "rg -F '`git stash`' README.md",
+    'gh pr create --body "- \\`git reset --hard\\` abbreviations"',
   ])
     expect(await $.tool.call({ tool: "Bash", command })).toEqual({ result: "ran" });
   expect(

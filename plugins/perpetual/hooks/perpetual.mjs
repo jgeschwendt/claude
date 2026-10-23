@@ -5,26 +5,32 @@ const CORRECTION = /^no[,.! ]|\bdon'?t\b|\bi said\b|\bnever\b|\bnot what i\b|\bs
 
 /** an optional quote, backslash or directory before a command word: `"git"`, `\git`, `/usr/bin/git` */
 const W = String.raw`[\\'"]?(?:[\w./~-]*\/)?`;
+/**
+ * one piece of a word: a quoted string, a backtick, `(…)` or `{…}` group (`$(pwd)`, `${HOME}`, `{}`), or a character
+ * no command position follows — each piece parses one way, and none runs past a separator unquoted, so a long
+ * spaceless line (minified JS, a query string) is scanned once, not once per `;`
+ */
+const V = String.raw`(?:"[^"]*"|'[^']*'|\`[^\`]*\`|\([^()]*\)|\{[^{}]*\}|[^\s;&|(){}\`"'])`;
 /** a statement keyword or a wrapper that runs the command after it, shells (`bash -c`) and `eval` included */
 const PRE = String.raw`(?:if|elif|while|until|then|do|else|!|${W}(?:sudo|env|command|exec|eval|nice|nohup|time|timeout|xargs|mise\s+(?:x|exec)|(?:ba|da|k|z)?sh))(?=\s)`;
 /**
- * a command word at a command position: line start, or after `;`, `&`, `|`, `(`, `{` or a backtick, then any
+ * a command word at a command position: line start, or after `;`, `&`, `|`, `(` or `{`, then any
  * `VAR=value` or PRE, a PRE taking options (`--`, `-u me`: a value is never a PRE, a `VAR=`, nor
  * leads with `-` or a digit, so each word parses one way) and bare numbers (`timeout 5`)
  */
-const AT = String.raw`(?:^|[;&|({\`])\s*(?:${PRE}(?:\s+(?:-\S+(?:\s+(?!${PRE}|\w+=)[^-\d\s]\S*)?|\d\S*))*\s+|\w+=\S*\s+)*${W}`;
+const AT = String.raw`(?:^|[;&|({])\s*(?:${PRE}(?:\s+(?:-${V}+(?:\s+(?![-\d]|${PRE}|\w+=)${V}+)?|\d${V}*))*\s+|\w+=${V}*\s+)*${W}`;
 /** the rest of one command: up to a separator or the end of the line */
 const ARGS = String.raw`[^;&|\n]*`;
 /**
- * `git`, closing quote and all, and its global options, then the subcommand: `-C <path>`, quoted or not, `-c k=v`, a lone letter (`-P`), a
- * value-taking long option with `=` or a separate value (`--git-dir <dir>`), any other long option with `=` only — a
+ * `git`, closing quote and all, and its global options, then the subcommand: `-C <path>`, quoted or not, `-c k=v`, a lone letter (`-P`), any
+ * long option with `=` only, a value-taking one also with a separate value (`--git-dir <dir>`) — a
  * separate value for every `--opt` would read `git --no-pager show stash@{0}` as `stash`, and backtrack exponentially
  */
-const GIT = String.raw`${AT}git['"]?(?:\s+-[Cc]\s+(?:"[^"]*"|'[^']*'|\S+)|\s+-[abd-zABD-Z]\b|\s+--(?:git-dir|work-tree|namespace|super-prefix|config-env)(?:=|\s+(?!-))\S+|\s+--[\w-]+(?:=\S+)?)*\s+`;
-/** Bash commands the house rules forbid, each with the rule that forbids it */
+const GIT = String.raw`git['"]?(?:\s+-[Cc]\s+${V}+|\s+-[abd-zABD-Z]\b|\s+--(?:git-dir|work-tree|namespace|super-prefix|config-env)\s+(?!-)${V}+|\s+--[\w-]+(?:=${V}+)?)*\s+`;
+/** Bash commands the house rules forbid, each after a command position, with the rule that forbids it */
 const GUARDS = [
   [
-    String.raw`${AT}pkill\b['"]?${ARGS}\s(?:-[a-z]*f|--full\b)`,
+    String.raw`pkill\b['"]?${ARGS}\s(?:-[a-z]*f|--full\b)`,
     "pkill -f matches every process's full argv — kill by resolved PID: `lsof -ti :<port>` or `pgrep -x <name>`, inspect, then `kill <pid>`",
   ],
   [
@@ -47,7 +53,9 @@ const GUARDS = [
     String.raw`${GIT}clean\b`,
     "never mutate to inspect — `git clean` deletes untracked files, co-resident work included",
   ],
-].map(([pattern, reason]) => [new RegExp(pattern, "m"), reason]);
+];
+/** every guard in one pass, so a long command is walked once, not once per guard; the capture names the guard */
+const GUARD = new RegExp(`${AT}(?:${GUARDS.map(([pattern]) => `(${pattern})`).join("|")})`, "m");
 const HOOK_MS = 10000;
 const TAKE_MS = 1500;
 
@@ -289,7 +297,7 @@ export const register = (on) => {
 
   on("tool.call", { tool: "Bash" }, async ($, e, next) => {
     const command = e.command.replace(/\\\r?\n/g, " ");
-    const reason = GUARDS.find(([pattern]) => pattern.test(command))?.[1];
+    const reason = GUARDS[GUARD.exec(command)?.slice(1).findIndex(Boolean)]?.[1];
     if (!reason) return next(e);
     await append($, "guard", `${reason}: ${e.command.slice(0, 200)}`);
     return { deny: `perpetual: ${reason}.` };

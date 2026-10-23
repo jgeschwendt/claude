@@ -53,7 +53,7 @@ mise run build          # cargo build --release, then install → ~/.local/bin/s
 mise run test           # cargo test: unit tests in src/, end-to-end tests in tests/
 ```
 
-`statusline` logs to `logs/statusline.log` (gitignored), overwriting it each tick with that tick's payload or error (plus any window-write failure).
+`statusline` logs to `~/.claude/logs/statusline.log`, overwriting it each tick with that tick's payload or error (plus any window-write failure).
 
 Each statusline tick whose payload carries `rate_limits` also writes the five-hour window —
 `{"at","five_hour":{"resets_at","used_percentage"},"session_id"}` — atomically to

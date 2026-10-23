@@ -466,6 +466,7 @@ test("guards deny the house-forbidden commands and .yml writes, trailing each de
       "git --no-pager stash",
       "git -c a=b -C '/r/x y' --namespace n --super-prefix s --config-env k=v stash",
       `git ${"-P ".repeat(99)}stash`,
+      `find . ${"-exec sudo -u a ".repeat(4000)}git stash`,
     ],
     "never force-push": [
       "git push --force origin x",

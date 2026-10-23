@@ -16,8 +16,8 @@ const PRE = String.raw`(?:if|elif|while|until|then|do|else|!|${W}(?:builtin|comm
 /** a `tool@version` word (`mise x node@22 --`): never a value, so it parses one way */
 const TOOL = String.raw`(?![-\d])[\w./:+-]+@${V}*`;
 /**
- * a command word at a command position: line start, after `;`, `&`, `|`, `(` or `{`, or after `find`'s
- * `-exec`/`-execdir`/`-ok`/`-okdir`, then any `VAR=value` or PRE, a PRE taking options (`--`, `-u me`: a
+ * a command word at a command position: line start, after `;`, `&`, `|`, `(` or `{`, or after an
+ * `-exec`/`-execdir`/`-ok`/`-okdir` word (`find`'s; any command's counts), then any `VAR=value` or PRE, a PRE taking options (`--`, `-u me`: a
  * value is never a PRE, a `VAR=`, a TOOL, nor leads with `-` or a digit, and `--` takes none, so each word parses one way;
  * an option is never `-exec`, so each run of options ends at the next one, which starts its own),
  * TOOLs and bare numbers (`timeout 5`)

@@ -392,7 +392,7 @@ fn eta_to_compact(tokens: f64, threshold: f64, now_ms: i64, samples: &mut Sample
     if samples.samples.last().is_some_and(|last| tokens < last.tokens) {
         samples.samples.clear();
     }
-    if samples.samples.last().is_none_or(|last| now_ms - last.at >= 15_000) {
+    if samples.samples.last().is_none_or(|last| now_ms.saturating_sub(last.at) >= 15_000) {
         let excess = samples.samples.len().saturating_sub(39);
         samples.samples.drain(..excess);
         samples.samples.push(Sample { at: now_ms, tokens });
@@ -400,7 +400,7 @@ fn eta_to_compact(tokens: f64, threshold: f64, now_ms: i64, samples: &mut Sample
     }
 
     let (first, last) = (samples.samples[0], samples.samples[samples.samples.len() - 1]);
-    let span = (last.at - first.at) as f64 / 1000.0;
+    let span = last.at.saturating_sub(first.at) as f64 / 1000.0;
     let rate = (last.tokens - first.tokens) / span;
     let eta = (threshold - tokens) / rate;
     // Under a minute the trend is noise; past the threshold there is nothing to project; an idle
@@ -481,6 +481,11 @@ fn plain(s: &str) -> String {
     parts.fold(head.to_string(), |text, part| text + part.split_once('m').map_or("", |(_, rest)| rest))
 }
 
+/// `s` without control characters: payload text must never reach the terminal as an escape.
+fn printable(s: &str) -> String {
+    s.chars().filter(|c| !c.is_control()).collect()
+}
+
 /// Render one tick. Pure but for the settings/global-state files [`auto_compact_threshold`] reads,
 /// which `env` redirects: the clock, the terminal width and the sample store are all injected.
 pub fn render(
@@ -490,7 +495,7 @@ pub fn render(
     samples: &mut Samples,
     env: &Environment,
 ) -> String {
-    let model = &input.model.display_name;
+    let model = printable(&input.model.display_name);
     // Missing early in session / after /compact → 0.
     let tokens = truthy(input.context_window.as_ref().and_then(|c| c.total_input_tokens)).unwrap_or(0.0);
     let threshold = auto_compact_threshold(input, env);
@@ -517,7 +522,7 @@ pub fn render(
     // Non-default mode markers next to the model — silent when running plain high-effort.
     let effort = input.effort.as_ref().and_then(|e| e.level.as_deref()).filter(|l| !l.is_empty() && *l != "high");
     let flags: Vec<&str> = input.fast_mode.unwrap_or(false).then_some("fast").into_iter().chain(effort).collect();
-    let flags = if flags.is_empty() { String::new() } else { format!(" {DIM}({}){RESET}", flags.join(" · ")) };
+    let flags = if flags.is_empty() { String::new() } else { format!(" {DIM}({}){RESET}", printable(&flags.join(" · "))) };
     let head = format!("{BOLD}{model}{RESET}{flags} ");
     let tail = format!("{} {pct}%{RESET}{eta}{usd}{limit}", tone(pct));
     // ANSI escapes have zero printed width — the bar gets what the plain head/tail leave.
@@ -604,6 +609,9 @@ mod tests {
             "rate_limits": { "five_hour": { "resets_at": 1_757_018_000, "used_percentage": 31.4 } },
         }));
         assert!(out.starts_with("Fable 5.1 (fast · low) "), "{out}");
+        // Payload text never reaches the terminal as an escape: an OSC title set is printed inert.
+        let hostile = json!({ "effort": { "level": "l\u{1b}ow" }, "model": { "display_name": "M\u{1b}]0;x\u{7}", "id": "m" } });
+        assert!(line(hostile).starts_with("M]0;x (low) "));
         assert!(out.ends_with(&format!(" 30% · $1.20 · 5h 31%† ↻ {}", clock(1_757_018_000.0))), "{out}");
         assert_eq!(out.chars().count(), 80 - MARGIN, "{out}");
         for (cost, usd) in [(0.015, " · $0.01"), (1.125, " · $1.13")] {
@@ -631,6 +639,10 @@ mod tests {
             assert_eq!(out.split_once('≈').map(|(_, rest)| rest.split(' ').next().unwrap()), eta, "{out}");
             assert_eq!(samples.dirty, tokens != 0, "{out}");
         }
+        // A corrupt store's far-past sample saturates into an hours-long span, never an overflow.
+        let mut corrupt = Samples { dirty: false, samples: vec![Sample { at: i64::MIN, tokens: 1.0 }] };
+        let input = payload(json!({ "context_window": { "context_window_size": 200_000, "total_input_tokens": 120_000 } }));
+        assert!(!plain(&render(&input, now(), 80, &mut corrupt, &env)).contains('≈'));
     }
 
     #[test]

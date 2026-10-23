@@ -11,8 +11,11 @@ const W = String.raw`[\\'"]?(?:[\w./~-]*\/)?`;
  * spaceless line (minified JS, a query string) is scanned once, not once per `;`
  */
 const V = String.raw`(?:"[^"]*"|'[^']*'|\`[^\`]*\`|\([^()]*\)|\{[^{}]*\}|[^\s;&|(){}\`"'])`;
-/** a statement keyword or a wrapper that runs the command after it, shells (`bash -c`) and `eval` included */
-const PRE = String.raw`(?:if|elif|while|until|then|do|else|!|${W}(?:sudo|env|command|exec|eval|nice|nohup|time|timeout|xargs|mise\s+(?:x|exec)|(?:ba|da|k|z)?sh))(?=\s)`;
+/**
+ * a statement keyword or a wrapper that runs the command after it, shells (`bash -c`) and `eval` included; `mise x`
+ * through its `--` when one ends the line's words, tool specs (`node@22`) and all
+ */
+const PRE = String.raw`(?:if|elif|while|until|then|do|else|!|${W}(?:sudo|env|command|exec|eval|nice|nohup|time|timeout|xargs|mise\s+(?:x|exec)(?:(?:[^\S\n]+(?!--\s)${V}+)*[^\S\n]+--)?|(?:ba|da|k|z)?sh))(?=\s)`;
 /**
  * a command word at a command position: line start, or after `;`, `&`, `|`, `(` or `{`, then any
  * `VAR=value` or PRE, a PRE taking options (`--`, `-u me`: a value is never a PRE, a `VAR=`, nor
@@ -34,23 +37,23 @@ const GUARDS = [
     "pkill -f matches every process's full argv — kill by resolved PID: `lsof -ti :<port>` or `pgrep -x <name>`, inspect, then `kill <pid>`",
   ],
   [
-    String.raw`${GIT}checkout\b${ARGS}\s--(?=[\s'";&|)]|$)`,
-    "never mutate to inspect — `git checkout --` discards every uncommitted change to the path, co-resident work included; undo your own edit by re-editing",
+    String.raw`${GIT}(?:checkout\b${ARGS}\s(?:(?:--(?:f\w*)?|\.)(?=[\s'";&|)]|$)|-[dlmpqt]*f)|switch\b${ARGS}\s(?:--(?:di[\w-]*|force(?![\w-]))|-[dmqt]*f)|restore\b(?:${ARGS}\s(?:--w\w*|-[mpqS]*W)|(?!${ARGS}\s(?:--st\w*|-[mpqW]*S))))`,
+    "never mutate to inspect — `git checkout --`/`.`/`-f`, `git switch -f` and a worktree `git restore` discard every uncommitted change to the path, co-resident work included; undo your own edit by re-editing",
   ],
   [
     String.raw`${GIT}reset\b${ARGS}\s--ha(?:rd?)?\b`,
     "never mutate to inspect — `git reset --hard` discards the working tree; commit, or fast-forward with `git update-ref`",
   ],
   [
-    String.raw`${GIT}push\b${ARGS}\s(?:--forc(?:e(?:-w[\w-]*)?)?(?:=\S*)?|-[a-zA-Z]*f[a-zA-Z]*|\+\S+)(?=[\s'";&|)]|$)`,
+    String.raw`${GIT}push\b${ARGS}\s['"]?(?:--forc(?:e(?:-w[\w-]*)?)?(?:=\S*)?|-[a-zA-Z]*f[a-zA-Z]*|\+\S+)(?=[\s'";&|)]|$)`,
     "never force-push — push a new branch or a new commit instead",
   ],
   [
-    String.raw`${GIT}stash\b(?!\s+(?:list|show)\b)`,
+    String.raw`${GIT}stash\b(?!\s+(?:list|show|-h|--help)\b)`,
     "never `git stash` — the stash stack is shared across worktrees and sessions; set work aside with a WIP commit",
   ],
   [
-    String.raw`${GIT}clean\b`,
+    String.raw`${GIT}clean\b(?!${ARGS}\s(?:-[dfiqxX]*n|--d))`,
     "never mutate to inspect — `git clean` deletes untracked files, co-resident work included",
   ],
 ];

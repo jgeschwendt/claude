@@ -216,10 +216,11 @@ fn truthy(value: Option<f64>) -> Option<f64> {
 }
 
 /// `JSON.parse(readFileSync(path))`, `None` on any failure. Paths come from the payload's project
-/// dir, so only a regular file (symlinks followed) of at most 1 MiB counts: a planted `/dev/zero`,
-/// tty or FIFO would otherwise exhaust memory or block the tick.
+/// dir, so only a regular file (symlinks followed) of at most 16 MiB counts: a planted `/dev/zero`,
+/// tty or FIFO would otherwise exhaust memory or block the tick. The cap sits far above
+/// `~/.claude.json`, which grows with every project (345 KB, 2026-10-23).
 fn read_json(path: impl AsRef<Path>) -> Option<Value> {
-    const CAP: u64 = 1 << 20;
+    const CAP: u64 = 16 << 20;
     let mut bytes = vec![];
     let file = std::fs::metadata(&path).ok().filter(|m| m.is_file()).and_then(|_| std::fs::File::open(&path).ok())?;
     file.take(CAP + 1).read_to_end(&mut bytes).ok().filter(|&n| n as u64 <= CAP)?;
@@ -749,7 +750,7 @@ mod tests {
             (json!({}), json!({ "autoCompactWindow": 150_000 }), fable, 200_000, "", 129_000.0),
             // Device and oversized settings read as absent: a planted /dev/zero must not exhaust memory.
             (json!({}), json!("/dev/zero"), fable, 200_000, "", 179_000.0),
-            (json!({}), json!({ "autoCompactWindow": 150_000, "pad": " ".repeat(1 << 20) }), fable, 200_000, "", 179_000.0),
+            (json!({}), json!({ "autoCompactWindow": 150_000, "pad": " ".repeat(16 << 20) }), fable, 200_000, "", 179_000.0),
             (json!({ "clientDataCacheSlots": { "a": slot(1, 120_000), "b": slot(2, 140_000) } }), json!({}), fable, 200_000, "", 119_000.0),
             (
                 json!({ "autoCompactWindowsCache": { fable: { "surfaces": { "local-agent": { "default": 130_000 } } } } }),

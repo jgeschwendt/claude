@@ -38,7 +38,7 @@
 use chrono::{DateTime, Local, SecondsFormat, Utc};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 // ─── payload ─────────────────────────────────────────────────────────────────
@@ -194,7 +194,9 @@ pub fn persist_window(input: &StatusInput, now: DateTime<Utc>, env: &Environment
 /// `path` is replaced rather than written through.
 fn replace(path: &Path, body: String) -> std::io::Result<()> {
     let tmp = path.with_file_name(format!(".{}.{}.tmp", path.file_name().unwrap_or_default().display(), std::process::id()));
-    std::fs::write(&tmp, body).and_then(|()| std::fs::rename(&tmp, path))
+    // `create_new` (O_EXCL) never follows a symlink planted at the predictable temp name.
+    let file = std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp);
+    file.and_then(|mut f| f.write_all(body.as_bytes())).and_then(|()| std::fs::rename(&tmp, path))
         .inspect_err(|_| drop(std::fs::remove_file(&tmp)))
 }
 
@@ -721,9 +723,14 @@ mod tests {
         // The store round-trips through the shared on-disk shape, integer notation pinned.
         assert_eq!([env.samples_path(Some("")), env.samples_path(Some("a/../b"))], [None, None]);
         let path = env.samples_path(Some("s1")).unwrap();
-        // A planted symlink is replaced, never written through.
+        // A symlink planted at the file or its temp name is never written through: the temp one fails
+        // that write and is cleared, the next replaces the file's.
         std::fs::write(path.with_extension("target"), "").unwrap();
-        std::os::unix::fs::symlink(path.with_extension("target"), &path).unwrap();
+        let tmp = path.with_file_name(format!(".claude-statusline-s1.json.{}.tmp", std::process::id()));
+        for link in [&path, &tmp] {
+            std::os::unix::fs::symlink(path.with_extension("target"), link).unwrap();
+        }
+        samples.write(&path);
         samples.write(&path);
         let bytes = std::fs::read_to_string(&path).unwrap();
         assert_eq!(std::fs::read_to_string(path.with_extension("target")).unwrap(), "");

@@ -520,9 +520,9 @@ pub fn render(
         format!("{DIM} · 5h {RESET}{}{used}%{RESET}{tier}{reset}", tone(used))
     });
     // Non-default mode markers next to the model — silent when running plain high-effort.
-    let effort = input.effort.as_ref().and_then(|e| e.level.as_deref()).filter(|l| !l.is_empty() && *l != "high");
-    let flags: Vec<&str> = input.fast_mode.unwrap_or(false).then_some("fast").into_iter().chain(effort).collect();
-    let flags = if flags.is_empty() { String::new() } else { format!(" {DIM}({}){RESET}", printable(&flags.join(" · "))) };
+    let effort = input.effort.as_ref().and_then(|e| e.level.as_deref()).map(printable).filter(|l| !l.is_empty() && l != "high");
+    let flags: Vec<&str> = input.fast_mode.unwrap_or(false).then_some("fast").into_iter().chain(effort.as_deref()).collect();
+    let flags = if flags.is_empty() { String::new() } else { format!(" {DIM}({}){RESET}", flags.join(" · ")) };
     let head = format!("{BOLD}{model}{RESET}{flags} ");
     let tail = format!("{} {pct}%{RESET}{eta}{usd}{limit}", tone(pct));
     // ANSI escapes have zero printed width — the bar gets what the plain head/tail leave.
@@ -612,6 +612,9 @@ mod tests {
         // Payload text never reaches the terminal as an escape: an OSC title set is printed inert.
         let hostile = json!({ "effort": { "level": "l\u{1b}ow" }, "model": { "display_name": "M\u{1b}]0;x\u{7}", "id": "m" } });
         assert!(line(hostile).starts_with("M]0;x (low) "));
+        for level in ["\u{7}", "hig\u{1b}h"] {
+            assert!(!line(json!({ "effort": { "level": level } })).contains('('), "{level:?}");
+        }
         assert!(out.ends_with(&format!(" 30% · $1.20 · 5h 31%† ↻ {}", clock(1_757_018_000.0))), "{out}");
         assert_eq!(out.chars().count(), 80 - MARGIN, "{out}");
         for (cost, usd) in [(0.015, " · $0.01"), (1.125, " · $1.13")] {

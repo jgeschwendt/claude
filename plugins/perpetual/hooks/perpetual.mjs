@@ -3,35 +3,40 @@
 /** prompts that read as the person correcting the session */
 const CORRECTION = /^no[,.! ]|\bdon'?t\b|\bi said\b|\bnever\b|\bnot what i\b|\bstop\b|\bwrong\b/i;
 
+/** an optional quote, backslash or directory before a command word: `"git"`, `\git`, `/usr/bin/git` */
+const W = String.raw`[\\'"]?(?:[\w./~-]*\/)?`;
+/** a statement keyword or a wrapper that runs the command after it, shells (`bash -c`) and `eval` included */
+const PRE = String.raw`(?:if|elif|while|until|then|do|else|!|${W}(?:sudo|env|command|exec|eval|nice|nohup|time|timeout|xargs|mise\s+(?:x|exec)|(?:ba|da|k|z)?sh))(?=\s)`;
 /**
- * a command word at a command position: line start, or after `;`, `&`, `|`, `(` or `{`, then any
- * `then`/`do`/`else`, a wrapper (`sudo`, `env`, `command`, `exec`, `nohup`, `time`, `xargs`) or `VAR=value`
+ * a command word at a command position: line start, or after `;`, `&`, `|`, `(`, `{` or a backtick, then any
+ * `VAR=value` or PRE, a PRE taking options (`--`, `-u me`: a value is never a PRE, a `VAR=`, nor
+ * leads with `-` or a digit, so each word parses one way) and bare numbers (`timeout 5`)
  */
-const AT = String.raw`(?:^|[;&|({])\s*(?:(?:then|do|else|sudo|env|command|exec|nohup|time|xargs)\s+|\w+=\S*\s+)*`;
+const AT = String.raw`(?:^|[;&|({\`])\s*(?:${PRE}(?:\s+(?:-\S+(?:\s+(?!${PRE}|\w+=)[^-\d\s]\S*)?|\d\S*))*\s+|\w+=\S*\s+)*${W}`;
 /** the rest of one command: up to a separator or the end of the line */
 const ARGS = String.raw`[^;&|\n]*`;
 /**
- * `git` and its global options, then the subcommand: `-C <path>`, quoted or not, `-c k=v`, a lone letter (`-P`), a
+ * `git`, closing quote and all, and its global options, then the subcommand: `-C <path>`, quoted or not, `-c k=v`, a lone letter (`-P`), a
  * value-taking long option with `=` or a separate value (`--git-dir <dir>`), any other long option with `=` only — a
  * separate value for every `--opt` would read `git --no-pager show stash@{0}` as `stash`, and backtrack exponentially
  */
-const GIT = String.raw`${AT}git(?:\s+-[Cc]\s+(?:"[^"]*"|'[^']*'|\S+)|\s+-[abd-zABD-Z]\b|\s+--(?:git-dir|work-tree|namespace|super-prefix|config-env)(?:=|\s+(?!-))\S+|\s+--[\w-]+(?:=\S+)?)*\s+`;
+const GIT = String.raw`${AT}git['"]?(?:\s+-[Cc]\s+(?:"[^"]*"|'[^']*'|\S+)|\s+-[abd-zABD-Z]\b|\s+--(?:git-dir|work-tree|namespace|super-prefix|config-env)(?:=|\s+(?!-))\S+|\s+--[\w-]+(?:=\S+)?)*\s+`;
 /** Bash commands the house rules forbid, each with the rule that forbids it */
 const GUARDS = [
   [
-    String.raw`${AT}pkill\b${ARGS}\s(?:-[a-z]*f|--full\b)`,
+    String.raw`${AT}pkill\b['"]?${ARGS}\s(?:-[a-z]*f|--full\b)`,
     "pkill -f matches every process's full argv — kill by resolved PID: `lsof -ti :<port>` or `pgrep -x <name>`, inspect, then `kill <pid>`",
   ],
   [
-    String.raw`${GIT}checkout\b${ARGS}\s--(?:\s|$)`,
+    String.raw`${GIT}checkout\b${ARGS}\s--(?=[\s'";&|)]|$)`,
     "never mutate to inspect — `git checkout --` discards every uncommitted change to the path, co-resident work included; undo your own edit by re-editing",
   ],
   [
-    String.raw`${GIT}reset\b${ARGS}\s--hard\b`,
+    String.raw`${GIT}reset\b${ARGS}\s--ha(?:rd?)?\b`,
     "never mutate to inspect — `git reset --hard` discards the working tree; commit, or fast-forward with `git update-ref`",
   ],
   [
-    String.raw`${GIT}push\b${ARGS}\s(?:--force(?:-with-lease)?(?:=\S*)?|-[a-zA-Z]*f[a-zA-Z]*|\+\S+)(?=\s|$)`,
+    String.raw`${GIT}push\b${ARGS}\s(?:--forc(?:e(?:-w[\w-]*)?)?(?:=\S*)?|-[a-zA-Z]*f[a-zA-Z]*|\+\S+)(?=[\s'";&|)]|$)`,
     "never force-push — push a new branch or a new commit instead",
   ],
   [
@@ -283,7 +288,8 @@ export const register = (on) => {
   });
 
   on("tool.call", { tool: "Bash" }, async ($, e, next) => {
-    const reason = GUARDS.find(([pattern]) => pattern.test(e.command))?.[1];
+    const command = e.command.replace(/\\\r?\n/g, " ");
+    const reason = GUARDS.find(([pattern]) => pattern.test(command))?.[1];
     if (!reason) return next(e);
     await append($, "guard", `${reason}: ${e.command.slice(0, 200)}`);
     return { deny: `perpetual: ${reason}.` };

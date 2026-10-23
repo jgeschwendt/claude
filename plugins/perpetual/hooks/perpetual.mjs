@@ -38,8 +38,9 @@ const GUARDS = [
     "pkill -f matches every process's full argv — kill by resolved PID: `lsof -ti :<port>` or `pgrep -x <name>`, inspect, then `kill <pid>`",
   ],
   [
-    String.raw`${GIT}(?:checkout\b${ARGS}\s(?:(?:--(?:f\w*)?|\.)(?=[\s'";&|)]|$)|-[dlmpqt]*f)|switch\b${ARGS}\s(?:--(?:di[\w-]*|force(?![\w-]))|-[dmqt]*f)|restore(?![\w-])(?!\s+(?:-h|--help)\b)(?:${ARGS}\s(?:--w\w*|-[mpqS]*W)|(?!${ARGS}\s(?:--st\w*|-[mpqW]*S))))`,
-    "never mutate to inspect — `git checkout --`/`.`/`-f`, `git switch -f` and a worktree `git restore` discard every uncommitted change to the path, co-resident work included; undo your own edit by re-editing",
+    // a `-c`/`--config-env` alias (any case: git lowercases the section) is denied outright, since it can name any of these
+    String.raw`${GIT}(?:(?:-c\s+|--config-env[=\s]\s*)['"]?[Aa][Ll][Ii][Aa][Ss]\.|checkout\b${ARGS}\s(?:(?:--(?:f\w*)?|\.)(?=[\s'";&|)]|$)|--pathspec-fr|-[dlmpqt]*f)|switch\b${ARGS}\s(?:--(?:di[\w-]*|force(?![\w-]))|-[dmqt]*f)|restore(?![\w-])(?!\s+(?:-h|--help)\b)(?:${ARGS}\s(?:--w\w*|-[mpqS]*W)|(?!${ARGS}\s(?:--st\w*|-[mpqW]*S)))|read-tree(?![\w-])${ARGS}\s(?:--res|-[imnv]*u))`,
+    "never mutate to inspect — `git checkout --`/`.`/`-f`/`--pathspec-from-file`, `git switch -f`, a worktree `git restore`, `git read-tree -u`/`--reset` and a `git -c alias.…` that can hide any of them discard every uncommitted change to the path, co-resident work included; undo your own edit by re-editing",
   ],
   [
     String.raw`${GIT}reset\b${ARGS}\s--ha(?:rd?)?\b`,

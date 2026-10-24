@@ -51,7 +51,7 @@ const GUARDS = [
     "never force-push — push a new branch or a new commit instead",
   ],
   [
-    String.raw`${GIT}stash\b(?!\s+(?:list|show|-h|--help)\b)`,
+    String.raw`${GIT}stash\b(?!['"]?\s+(?:list|show|-h|--help)\b)`,
     "never `git stash` — the stash stack is shared across worktrees and sessions; set work aside with a WIP commit",
   ],
   [

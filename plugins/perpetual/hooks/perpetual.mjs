@@ -26,11 +26,11 @@ const AT = String.raw`(?:^|[;&|({]|\s-(?:exec|ok)(?:dir)?(?=\s))\s*(?:${PRE}(?:[
 /** the rest of one command: up to a separator or the end of the line */
 const ARGS = String.raw`[^;&|\n]*`;
 /**
- * `git`, closing quote and all, and its global options, then the subcommand: `-C <path>`, quoted or not, `-c k=v`, a lone letter (`-P`), any
+ * `git`, closing quote and all, and its global options, then the subcommand's opening quote (`git "stash"`): `-C <path>`, quoted or not, `-c k=v`, a lone letter (`-P`), any
  * long option with `=` only, a value-taking one also with a separate value (`--git-dir <dir>`) — a
  * separate value for every `--opt` would read `git --no-pager show stash@{0}` as `stash`, and backtrack exponentially
  */
-const GIT = String.raw`git['"]?(?:\s+-[Cc]\s+${V}+|\s+-[abd-zABD-Z]\b|\s+--(?:git-dir|work-tree|namespace|super-prefix|config-env)\s+(?!-)${V}+|\s+--[\w-]+(?:=${V}+)?)*\s+`;
+const GIT = String.raw`git['"]?(?:\s+-[Cc]\s+${V}+|\s+-[abd-zABD-Z]\b|\s+--(?:git-dir|work-tree|namespace|super-prefix|config-env)\s+(?!-)${V}+|\s+--[\w-]+(?:=${V}+)?)*\s+['"]?`;
 /** Bash commands the house rules forbid, each after a command position, with the rule that forbids it */
 const GUARDS = [
   [

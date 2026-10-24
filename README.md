@@ -18,12 +18,12 @@ jgeschwendt/claude
 ├── rules/                 house standards for code and docs
 ├── skills/                personal skills, lean and self-contained
 ├── src/                   claude-home crate: statusline, log
-├── tests/                 integration tests that drive the built binaries
+├── tests/                 integration tests that drive the built binaries and the link task
 ├── Cargo.toml             the crate manifest
 ├── CLAUDE.md              global instructions: golden rule, house rules, memory contract
-├── mise.toml              toolchain pins (rust, bun) and the build/test tasks
+├── mise.toml              toolchain pins (rust, bun, hk, oxfmt, oxlint) and the build/test tasks
 ├── settings.json          harness config — permissions, enabled plugins (the perpetual mod), statusline
-└── settings.local.json    output-style override
+└── settings.local.json    output style and the `Bash(git *)` allow
 ```
 
 Runtime but load-bearing, in `~/.claude` rather than the repo: `plans/` is what `/execute-plan` runs (newest file wins); `briefs/` holds write-ups meant to brief a future session, never executed.
@@ -45,10 +45,10 @@ claude plugin install perpetual@jgeschwendt
 installs it. It lives outside `target/`, which mbx redirects into `~/Library/Caches/mbx/` and its gc prunes when the
 disk is tight (that pruning blanked the status bar, 2026-10-17). A source change is live only once rebuilt.
 
-`mise.toml` pins the toolchain (rust, bun) and this repo's own oxfmt/oxlint (npm backend), and carries the tasks:
+`mise.toml` pins the toolchain (rust, bun, hk) and this repo's own oxfmt/oxlint (npm backend), and carries the tasks:
 
 ```sh
-mise install            # rust, bun, and the pinned oxfmt/oxlint this repo formats with
+mise install            # rust, bun, hk, and the pinned oxfmt/oxlint this repo formats with
 mise run build          # cargo build --release, then install → ~/.local/bin/statusline
 mise run test           # cargo test: unit tests in src/, end-to-end tests in tests/
 ```

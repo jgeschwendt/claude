@@ -34,3 +34,34 @@ fn reports_a_perpetual_install_behind_the_trunk() {
         assert!(stdout.lines().any(|l| l == line), "{stdout}");
     }
 }
+
+/// A real file or a foreign link is `drift` and left alone in either mode; `--check` only reports a missing
+/// entry or a stale link into the repo, which a plain run links or removes; any other argument is usage.
+#[test]
+fn links_missing_entries_and_never_overwrites() {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let home = Path::new(env!("CARGO_TARGET_TMPDIR")).join("link-entries");
+    let _ = std::fs::remove_dir_all(&home);
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::write(home.join("CLAUDE.md"), "mine").unwrap();
+    std::os::unix::fs::symlink("/elsewhere", home.join("rules")).unwrap();
+    std::os::unix::fs::symlink(repo.join("settings.json"), home.join("settings.json")).unwrap();
+    std::os::unix::fs::symlink(repo.join("gone"), home.join("gone")).unwrap();
+    let link = |args: &[&str]| {
+        let out = Command::new(repo.join(".mise/tasks/link")).args(args).env("CLAUDE_HOME", &home).output().unwrap();
+        (out.status.code(), String::from_utf8(out.stdout).unwrap())
+    };
+    for (args, lines) in [
+        (&["--check"][..], ["drift: rules", "missing: skills", "drift: CLAUDE.md", "ok: settings.json", "missing: settings.local.json", "stale: gone"]),
+        (&[], ["drift: rules", "link: skills", "drift: CLAUDE.md", "ok: settings.json", "link: settings.local.json", "unlink: gone"]),
+    ] {
+        let (code, stdout) = link(args);
+        assert_eq!(code, Some(1), "{stdout}");
+        assert_eq!(stdout.lines().take(6).collect::<Vec<_>>(), lines, "{stdout}");
+    }
+    assert_eq!(std::fs::read_to_string(home.join("CLAUDE.md")).unwrap(), "mine");
+    assert_eq!(std::fs::read_link(home.join("rules")).unwrap(), Path::new("/elsewhere"));
+    assert_eq!(std::fs::read_link(home.join("skills")).unwrap(), repo.join("skills"));
+    assert!(std::fs::symlink_metadata(home.join("gone")).is_err());
+    assert_eq!(link(&["-x"]).0, Some(2));
+}

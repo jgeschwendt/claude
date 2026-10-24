@@ -21,7 +21,7 @@ invariants:
 | rules/          | house standards, one file per language or practice, read through `~/.claude/rules`                                                  |
 | skills/         | personal skills, read through `~/.claude/skills`; `skills/synced/` is Claude Code's, gitignored                                     |
 | src/            | `claude-home` crate — `lib.rs` modules `log`, `statusline`; `src/bin/` holds thin `main`s over them                                 |
-| tests/          | end-to-end tests driving the built `statusline` binary against a temp `$HOME`                                                       |
+| tests/          | end-to-end tests driving the built `statusline` binary and the `link` task against a temp home                                      |
 
 ## Working here
 

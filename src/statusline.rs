@@ -43,63 +43,68 @@ use std::path::{Path, PathBuf};
 
 // ─── payload ─────────────────────────────────────────────────────────────────
 
+/// `deserialize_with` for every optional field: a value of the wrong type reads as absent.
+fn lenient<'de, D: serde::Deserializer<'de>, T: serde::de::DeserializeOwned + Default>(d: D) -> Result<T, D::Error> {
+    Ok(serde_json::from_value(Value::deserialize(d)?).unwrap_or_default())
+}
+
 /// One render tick's payload, as piped in by the CLI. Unknown fields are ignored; everything the
-/// renderer treats as optional is optional here too.
+/// renderer treats as optional is optional here too, and [`lenient`]: only a broken `model` fails the tick.
 #[derive(Debug, Deserialize)]
 pub struct StatusInput {
-    pub context_window: Option<ContextWindow>,
-    pub cost: Option<Cost>,
-    pub effort: Option<Effort>,
+    #[serde(default, deserialize_with = "lenient")] pub context_window: Option<ContextWindow>,
+    #[serde(default, deserialize_with = "lenient")] pub cost: Option<Cost>,
+    #[serde(default, deserialize_with = "lenient")] pub effort: Option<Effort>,
     /// Whether requests crossed into the 2× long-context tier.
-    pub exceeds_200k_tokens: Option<bool>,
-    pub fast_mode: Option<bool>,
+    #[serde(default, deserialize_with = "lenient")] pub exceeds_200k_tokens: Option<bool>,
+    #[serde(default, deserialize_with = "lenient")] pub fast_mode: Option<bool>,
     pub model: Model,
-    pub rate_limits: Option<RateLimits>,
-    pub session_id: Option<String>,
-    pub workspace: Option<Workspace>,
+    #[serde(default, deserialize_with = "lenient")] pub rate_limits: Option<RateLimits>,
+    #[serde(default, deserialize_with = "lenient")] pub session_id: Option<String>,
+    #[serde(default, deserialize_with = "lenient")] pub workspace: Option<Workspace>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct ContextWindow {
-    pub context_window_size: Option<f64>,
+    #[serde(default, deserialize_with = "lenient")] pub context_window_size: Option<f64>,
     /// The app's own numerator: input + cache read + cache creation.
-    pub total_input_tokens: Option<f64>,
+    #[serde(default, deserialize_with = "lenient")] pub total_input_tokens: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Cost {
-    pub total_cost_usd: Option<f64>,
+    #[serde(default, deserialize_with = "lenient")] pub total_cost_usd: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Effort {
     /// `"high"` (the default, never shown), `"medium"`, `"low"`, …
-    pub level: Option<String>,
+    #[serde(default, deserialize_with = "lenient")] pub level: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct FiveHour {
     /// Unix seconds.
-    pub resets_at: Option<f64>,
-    pub used_percentage: Option<f64>,
+    #[serde(default, deserialize_with = "lenient")] pub resets_at: Option<f64>,
+    #[serde(default, deserialize_with = "lenient")] pub used_percentage: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Model {
     pub display_name: String,
     /// Keyed on to resolve the auto-compact window.
-    pub id: Option<String>,
+    #[serde(default, deserialize_with = "lenient")] pub id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct RateLimits {
-    pub five_hour: Option<FiveHour>,
+    #[serde(default, deserialize_with = "lenient")] pub five_hour: Option<FiveHour>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Workspace {
     /// Project root, whose `.claude/settings*.json` can override the auto-compact window.
-    pub project_dir: Option<String>,
+    #[serde(default, deserialize_with = "lenient")] pub project_dir: Option<String>,
 }
 
 // ─── environment ─────────────────────────────────────────────────────────────
@@ -162,22 +167,28 @@ impl Environment {
 /// when the window does not reset within 6h, or when it is behind the file's live window (an
 /// earlier `resets_at`, or less used of the same one) — so readers (`sandman shift clock`, which
 /// faults on a null `resets_at`) never see a null `five_hour` field, and an idle session re-rendering stale limits
-/// never rolls the clock back. Atomic: a sibling temp file renamed into place. `Err` carries a
-/// one-line reason; the caller logs it and the tick carries on.
+/// never rolls the clock back. Atomic: a sibling temp file renamed into place, read-to-rename under an
+/// exclusive lock on the parent directory so concurrent ticks never race a stale read (a directory,
+/// not a lock file, leaves nothing to plant a symlink at). `Err` carries a one-line reason; the
+/// caller logs it and the tick carries on.
 pub fn persist_window(input: &StatusInput, now: DateTime<Utc>, env: &Environment) -> Result<(), String> {
-    let five = input.rate_limits.as_ref().and_then(|l| l.five_hour.as_ref());
-    let (Some(path), Some((resets_at, used))) =
-        (&env.window_file, five.and_then(|f| f.resets_at.zip(f.used_percentage)))
-    else {
-        return Ok(());
-    };
-    let resets_at = resets_at as i64;
     // The reader's bound: a live window resets within 6h. Outside it a payload is never written and
     // a stored window never blocks one, so a corrupt file heals on the next good tick.
     let live = |resets_at: i64| (1..=6 * 3600).contains(&resets_at.saturating_sub(now.timestamp()));
+    let five = input.rate_limits.as_ref().and_then(|l| l.five_hour.as_ref());
+    let (Some(path), Some((resets_at, used))) =
+        (&env.window_file, five.and_then(|f| Some((f.resets_at? as i64, f.used_percentage?))).filter(|w| live(w.0)))
+    else {
+        return Ok(());
+    };
+    let fail = |e: std::io::Error| format!("window: {}: {e}", path.display());
+    // `./` gives a bare file name an openable parent.
+    let dir = Path::new(".").join(path);
+    let dir = dir.parent().unwrap_or(Path::new("."));
+    let _lock = std::fs::create_dir_all(dir).and_then(|()| std::fs::File::open(dir)).and_then(|f| f.lock().map(|()| f)).map_err(fail)?;
     let prior = read_json(path)
         .and_then(|v| v["five_hour"]["resets_at"].as_i64().zip(v["five_hour"]["used_percentage"].as_f64()));
-    if !live(resets_at) || prior.is_some_and(|prior| live(prior.0) && prior > (resets_at, used)) {
+    if prior.is_some_and(|prior| live(prior.0) && prior > (resets_at, used)) {
         return Ok(());
     }
     let body = json!({
@@ -185,9 +196,7 @@ pub fn persist_window(input: &StatusInput, now: DateTime<Utc>, env: &Environment
         "five_hour": { "resets_at": resets_at, "used_percentage": used },
         "session_id": input.session_id,
     });
-    let fail = |e: std::io::Error| format!("window: {}: {e}", path.display());
-    std::fs::create_dir_all(path.parent().unwrap_or(Path::new("")))
-        .and_then(|()| replace(path, body.to_string() + "\n")).map_err(fail)
+    replace(path, body.to_string() + "\n").map_err(fail)
 }
 
 /// Write `body` to a sibling temp file and rename it over `path`: atomic, and a planted symlink at
@@ -404,8 +413,9 @@ fn eta_to_compact(tokens: f64, threshold: f64, now_ms: i64, samples: &mut Sample
     if tokens == 0.0 {
         return None;
     }
-    // A token drop means /compact or /clear rewound the context — the old trend describes nothing.
-    if samples.samples.last().is_some_and(|last| tokens < last.tokens) {
+    // A token drop means /compact or /clear rewound the context, a future stamp that the clock stepped
+    // back — either way the old trend describes nothing.
+    if samples.samples.last().is_some_and(|last| tokens < last.tokens || last.at > now_ms) {
         samples.samples.clear();
     }
     if samples.samples.last().is_none_or(|last| now_ms.saturating_sub(last.at) >= 15_000) {

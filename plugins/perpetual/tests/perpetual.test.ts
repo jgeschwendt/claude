@@ -529,6 +529,7 @@ test("guards deny the house-forbidden commands and .yml writes, trailing each de
     }
   for (const command of [
     "git stash list; git stash show -p; git stash -h; git stash --help; git cleanup",
+    `git "stash" list; git 'stash' show`,
     "git clean -n; git clean --dry-run -d; git clean -nd",
     "git checkout main; git checkout -b fix; git switch -c fix; git switch main",
     "git switch --force-create x; git restore --staged f; git restore -S .",

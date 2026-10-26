@@ -144,8 +144,9 @@ async function show($, bin, args, shape = (stdout) => stdout.trim()) {
 }
 
 /**
- * Resolves the open notification `problem` threads (every message the title: docket's Notification) keyed
- * `session:<id>` where `ends(id)`, by id: docket's Stop keys a `failed:` problem (its body the whole message)
+ * Resolves the open notification `problem` threads (docket's Notification: the first message the title,
+ * none a Stop's `failed:` or `needs input:` — later notifications append) keyed `session:<id>` where
+ * `ends(id)`, by id: docket's Stop keys a `failed:` problem (its body the whole message)
  * and a `needs input:` decision under the same key, and those stay for the owner. The list, then the
  * resolves, get `timeoutMs` each.
  */
@@ -159,7 +160,8 @@ async function close($, ends, reason, timeoutMs) {
           thread.kind === "problem" &&
           thread.key?.startsWith("session:") &&
           ends(thread.key.slice(8)) &&
-          thread.messages.every((message) => message.body === thread.title),
+          thread.messages[0]?.body === thread.title &&
+          !thread.messages.some((message) => /^(failed|needs input):/.test(message.body)),
       )
       .map((thread) => run($, "docket", ["resolve", thread.id, "--reason", reason], init)),
   );

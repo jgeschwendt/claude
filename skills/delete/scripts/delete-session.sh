@@ -36,6 +36,7 @@ INT_GAP_SECONDS=0.4
 SIGNAL_GRACE_SECONDS=0.6
 WATCH_POLL_SECONDS=0.3
 
+JOBS_DIR="${CLAUDE_JOBS_DIR:-$HOME/.claude/jobs}"
 PROJECTS_DIR="${CLAUDE_PROJECTS_DIR:-$HOME/.claude/projects}"
 
 watch_only=0
@@ -72,17 +73,16 @@ fi
 # A background worker titles itself (`claude bg-spare`), so only the first word of the title
 # is compared; the bare-path `claude daemon` and its `bg-pty-host` sit above the worker and
 # are never the session — refuse rather than walk on to them (a dispatcher armed on the
-# daemon's pid waited for a daemon restart, 2026-09-05).
+# daemon's pid waited for a daemon restart, 2026-09-05). Only the subcommand word is
+# tested: a prompt carries the same words (`claude why does the daemon crash`, 2026-10-26).
 resolve_cli_pid() {
-  local pid comm args
+  local pid comm sub
   pid=$PPID
   while [ -n "$pid" ] && [ "$pid" -gt 1 ]; do
     comm=$(ps -o comm= -p "$pid" 2>/dev/null | sed 's#.*/##; s/[[:space:]].*//')
     if [ "$comm" = "claude" ]; then
-      args=$(ps -o args= -p "$pid" 2>/dev/null)
-      case " $args " in
-        *" daemon "* | *" bg-pty-host "*) return 1 ;;
-      esac
+      read -r _ sub _ <<<"$(ps -o args= -p "$pid" 2>/dev/null)"
+      case "$sub" in daemon | bg-pty-host) return 1 ;; esac
       echo "$pid"
       return 0
     fi
@@ -93,15 +93,19 @@ resolve_cli_pid() {
 cli_pid="$(resolve_cli_pid || true)"
 
 # A background worker holds a pty, so the TTY test below would not save it from the
-# interrupts; a live job (its `state.json` still present) is closed from outside.
-[ -f "${CLAUDE_JOBS_DIR:-$HOME/.claude/jobs}/${sid:0:8}/state.json" ] && watch_only=1
+# interrupts; a live job (its `state.json` still present) is closed from outside. Resolved here
+# and handed to the watcher, as in dissolve-session.sh.
+job_dir=""
+[ -f "$JOBS_DIR/${sid:0:8}/state.json" ] && job_dir="$JOBS_DIR/${sid:0:8}" && watch_only=1
 
+# Nothing armed exits non-zero, so the skill never reports an ending that did not happen
+# (a sandbox denying `ps` resolved nothing and still read as erased, 2026-10-26).
 if [ -z "$cli_pid" ]; then
   echo "  ✻ Could not identify this session's CLI process safely — nothing closed."
   echo "    Interactive: type /exit. Background agent: stop it from outside"
   echo "    (claude stop <short-id>). The erase already ran; re-run sandman forget"
   echo "    afterwards to remove the transcript the exit flush re-creates."
-  exit 0
+  exit 1
 fi
 
 # ─── the regrowth watcher ─────────────────────────────────────────────────────
@@ -110,11 +114,20 @@ fi
 # removes any `<sid>.jsonl` that came back in any project dir, plus the subagent directory
 # Claude Code writes beside it. No nullglob in the child — the `-f`/`-d` tests are what make
 # an unmatched glob a no-op.
+#
+# A live job is retired with `claude rm` first, as dissolve does: left alive, `take --hook`
+# declines it as live-job and the job stays resumable (2026-10-26). A failed rm still erases.
 # shellcheck disable=SC2016
 nohup bash -c '
-  sid="$1"; pid="$2"; projects="$3"; poll="$4"; flush="$5"; sandman="$6"
+  sid="$1"; pid="$2"; projects="$3"; poll="$4"; flush="$5"; sandman="$6"; jobdir="$7"
+  export PATH="$HOME/.local/bin:$PATH"
   while kill -0 "$pid" 2>/dev/null; do sleep "$poll"; done
   sleep "$flush"
+  if [ -n "$jobdir" ] && [ -f "$jobdir/state.json" ]; then
+    cli="$(command -v claude 2>/dev/null || true)"
+    [ -n "$cli" ] || cli="$HOME/.local/bin/claude"
+    "$cli" rm "${sid:0:8}" >/dev/null 2>&1
+  fi
   for t in "$projects"/*/"$sid".jsonl; do
     [ -f "$t" ] && rm -f "$t"
   done
@@ -122,7 +135,7 @@ nohup bash -c '
     [ -d "$d" ] && rm -rf "$d"
   done
   "$sandman" forget "$sid"
-' _ "$sid" "$cli_pid" "$PROJECTS_DIR" "$WATCH_POLL_SECONDS" "$FLUSH_GRACE_SECONDS" "${SANDMAN_BIN:-$HOME/.local/bin/sandman}" \
+' _ "$sid" "$cli_pid" "$PROJECTS_DIR" "$WATCH_POLL_SECONDS" "$FLUSH_GRACE_SECONDS" "${SANDMAN_BIN:-$HOME/.local/bin/sandman}" "$job_dir" \
   >/dev/null 2>&1 &
 disown
 

@@ -80,17 +80,16 @@ fi
 # A background worker titles itself (`claude bg-spare`), so only the first word of the title
 # is compared; the bare-path `claude daemon` and its `bg-pty-host` sit above the worker and
 # are never the session — refuse rather than walk on to them (a dispatcher armed on the
-# daemon's pid waited for a daemon restart, 2026-09-05).
+# daemon's pid waited for a daemon restart, 2026-09-05). Only the subcommand word is
+# tested: a prompt carries the same words (`claude why does the daemon crash`, 2026-10-26).
 resolve_cli_pid() {
-  local pid comm args
+  local pid comm sub
   pid=$PPID
   while [ -n "$pid" ] && [ "$pid" -gt 1 ]; do
     comm=$(ps -o comm= -p "$pid" 2>/dev/null | sed 's#.*/##; s/[[:space:]].*//')
     if [ "$comm" = "claude" ]; then
-      args=$(ps -o args= -p "$pid" 2>/dev/null)
-      case " $args " in
-        *" daemon "* | *" bg-pty-host "*) return 1 ;;
-      esac
+      read -r _ sub _ <<<"$(ps -o args= -p "$pid" 2>/dev/null)"
+      case "$sub" in daemon | bg-pty-host) return 1 ;; esac
       echo "$pid"
       return 0
     fi
@@ -100,12 +99,14 @@ resolve_cli_pid() {
 }
 cli_pid="$(resolve_cli_pid || true)"
 
+# Nothing armed exits non-zero, so the skill never reports an ending that did not happen
+# (a sandbox denying `ps` resolved nothing and still read as erased, 2026-10-26).
 if [ -z "$cli_pid" ]; then
   echo "  ✻ Could not identify this session's CLI process safely — nothing armed."
   echo "    Interactive: type /exit; the SessionEnd hook takes the session on its own."
   echo "    Background agent: retire the job (claude rm $short), then"
   echo "    $SANDMAN_BIN take $sid --force."
-  exit 0
+  exit 1
 fi
 
 # The job dir is resolved HERE, in the parent, and handed to the child as an argument —
@@ -118,13 +119,21 @@ job_dir=""
 # interrupts; a live job is closed from outside, whatever the caller asked for.
 [ -n "$job_dir" ] && watch_only=1
 
+# A pointer counts as the hook take only if it CHANGED since arming: a session resumed after an
+# earlier take already has a `.recent/<sid>.json`, and trusting that stale pointer would skip
+# the take — and could mistake the live transcript for a stub. Its identity (inode + sub-second
+# mtime) is read HERE, before the CLI can exit; a `-nt` against a mark file had whole-second
+# resolution under bash 3.2, so a hook take within the second read as stale (2026-10-26).
+pointer="$SANDMAN_ROOT_DIR/memories/.recent/$sid.json"
+pointer_was="$(stat -f "%i %Fm" "$pointer" 2>/dev/null)"
+
 # ─── the take dispatcher ──────────────────────────────────────────────────────
 # Detached so it outlives the CLI. The child gets its inputs as ARGUMENTS, so no path can
 # reshape the command it runs. It polls until the pid is gone, waits out the OS flush and the
 # SessionEnd hook's own take, then decides: retire a live job first (background mode), take
-# nothing if that fails, honour the hook's take if a pointer already exists (removing only a
-# regrown fragment that is strictly smaller than what was archived), else take by hand with
-# --force (a transcript touched in the last 120 s is otherwise refused as live).
+# nothing if that fails, honour the hook's take if the pointer changed since arming
+# (removing only a regrown fragment that is strictly smaller than what was archived), else
+# take by hand with --force (a transcript touched in the last 120 s is otherwise refused as live).
 #
 # Every decision is journalled to `$SANDMAN_ROOT_DIR/.trace/dissolve-<date>.log`. The child
 # is detached and its exit code goes nowhere, so that journal is the ONLY way its outcome can
@@ -132,16 +141,11 @@ job_dir=""
 # shellcheck disable=SC2016
 nohup bash -c '
   sid="$1"; pid="$2"; projects="$3"; poll="$4"; flush="$5"; hookgrace="$6"
-  sandman="$7"; root="$8"; jobdir="$9"
+  sandman="$7"; root="$8"; jobdir="$9"; pointer="${10}"; was="${11}"
   export PATH="$HOME/.local/bin:$PATH"
 
   mkdir -p "$root/.trace" 2>/dev/null
   trace="$root/.trace/dissolve-$(date -u +%Y-%m-%d).log"
-  # A pointer counts as the hook take only if it is NEWER than this mark: a session resumed
-  # after an earlier take already has a `.recent/<sid>.json`, and trusting that stale
-  # pointer would skip the take — and could mistake the live transcript for a stub.
-  mark="$root/.trace/.dissolve-$sid.mark"
-  : >"$mark" 2>/dev/null
   journal() {
     printf "%s pid=%s %s session=%s %s\n" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$" "$1" "$sid" "${2:-}" >>"$trace" 2>/dev/null
@@ -161,15 +165,12 @@ nohup bash -c '
       journal job-retired "job=$short"
     else
       journal rm-failed "job=$short err=$(printf %s "$err" | tail -n 1)"
-      rm -f "$mark"
       exit 0
     fi
   fi
 
   # the hook may already have taken it; if so, only tidy a regrown stub.
-  pointer="$root/memories/.recent/$sid.json"
-  if [ -f "$pointer" ] && [ "$pointer" -nt "$mark" ]; then
-    rm -f "$mark"
+  if [ -f "$pointer" ] && [ "$(stat -f "%i %Fm" "$pointer" 2>/dev/null)" != "$was" ]; then
     journal hook-took "pointer=$pointer"
     archived="$(sed -n "s/.*\"archived\":\"\([^\"]*\)\".*/\1/p" "$pointer" | head -n 1)"
     for t in "$projects"/*/"$sid".jsonl; do
@@ -194,9 +195,8 @@ nohup bash -c '
   else
     journal take-failed "$(printf %s "$out" | tail -n 1)"
   fi
-  rm -f "$mark"
 ' _ "$sid" "$cli_pid" "$PROJECTS_DIR" "$WATCH_POLL_SECONDS" "$FLUSH_GRACE_SECONDS" \
-  "$HOOK_GRACE_SECONDS" "$SANDMAN_BIN" "$SANDMAN_ROOT_DIR" "$job_dir" \
+  "$HOOK_GRACE_SECONDS" "$SANDMAN_BIN" "$SANDMAN_ROOT_DIR" "$job_dir" "$pointer" "$pointer_was" \
   >/dev/null 2>&1 &
 disown
 

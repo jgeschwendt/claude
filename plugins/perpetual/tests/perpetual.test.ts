@@ -329,6 +329,8 @@ test("SessionEnd runs sandman take and resolves only the session's notification 
     ),
     thread("t2", "problem", "session:sess-1", "Ran the suite.\n  failed: x"),
     thread("t8", "problem", "session:sess-1", "Two ways.\nneeds input: A or B?"),
+    thread("t9", "problem", "session:sess-1", "waiting", "other"),
+    thread("t10", "problem", "session:sess-1", "boom\n\u0085failed: boom"),
     thread("t3", "decision", "session:sess-1"),
     thread("t4", "problem", "session:other"),
   ];

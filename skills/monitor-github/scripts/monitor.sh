@@ -43,7 +43,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIR="${GITHUB_MONITOR_DIR:-$HOME/.local/state/github-monitor}"
 SESS="$DIR/sessions"; QUEUES="$DIR/queues"
-PIDFILE="$DIR/daemon.pid"; LOG="$DIR/daemon.log"; STATE="$DIR/state.json"
+PIDFILE="$DIR/daemon.pid"; LOG="$DIR/daemon.log"; STATE="$DIR/state.json"; LOCK="$DIR/start.lock"
 INTERVAL_FILE="$DIR/interval"
 HISTORY="$DIR/history.jsonl"; MUTES="$DIR/mutes.json"; WATCHES="$DIR/watches.json"
 FAILC="$DIR/failcount"; DEGRADED="$DIR/degraded"
@@ -316,7 +316,7 @@ run_tick() {
   fi
 
   if [ ! -f "$STATE" ]; then
-    printf '%s\n' "$new" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+    printf '%s\n' "$new" > "$STATE.tmp.$$" && mv "$STATE.tmp.$$" "$STATE"
     local mine_n rr_n
     mine_n="$(echo "$raw" | jq '.my_prs.total')"
     rr_n="$(echo "$raw" | jq '.review_requests.total')"
@@ -335,7 +335,7 @@ run_tick() {
     log "tick: $n event(s)"
     route_events "$resolved"
   fi
-  printf '%s\n' "$new" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+  printf '%s\n' "$new" > "$STATE.tmp.$$" && mv "$STATE.tmp.$$" "$STATE"
 }
 
 cmd_start() {
@@ -343,6 +343,11 @@ cmd_start() {
   local iv=""
   while [ $# -gt 0 ]; do case "$1" in --interval) iv="$2"; shift 2 ;; *) shift ;; esac; done
   if [ -n "$iv" ]; then echo "$iv" > "$INTERVAL_FILE"; fi
+  # Check-and-start under an atomic mkdir lock, so parallel callers start one
+  # daemon; a lock held past ~5s is presumed orphaned and broken.
+  local n=0
+  until mkdir "$LOCK" 2>/dev/null; do [ $((n += 1)) -lt 50 ] || rm -rf "$LOCK"; sleep 0.1; done
+  trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT
   if daemon_alive; then
     jq -cn --arg pid "$(cat "$PIDFILE")" --arg iv "$(interval)" \
       '{daemon:"already_running",pid:($pid|tonumber),interval_seconds:($iv|tonumber)}'
@@ -380,9 +385,7 @@ cmd_attach() {
     '{session:$id, scope:(if $scope=="" then null else $scope end), created:(now|todate)}' \
     > "$SESS/$id.json"
   : > "$QUEUES/$id.jsonl"
-  local started="already_running"
-  if ! daemon_alive; then cmd_start >/dev/null; started="started"; fi
-  jq -c --arg d "$started" '. + {daemon:$d}' "$SESS/$id.json"
+  jq -c --arg d "$(cmd_start | jq -r .daemon)" '. + {daemon:$d}' "$SESS/$id.json"
 }
 
 cmd_poll() {

@@ -2,7 +2,7 @@
 # delete-session.sh — close THIS session after `/delete` has erased it, and make sure
 # the erase survives the CLI's own exit. Used by nothing else: ending a session normally is
 # the SessionEnd router's job, and un-resumable-ness is no longer a goal (Claude Code keeps
-# its transcripts, `cleanupPeriodDays: 3650`).
+# its transcripts, `cleanupPeriodDays: 365`).
 #
 # Usage: delete-session.sh [scratchpad_dir]
 #        delete-session.sh --watch-only        # arm the watcher, close nothing

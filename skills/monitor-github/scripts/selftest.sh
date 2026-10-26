@@ -251,6 +251,7 @@ for _ in 1 2 3 4; do bash "$MON" attach --global >/dev/null 2>&1 & done; wait; s
 pids="$(sed -n 's/.*daemon started pid \([0-9]*\).*/\1/p' "$STATED/daemon.log")"
 kill $pids 2>/dev/null
 if [ "$(echo "$pids" | grep -c .)" = 1 ]; then pass "parallel attaches start one daemon"; else fail "parallel attaches start one daemon (pids: $(echo $pids))"; fi
+if [ ! -e "$STATED/start.lock" ]; then pass "attach releases the start lock"; else fail "attach releases the start lock"; fi
 
 echo
 echo "== summary: $PASSED passed, $FAILED failed =="

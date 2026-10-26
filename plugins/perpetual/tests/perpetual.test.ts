@@ -302,11 +302,11 @@ test("SessionEnd runs sandman take and resolves only the session's notification 
     id,
     key,
     kind,
-    messages: [{ body }],
+    messages: [{ body: "waiting" }, { body }],
     title: "waiting",
   });
   const threads = [
-    thread("t1", "problem", "session:sess-1"),
+    thread("t1", "problem", "session:sess-1", "Claude needs your permission to use Edit"),
     thread("t2", "problem", "session:sess-1", "failed: x\nmore"),
     thread("t3", "decision", "session:sess-1"),
     thread("t4", "problem", "session:other"),
@@ -340,7 +340,7 @@ test("SessionStart resolves the notification problems of unregistered sessions, 
     "docket --hook": { stdout: "- t1" },
     "docket list --json": {
       stdout: JSON.stringify([
-        thread("t1", "problem", "session:dead"),
+        thread("t1", "problem", "session:dead", "Claude is waiting for your input"),
         thread("t2", "problem", "session:live"),
         thread("t3", "problem", "session:sess-1"),
         thread("t4", "decision", "session:dead"),
@@ -404,8 +404,11 @@ test("the five-hour window is written atomically at a headless start and on each
     [{}, stored(R, 31.3)],
     [{}, stored(R + 86400, 99)],
     [{ CLAUDE_WINDOW_FILE: "/x.json" }, "{"],
-  ])
-    (Object.assign(env, set), (files[env.CLAUDE_WINDOW_FILE] = text), await measure($));
+  ]) {
+    Object.assign(env, set);
+    files[env.CLAUDE_WINDOW_FILE] = text;
+    await measure($);
+  }
   const json =
     '{"at":"2026-10-09T12:00:00Z","five_hour":{"resets_at":1791558000,"used_percentage":31.4},"session_id":"sess-1"}';
   const done = [path, "/w.json", "/w.json", "/w.json", "/x.json"];

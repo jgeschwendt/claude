@@ -37,7 +37,7 @@ claude plugin marketplace add ~/.grove/code/jgeschwendt/claude/main
 claude plugin install perpetual@jgeschwendt
 ```
 
-`settings.json` enables it (`enabledPlugins`). The install is a versioned copy under `~/.claude/plugins/cache/`, so a mod change bumps its `plugin.json` `version` and goes live after `claude plugin update perpetual@jgeschwendt` on a pulled trunk; until then `mise run link` reports `behind:`. `claude plugin validate plugins/perpetual --strict` and `claude plugin test plugins/perpetual` check it.
+`settings.json` enables it (`enabledPlugins`). The install is a versioned copy under `~/.claude/plugins/cache/`, so a mod change bumps its `plugin.json` `version` and goes live after `claude plugin update perpetual@jgeschwendt` on a pulled trunk; until then `mise run link` reports `differs:`. `claude plugin validate plugins/perpetual --strict` and `claude plugin test plugins/perpetual` check it.
 
 ## The crate
 
@@ -58,6 +58,6 @@ mise run test           # cargo test: unit tests in src/, end-to-end tests in te
 Each statusline tick whose payload carries `rate_limits` also writes the five-hour window —
 `{"at","five_hour":{"resets_at","used_percentage"},"session_id"}` — atomically to
 `$XDG_STATE_HOME/claude/window.json` (default `~/.local/state/claude/window.json`; `$CLAUDE_WINDOW_FILE` overrides it).
-The write is monotone: a window not resetting within 6h, or behind the stored live one (an earlier
+The write is monotone: a `used_percentage` outside 0–100, a window not resetting within 6h, or behind the stored live one (an earlier
 `resets_at`, or less used of the same), writes nothing — an idle session never rolls the clock back.
-The perpetual mod writes the same file at `session.start` and on `session.measure`, without the monotone check.
+The perpetual mod writes the same file at `session.start` and on `session.measure` under the same check against a live stored window, but without the statusline's directory lock.

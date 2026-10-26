@@ -168,6 +168,9 @@ test("every correction, and a repeat of three or more words, appends within 5 s 
   const corrections = [
     "that is wrong",
     "No.",
+    "no",
+    "No",
+    "no\nuse the other one",
     "no way",
     "dont",
     "I said so",
@@ -182,7 +185,7 @@ test("every correction, and a repeat of three or more words, appends within 5 s 
       (rationale) => `${rationale} --ref session:sess-1 --shift s1`,
     ),
   );
-  expect(inits).toEqual(Array(9).fill({ timeoutMs: 5000 }));
+  expect(inits).toEqual(Array(12).fill({ timeoutMs: 5000 }));
 });
 
 test("/trail 5, /shift and /docket log their binary's output and answer nothing", async ($, on) => {
@@ -298,15 +301,32 @@ test("UserPromptSubmit adds docket's pull; Stop and permission notifications run
 });
 
 test("SessionEnd runs sandman take and resolves only the session's notification problems inside the 1.5 s budget", async ($, on) => {
-  const thread = (id: string, kind: string, key: string, body = "waiting") => ({
+  const thread = (
+    id: string,
+    kind: string,
+    key: string,
+    body = "waiting",
+    first = "waiting",
+    title = "waiting",
+  ) => ({
     id,
     key,
     kind,
-    messages: [{ body: "waiting" }, { body }],
-    title: "waiting",
+    messages: [{ body: first }, { body }],
+    title,
   });
   const threads = [
     thread("t1", "problem", "session:sess-1", "Claude needs your permission to use Edit"),
+    thread("t5", "problem", "session:sess-1", "waiting", " waiting "),
+    thread("t6", "problem", "session:sess-1", "waiting", "waiting\nfor you"),
+    thread(
+      "t7",
+      "problem",
+      "session:sess-1",
+      "waiting",
+      `${"𝑤".repeat(119)} tail`,
+      "𝑤".repeat(119),
+    ),
     thread("t2", "problem", "session:sess-1", "Ran the suite.\n  failed: x"),
     thread("t8", "problem", "session:sess-1", "Two ways.\nneeds input: A or B?"),
     thread("t3", "decision", "session:sess-1"),
@@ -322,8 +342,16 @@ test("SessionEnd runs sandman take and resolves only the session's notification 
   ]);
   await clock.advance(200);
   await out;
-  expect(runs[2]).toEqual([`${BIN}/docket`, "resolve", "t1", "--reason", "session ended"]);
-  expect(inits.map((init) => init.timeoutMs)).toEqual([1500, 750, 750]);
+  expect(runs.slice(2)).toEqual(
+    ["t1", "t5", "t6", "t7"].map((id) => [
+      `${BIN}/docket`,
+      "resolve",
+      id,
+      "--reason",
+      "session ended",
+    ]),
+  );
+  expect(inits.map((init) => init.timeoutMs)).toEqual([1500, ...Array(5).fill(750)]);
   expect(JSON.parse(inits[0].stdin)).toMatchObject({ reason: "prompt_input_exit" });
 });
 

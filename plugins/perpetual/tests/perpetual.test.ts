@@ -307,7 +307,8 @@ test("SessionEnd runs sandman take and resolves only the session's notification 
   });
   const threads = [
     thread("t1", "problem", "session:sess-1", "Claude needs your permission to use Edit"),
-    thread("t2", "problem", "session:sess-1", "failed: x\nmore"),
+    thread("t2", "problem", "session:sess-1", "Ran the suite.\n  failed: x"),
+    thread("t8", "problem", "session:sess-1", "Two ways.\nneeds input: A or B?"),
     thread("t3", "decision", "session:sess-1"),
     thread("t4", "problem", "session:other"),
   ];
@@ -346,7 +347,8 @@ test("SessionStart resolves the notification problems of unregistered sessions, 
         thread("t4", "decision", "session:dead"),
         thread("t5", "problem", "proposal:x"),
         thread("t6", "problem", null),
-        thread("t7", "problem", "session:dead", "failed: x\nmore"),
+        thread("t7", "problem", "session:dead", "Ran the suite.\n  failed: x"),
+        thread("t8", "problem", "session:dead", "Two ways.\nneeds input: A or B?"),
       ]),
     },
     "sandman report --hook": { stdout: '{"hookSpecificOutput":{"additionalContext":1}}' },

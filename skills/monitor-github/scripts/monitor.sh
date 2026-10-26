@@ -354,7 +354,7 @@ cmd_start() {
     disown 2>/dev/null || true
     d=started
   fi
-  rmdir "$LOCK"
+  rmdir "$LOCK" 2>/dev/null || true
   jq -cn --arg d "$d" --arg pid "$(cat "$PIDFILE")" --arg iv "$(interval)" \
     '{daemon:$d,pid:($pid|tonumber),interval_seconds:($iv|tonumber)}'
 }

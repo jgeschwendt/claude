@@ -294,9 +294,10 @@ then pass "poll revives a pruned session"; else fail "poll revives a pruned sess
 if echo "$hout" | grep -q 'o/r#7' && ! echo "$hout" | grep -q 'Monitoring active'
 then pass "hook keeps a pruned session's queue"; else kill "$(cat "$STATED/daemon.pid")"; fail "hook keeps a pruned session's queue :: $hout"; fi
 sleep 300 & sp=$!; echo "$sp" > "$STATED/daemon.pid"
-st="$(PS_CMD="sleep 300" bash "$MON" status | jq .daemon.running)$(PS_CMD="sleep 300" bash "$MON" stop)"
-if kill "$sp" 2>/dev/null && [ "$st" = 'false{"daemon":"not_running"}' ]
-then pass "a recycled daemon.pid is not ours"; else fail "a recycled daemon.pid is not ours :: $st"; fi
+st="$(PS_CMD="bash $MON _daemon" bash "$MON" status | jq .daemon.running)"
+st="$st$(PS_CMD="sleep 300" bash "$MON" status | jq .daemon.running)$(PS_CMD="sleep 300" bash "$MON" stop)"
+if kill "$sp" 2>/dev/null && [ "$st" = 'truefalse{"daemon":"not_running"}' ]
+then pass "daemon.pid counts only while it names our daemon"; else fail "daemon.pid counts only while it names our daemon :: $st"; fi
 
 echo "== snapshot carry =="
 fresh_dir

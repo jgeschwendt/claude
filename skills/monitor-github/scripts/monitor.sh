@@ -63,7 +63,7 @@ need_tools() {
 # ps is denied (sandbox) fall back to liveness, with EPERM from kill -0 alive.
 daemon_alive() {
   local p c; p="$(cat "$PIDFILE" 2>/dev/null)" && [ -n "$p" ] || return 1
-  if c="$(ps -p "$p" -o command= 2>/dev/null)" || [ $? = 1 ]; then [[ "$c" == *"monitor.sh _daemon"* ]]
+  if c="$(ps -ww -p "$p" -o command= 2>/dev/null)" || [ $? = 1 ]; then [[ "$c" == *"monitor.sh _daemon"* ]]
   else [[ "$(kill -0 "$p" 2>&1)" != *"No such process"* ]]; fi
 }
 

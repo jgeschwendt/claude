@@ -47,10 +47,16 @@ fn blanks_the_line_only_for_malformed_stdin_or_model() {
         let log = std::fs::read_to_string(dir.join(".claude/logs/statusline.log")).unwrap();
         assert!(log.contains(error), "{log}");
     }
-    // Any other field of the wrong type reads as absent.
-    for odd in [r#""effort":"low""#, r#""session_id":42"#, r#""rate_limits":{"five_hour":{"resets_at":"1","used_percentage":7}}"#] {
+    // Any other field of the wrong type reads as absent; a five-hour window without its percentage draws no 5h.
+    for odd in [
+        r#""effort":"low""#,
+        r#""session_id":42"#,
+        r#""rate_limits":{"five_hour":{"resets_at":"1","used_percentage":7}}"#,
+        r#""rate_limits":{"five_hour":{}}"#,
+        r#""rate_limits":{"five_hour":{"resets_at":1}}"#,
+    ] {
         let out = run(&dir, &dir, format!(r#"{{"model":{{"display_name":"F","id":"x"}},{odd}}}"#)).1;
-        assert!(out.starts_with("\x1b[1mF"), "{odd}: {out:?}");
+        assert!(out.starts_with("\x1b[1mF") && out.contains("5h") == odd.contains("used_percentage"), "{odd}: {out:?}");
     }
 }
 

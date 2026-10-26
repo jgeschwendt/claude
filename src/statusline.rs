@@ -547,8 +547,9 @@ pub fn render(
         // ulp stays under a cent (measured 2026-10-14 · node toFixed sweep, 709k values).
         .map(|cost| if (cost * 8.0) % 2.0 == 1.0 { cost.next_up() } else { cost })
         .map_or_else(String::new, |cost| format!("{DIM} · ${cost:.2}{RESET}"));
-    let limit = input.rate_limits.as_ref().and_then(|r| r.five_hour.as_ref()).map_or_else(String::new, |five| {
-        let used = five.used_percentage.unwrap_or(0.0).floor().clamp(0.0, 100.0) as i64;
+    let five = input.rate_limits.as_ref().and_then(|r| r.five_hour.as_ref()).and_then(|f| Some((f, f.used_percentage?)));
+    let limit = five.map_or_else(String::new, |(five, used)| {
+        let used = used.floor().clamp(0.0, 100.0) as i64;
         let tier = if input.exceeds_200k_tokens == Some(true) { format!("{DIM}†{RESET}") } else { String::new() };
         let reset = truthy(five.resets_at).map_or_else(String::new, |at| format!("{DIM} ↻ {}{RESET}", clock(at)));
         format!("{DIM} · 5h {RESET}{}{used}%{RESET}{tier}{reset}", tone(used))

@@ -244,6 +244,14 @@ if qhas sG own_pr_tracked '"o/w#50"'; then pass "tick survives watched-fetch fai
 tick_items "$(jq -cn --argjson a "$prW" '[$a]')"
 if qhas sG watch_started 'null'; then fail "no watch_started re-broadcast after recovery"; else pass "no watch_started re-broadcast after recovery"; fi
 
+echo "== concurrent attach =="
+fresh_dir
+dash '[]' > "$DASHF"; echo 3600 > "$STATED/interval"
+for _ in 1 2 3 4; do bash "$MON" attach --global >/dev/null 2>&1 & done; wait; sleep 1
+pids="$(sed -n 's/.*daemon started pid \([0-9]*\).*/\1/p' "$STATED/daemon.log")"
+kill $pids 2>/dev/null
+if [ "$(echo "$pids" | grep -c .)" = 1 ]; then pass "parallel attaches start one daemon"; else fail "parallel attaches start one daemon (pids: $(echo $pids))"; fi
+
 echo
 echo "== summary: $PASSED passed, $FAILED failed =="
 [ "$FAILED" -eq 0 ]

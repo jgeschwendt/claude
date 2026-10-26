@@ -352,7 +352,7 @@ cmd_start() {
   local iv=""
   while [ $# -gt 0 ]; do case "$1" in --interval) iv="$2"; shift 2 ;; *) shift ;; esac; done
   if [ -n "$iv" ]; then
-    [[ "$iv" =~ ^[0-9]+$ ]] && [ "$iv" -ge 30 ] || die_json bad_interval "Use whole seconds, at least 30"
+    [[ "$iv" =~ ^[1-9][0-9]*$ ]] && [ "$iv" -ge 30 ] || die_json bad_interval "Use whole seconds, at least 30"
     echo "$iv" > "$INTERVAL_FILE"
   fi
   # Check-and-start under an atomic mkdir lock, so parallel callers start one

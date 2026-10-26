@@ -133,6 +133,6 @@ if [ "$ALL" = true ]; then JQ_FILTER=''; fi
 # --paginate follows pageInfo/$endCursor; --slurp wraps the pages in an array.
 # ✻ piped into jq, not --jq: gh ≥2.95 rejects --slurp combined with --jq
 gh api graphql --paginate --slurp \
-  -F owner="$OWNER" -F name="$REPO" -F number="$NUMBER" \
+  -f owner="$OWNER" -f name="$REPO" -F number="$NUMBER" \
   -f query="$QUERY" \
   | jq "${JQ_HEAD}${JQ_FILTER}${JQ_TAIL}"

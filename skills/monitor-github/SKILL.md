@@ -130,7 +130,7 @@ bash $SKILL/scripts/monitor.sh attach --global   # everything (minus claimed rep
 bash $SKILL/scripts/monitor.sh attach --repo o/r # explicit scope
 ```
 
-`attach` starts the daemon if needed and prints `{"session": "s…", "scope": …}`.
+`attach` starts the daemon if needed (not after `stop`; `start` resumes) and prints `{"session": "s…", "scope": …}`.
 **Remember the session id for the rest of the conversation**, and tell the
 user their scope in plain words.
 
@@ -143,7 +143,8 @@ user their scope in plain words.
   repo-scoped session. So "watch everything else here, this repo is handled
   in the other conversation" works with zero configuration.
 - Claims release on `detach` or after 2h without polling (stale sessions are
-  pruned so a dead conversation can't silently eat notifications forever).
+  pruned so a dead conversation can't silently eat notifications forever); a
+  pruned session's next poll within 7d revives it with its scope and queue.
 
 **Delivering events** (all three modes below): when events land, surface
 `high` severity briefly but prominently, then continue with the user's actual
@@ -213,6 +214,7 @@ null for repo-wide events like releases).
 | `new_conversation_comment`                    | high      | Someone commented on the Conversation tab of their PR (commenter named)                   |
 | `mentioned`                                   | high      | The user was mentioned in an issue/PR by someone else                                     |
 | `pr_merged` / `pr_closed`                     | high      | Their PR left the open set (distinguished by lookup; merged shows "merged ✓")             |
+| `pr_disappeared`                              | high      | Their PR left the open set and the state lookup failed                                    |
 | `watch_started`                               | info      | A watched repo baselined (first sighting, silent otherwise)                               |
 | `repo_new_pr` / `repo_new_issue`              | info      | New PR / issue by someone else in a watched repo                                          |
 | `release_published`                           | info      | A watched repo published a new latest release                                             |
@@ -221,7 +223,7 @@ null for repo-wide events like releases).
 | `own_pr_tracked`, `monitor_started`           | info      | Informational bookkeeping                                                                 |
 
 Lifecycle: `detach <id>` when the user says stop watching (the daemon keeps
-serving other sessions); `stop` kills the daemon; `status` shows pid,
+serving other sessions); `stop` kills the daemon until `start`; `status` shows pid,
 interval, sessions, plus active mutes, watches, and `history_lines`;
 `start --interval 60` tunes the poll cadence (default 120s ≈ 2 cheap GraphQL
 calls per tick - rate limits are a non-issue). `tick` runs one cycle in the

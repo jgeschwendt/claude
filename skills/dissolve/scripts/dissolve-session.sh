@@ -72,7 +72,7 @@ short="${sid:0:8}"
 
 # ─── clean scratchpad (session-isolated — safe to rm) ──────────────────────────
 if [ -n "$scratchpad" ] && [ -d "$scratchpad" ] && printf '%s' "$scratchpad" | grep -q '/scratchpad$'; then
-  rm -rf "${scratchpad:?}/"* 2>/dev/null
+  find "${scratchpad:?}" -mindepth 1 -delete 2>/dev/null
   echo "  ▸ cleaned scratchpad: $scratchpad"
 fi
 

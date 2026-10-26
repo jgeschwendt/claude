@@ -14,14 +14,17 @@
 # The watcher is the load-bearing half. `sandman forget` erases the live `.jsonl` while the
 # CLI is still running, and the CLI's final flush RE-CREATES it — a write that happens
 # after every in-session tool call has returned, so nothing in-session can prevent it. The
-# watcher outlives the CLI, waits for the pid to die, and erases whatever regrew.
+# watcher outlives the CLI, waits for the pid to die, and erases whatever regrew — and
+# `sandman forget`s again: the SessionEnd hook's `take --hook` runs inside the CLI before it
+# dies and archives the regrown file with a queue pointer, which only forget reaches.
 #
 # --watch-only exists for a background agent (`claude --bg`), which cannot close itself
 # with signals: arm the watcher here, then stop the job from outside with
 # `claude stop <short-id>`. Without it that ending leaves the regrown transcript on disk.
 #
 # Self-contained by rule: this script is the last thing a deleted conversation runs, so it
-# depends on nothing but bash and the paths below. (The sid/component/projects-dir helpers
+# depends on nothing but bash, the paths below and `sandman` (best-effort: absent, the
+# projects sweep still runs). (The sid/component/projects-dir helpers
 # were sourced from the orrery clone until 2026-08-25; they are inlined now.)
 #
 # Nothing is ever archived, copied, or buffered here. `/delete` is the ending that
@@ -61,7 +64,7 @@ esac
 
 # ─── clean scratchpad (session-isolated — safe to rm) ──────────────────────────
 if [ -n "$scratchpad" ] && [ -d "$scratchpad" ] && printf '%s' "$scratchpad" | grep -q '/scratchpad$'; then
-  rm -rf "${scratchpad:?}/"* 2>/dev/null
+  find "${scratchpad:?}" -mindepth 1 -delete 2>/dev/null
   echo "  ▸ cleaned scratchpad: $scratchpad"
 fi
 
@@ -109,7 +112,7 @@ fi
 # an unmatched glob a no-op.
 # shellcheck disable=SC2016
 nohup bash -c '
-  sid="$1"; pid="$2"; projects="$3"; poll="$4"; flush="$5"
+  sid="$1"; pid="$2"; projects="$3"; poll="$4"; flush="$5"; sandman="$6"
   while kill -0 "$pid" 2>/dev/null; do sleep "$poll"; done
   sleep "$flush"
   for t in "$projects"/*/"$sid".jsonl; do
@@ -118,7 +121,8 @@ nohup bash -c '
   for d in "$projects"/*/"$sid"; do
     [ -d "$d" ] && rm -rf "$d"
   done
-' _ "$sid" "$cli_pid" "$PROJECTS_DIR" "$WATCH_POLL_SECONDS" "$FLUSH_GRACE_SECONDS" \
+  "$sandman" forget "$sid"
+' _ "$sid" "$cli_pid" "$PROJECTS_DIR" "$WATCH_POLL_SECONDS" "$FLUSH_GRACE_SECONDS" "${SANDMAN_BIN:-$HOME/.local/bin/sandman}" \
   >/dev/null 2>&1 &
 disown
 

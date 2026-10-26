@@ -56,9 +56,10 @@ claude stop <short-id>
 
 Skipping `--watch-only` is what left the regrown transcript on disk (observed
 2026-08-25): the CLI's exit flush re-creates the `.jsonl` that `forget` destroyed, and
-`claude stop` alone never removes it. Nothing resurrects the conversation as a queue
-pointer — `take --hook` exits quietly on a session whose files `forget` already
-destroyed. (verified 2026-07-29 · live probe, Claude Code 2.1.220: `claude stop` fires
+`claude stop` alone never removes it. The SessionEnd hook's `take --hook` runs inside the
+CLI before it dies and archives that regrown file with a queue pointer, so the watcher runs
+`sandman forget` again once the process is gone (observed 2026-10-26 · probe under a fake
+`SANDMAN_ROOT`: forget, regrow, `take --hook` archived it). (verified 2026-07-29 · live probe, Claude Code 2.1.220: `claude stop` fires
 `SessionEnd(reason=other)`.)
 
 ### Caveats — state them, don't hide them
@@ -66,6 +67,10 @@ destroyed. (verified 2026-07-29 · live probe, Claude Code 2.1.220: `claude stop
 - **`~/.claude/history.jsonl` survives.** It keeps one line per prompt (cwd + the prompt
   text) and is Claude Code's own file, not sandman's — nothing here touches it. A
   hard-deleted conversation's PROMPTS live there until that file is filtered by hand.
+- **Claude Code's other per-session files survive** — `~/.claude/file-history/<sid>/`
+  (pre-edit snapshots), `~/.claude/session-env/<sid>`, and background-task output under
+  the temp dir's `<sid>/tasks/` (observed 2026-10-26); neither `forget` nor the watcher
+  touches them.
 - **The exit is best-effort.** The signal is sent from inside a running tool call and the
   CLI may absorb the first interrupt as a turn-cancel. If the script reports "still
   running", tell the user to type `/exit` — the watcher erases the transcript however the

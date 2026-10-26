@@ -1,7 +1,8 @@
 // perpetual: the harness's session hooks, guards and window clock, plus the shift band.
 
 /** prompts that read as the person correcting the session */
-const CORRECTION = /^no[,.! ]|\bdon'?t\b|\bi said\b|\bnever\b|\bnot what i\b|\bstop\b|\bwrong\b/i;
+const CORRECTION =
+  /^no(?:[,.!\s]|$)|\bdon'?t\b|\bi said\b|\bnever\b|\bnot what i\b|\bstop\b|\bwrong\b/i;
 
 /** an optional quote, backslash or directory before a command word: `"git"`, `\git`, `/usr/bin/git` */
 const W = String.raw`[\\'"]?(?:[\w./~-]*\/)?`;
@@ -144,7 +145,8 @@ async function show($, bin, args, shape = (stdout) => stdout.trim()) {
 }
 
 /**
- * Resolves the open notification `problem` threads (docket's Notification: the first message the title,
+ * Resolves the open notification `problem` threads (docket's Notification: the title the first message's first line,
+ * trimmed and cut at 120 chars,
  * no message line a Stop's `failed:` or `needs input:` — later notifications append) keyed `session:<id>` where
  * `ends(id)`, by id: docket's Stop keys a `failed:` problem (its body the whole message)
  * and a `needs input:` decision under the same key, and those stay for the owner. The list, then the
@@ -160,7 +162,10 @@ async function close($, ends, reason, timeoutMs) {
           thread.kind === "problem" &&
           thread.key?.startsWith("session:") &&
           ends(thread.key.slice(8)) &&
-          thread.messages[0]?.body === thread.title &&
+          [...(thread.messages[0]?.body ?? "").split("\n")[0].trim()]
+            .slice(0, 120)
+            .join("")
+            .trimEnd() === thread.title &&
           !thread.messages.some((message) => /^\s*(failed|needs input):/m.test(message.body)),
       )
       .map((thread) => run($, "docket", ["resolve", thread.id, "--reason", reason], init)),

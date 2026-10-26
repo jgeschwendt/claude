@@ -344,20 +344,19 @@ cmd_start() {
   while [ $# -gt 0 ]; do case "$1" in --interval) iv="$2"; shift 2 ;; *) shift ;; esac; done
   if [ -n "$iv" ]; then echo "$iv" > "$INTERVAL_FILE"; fi
   # Check-and-start under an atomic mkdir lock, so parallel callers start one
-  # daemon; a lock held past ~5s is presumed orphaned and broken.
-  local n=0
-  until mkdir "$LOCK" 2>/dev/null; do [ $((n += 1)) -lt 50 ] || rm -rf "$LOCK"; sleep 0.1; done
-  trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT
-  if daemon_alive; then
-    jq -cn --arg pid "$(cat "$PIDFILE")" --arg iv "$(interval)" \
-      '{daemon:"already_running",pid:($pid|tonumber),interval_seconds:($iv|tonumber)}'
-    return 0
+  # daemon; a lock held past ~5s is presumed orphaned and broken once. Released
+  # by hand, not by an EXIT trap: bash 3.2 skips one inside a pipeline element.
+  local n=0 d=already_running
+  until mkdir "$LOCK" 2>/dev/null; do [ $((n += 1)) -lt 50 ] || { rm -rf "$LOCK"; n=0; }; sleep 0.1; done
+  if ! daemon_alive; then
+    nohup bash "$0" _daemon >> "$LOG" 2>&1 &
+    echo $! > "$PIDFILE"
+    disown 2>/dev/null || true
+    d=started
   fi
-  nohup bash "$0" _daemon >> "$LOG" 2>&1 &
-  echo $! > "$PIDFILE"
-  disown 2>/dev/null || true
-  jq -cn --arg pid "$(cat "$PIDFILE")" --arg iv "$(interval)" \
-    '{daemon:"started",pid:($pid|tonumber),interval_seconds:($iv|tonumber)}'
+  rmdir "$LOCK"
+  jq -cn --arg d "$d" --arg pid "$(cat "$PIDFILE")" --arg iv "$(interval)" \
+    '{daemon:$d,pid:($pid|tonumber),interval_seconds:($iv|tonumber)}'
 }
 
 cmd__daemon() {

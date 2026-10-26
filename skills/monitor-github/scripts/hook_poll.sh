@@ -44,7 +44,7 @@ fi
 MON_SID=""
 [ -f "$MAPF" ] && MON_SID="$(cat "$MAPF" 2>/dev/null || true)"
 
-if [ -z "$MON_SID" ] || [ ! -f "$DIR/sessions/$MON_SID.json" ]; then
+if [ -z "$MON_SID" ] || [ ! -f "$DIR/sessions/$MON_SID.json" ] && [ ! -f "$DIR/sessions/$MON_SID.pruned" ]; then
   out="$( { cd "${CWD:-.}" 2>/dev/null || true; bash "$M" attach 2>/dev/null; } || true)"
   MON_SID="$(printf '%s' "$out" | jq -r '.session // empty' 2>/dev/null || true)"
   [ -n "$MON_SID" ] || exit 0

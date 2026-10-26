@@ -28,6 +28,7 @@ BIN="$TMP/bin"; mkdir -p "$BIN"
 cat > "$BIN/gh" <<'SH'
 #!/usr/bin/env bash
 # Minimal gh stub. Only the calls monitor.sh makes during enrichment matter.
+[ -n "${GH_ARGV:-}" ] && echo "$*" >> "$GH_ARGV"
 case "${1:-} ${2:-}" in
   "auth status") exit 0 ;;
   "pr view")     echo "${GH_PR_STATE:-MERGED}" ;;
@@ -40,6 +41,9 @@ case "${1:-} ${2:-}" in
 esac
 SH
 chmod +x "$BIN/gh"
+# ps stub: PS_CMD is the pid's command line; unset = ps denied, as in a sandbox
+printf '%s\n' '#!/bin/sh' '[ -n "${PS_CMD+x}" ] || exit 126' '[ -n "$PS_CMD" ] && echo "$PS_CMD"' > "$BIN/ps"
+chmod +x "$BIN/ps"
 export PATH="$BIN:$PATH"
 
 # ─── diff_events.jq unit harness ────────────────────────────────────────────
@@ -165,6 +169,12 @@ printf '%s\n' '[{"target":"o/r","until":1}]' > "$STATED/mutes.json"
 pr3="$(pritem '.repo="o/r"|.number=103|.url="u103"')"
 tick_items "$(jq -cn --argjson a "$prR" --argjson b "$prX" --argjson c "$pr1" --argjson d "$pr2" --argjson e "$pr3" '[$a,$b,$c,$d,$e]')"
 if qhas sG own_pr_tracked '"o/r#103"'; then pass "expired mute is ignored"; else fail "expired mute is ignored"; fi
+# empty mutes/watches files read as [], so mute/watch persist and status parses
+fresh_dir
+: > "$STATED/mutes.json"; : > "$STATED/watches.json"
+bash "$MON" mute o/r >/dev/null; bash "$MON" watch o/w >/dev/null
+if [ "$(bash "$MON" status 2>/dev/null | jq -c '[.mutes[].target, .watches[]]')" = '["o/r","o/w"]' ]
+then pass "empty mutes/watches files read as []"; else fail "empty mutes/watches files read as []"; fi
 
 echo "== history =="
 fresh_dir
@@ -213,6 +223,8 @@ tick_items "$(jq -cn --argjson a "$prR" '[$a]')"       # baseline tracks it
 export GH_PR_STATE=MERGED
 tick_items '[]'                                          # PR gone -> disappeared -> merged
 if qhas sG pr_merged '"o/r#400"'; then pass "pr_disappeared resolves to pr_merged"; else fail "pr_disappeared resolves to pr_merged"; fi
+GH_PR_STATE=OPEN; tick_items "[$prR]"; tick_items '[]'
+if qhas sG pr_disappeared '"o/r#400"'; then fail "a still-OPEN PR emits no pr_disappeared"; else pass "a still-OPEN PR emits no pr_disappeared"; fi
 unset GH_PR_STATE
 # ci_failed enrichment names the failing checks
 fresh_dir
@@ -225,6 +237,9 @@ tick_items "$(jq -cn --argjson a "$prF" '[$a]')"
 if jq -e 'select(.type=="ci_failed" and (.title | test("test")))' "$STATED/queues/sG.jsonl" >/dev/null 2>&1
 then pass "ci_failed enriched with check names"; else fail "ci_failed enriched with check names"; fi
 unset GH_CHECKS
+GH_ARGV="$TMP/argv" bash "$SCRIPT_DIR/pr_review_threads.sh" gabrielecirulli/2048 1 >/dev/null 2>&1
+if grep -q -- '-f owner=gabrielecirulli -f name=2048 -F number=1' "$TMP/argv"
+then pass "review threads send owner/name as strings"; else fail "review threads send owner/name as strings :: $(cat "$TMP/argv")"; fi
 
 echo "== watched carry-forward =="
 fresh_dir
@@ -265,6 +280,23 @@ if [ "$(echo "$out" | grep -c '^- ')" = 30 ] && [ "$(jq -sc 'map(.title)|[length
 then pass "hook requeues events past 30"; else fail "hook requeues events past 30"; fi
 bash "$MON" stop >/dev/null; bash "$MON" poll sH >/dev/null
 if [ ! -f "$STATED/daemon.pid" ]; then pass "poll leaves a stopped daemon stopped"; else kill "$(cat "$STATED/daemon.pid")"; fail "poll leaves a stopped daemon stopped"; fi
+d="$(bash "$MON" attach --global | jq -r .daemon)"
+if [ "$d" = stopped ] && [ -e "$STATED/stopped" ] && [ ! -f "$STATED/daemon.pid" ]; then pass "attach leaves a stopped daemon stopped"
+else kill "$(cat "$STATED/daemon.pid")"; fail "attach leaves a stopped daemon stopped ($d)"; fi
+# a pruned session revives on poll with its scope and queue (Monitor and hook mode)
+mk_session sP "o/r"; mk_session sQ "o/r"; printf sQ > "$STATED/cc-map/cc2"
+tick_items "[$(pritem '.number=7')]"
+touch -t 200001010000 "$STATED/sessions/sP.json" "$STATED/sessions/sQ.json"
+tick_items "[$(pritem '.number=7|.ci="FAILURE"')]"   # routing prunes both first
+out="$(bash "$MON" poll sP 2>&1)"; hout="$(echo '{"session_id":"cc2"}' | bash "$SCRIPT_DIR/hook_poll.sh")"
+if echo "$out" | jq -e 'select(.key=="o/r#7")' >/dev/null 2>&1 && [ "$(jq -r .scope "$STATED/sessions/sP.json" 2>/dev/null)" = o/r ]
+then pass "poll revives a pruned session"; else fail "poll revives a pruned session :: $out"; fi
+if echo "$hout" | grep -q 'o/r#7' && ! echo "$hout" | grep -q 'Monitoring active'
+then pass "hook keeps a pruned session's queue"; else kill "$(cat "$STATED/daemon.pid")"; fail "hook keeps a pruned session's queue :: $hout"; fi
+sleep 300 & sp=$!; echo "$sp" > "$STATED/daemon.pid"
+st="$(PS_CMD="sleep 300" bash "$MON" status | jq .daemon.running)$(PS_CMD="sleep 300" bash "$MON" stop)"
+if kill "$sp" 2>/dev/null && [ "$st" = 'false{"daemon":"not_running"}' ]
+then pass "a recycled daemon.pid is not ours"; else fail "a recycled daemon.pid is not ours :: $st"; fi
 
 echo "== snapshot carry =="
 fresh_dir
@@ -272,10 +304,16 @@ mk_session sG ""
 for c in SUCCESS FAILURE PENDING SUCCESS; do tick_items "[$(pritem ".ci=\"$c\"")]"; done
 if qhas sG ci_green '"o/r#1"'; then pass "ci_green across FAILURE→PENDING→SUCCESS"; else fail "ci_green across FAILURE→PENDING→SUCCESS"; fi
 for m in CONFLICTING:false UNKNOWN:false CONFLICTING:false MERGEABLE:true UNKNOWN:false MERGEABLE:true; do
-  tick_items "[$(pritem ".number=2|.mergeable=\"${m%:*}\"|.ready_to_merge=${m#*:}")]"
+  tick_items "[$(pritem ".number=2|.review=\"APPROVED\"|.mergeable=\"${m%:*}\"|.ready_to_merge=${m#*:}")]"
 done
 if [ "$(jq -c 'select(.type=="merge_conflict" or .type=="ready_to_merge")' "$STATED/queues/sG.jsonl" | grep -c .)" = 1 ]
 then pass "mergeable UNKNOWN flicker does not re-fire"; else fail "mergeable UNKNOWN flicker does not re-fire"; fi
+fresh_dir
+mk_session sG ""
+A='.review="APPROVED"|.ready_to_merge=true'
+for p in "$A" "$A" "$A|.ci=\"FAILURE\"|.mergeable=\"UNKNOWN\"|.ready_to_merge=false" "$A"; do tick_items "[$(pritem "$p")]"; done
+if [ "$(jq -c 'select(.type=="ready_to_merge")' "$STATED/queues/sG.jsonl" | grep -c .)" = 1 ]
+then pass "rtm recomputed under a carried mergeable"; else fail "rtm recomputed under a carried mergeable"; fi
 fresh_dir
 mk_session sG ""
 printf '%s\n' '["o/r"]' > "$STATED/watches.json"

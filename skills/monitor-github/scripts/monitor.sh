@@ -15,7 +15,7 @@
 #   monitor.sh attach [--repo O/R | --global]
 #         Register this conversation. By default auto-detects a repo scope
 #         from the cwd (a git clone => scoped to that repo; anywhere else
-#         => global). Starts the daemon if it isn't running. Prints
+#         => global). Starts the daemon unless `stop`ped. Prints
 #         {"session": ..., "scope": ..., "daemon": ...}
 #   monitor.sh poll <session>     Drain pending events (JSONL; empty = no news);
 #         restarts the daemon if it died (reboot, kill), not after `stop`
@@ -59,7 +59,13 @@ need_tools() {
   command -v jq >/dev/null 2>&1 || die_json jq_not_installed "Install jq (apt install jq / brew install jq)"
 }
 
-daemon_alive() { [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; }
+# Pids recycle: daemon.pid counts only while it names our command line. Where
+# ps is denied (sandbox) fall back to liveness, with EPERM from kill -0 alive.
+daemon_alive() {
+  local p c; p="$(cat "$PIDFILE" 2>/dev/null)" && [ -n "$p" ] || return 1
+  if c="$(ps -p "$p" -o command= 2>/dev/null)" || [ $? = 1 ]; then [[ "$c" == *"monitor.sh _daemon"* ]]
+  else [[ "$(kill -0 "$p" 2>&1)" != *"No such process"* ]]; fi
+}
 
 interval() { local v; v="$(cat "$INTERVAL_FILE" 2>/dev/null || true)"; [[ "$v" =~ ^[1-9][0-9]*$ ]] && echo "$v" || echo 120; }
 
@@ -86,15 +92,19 @@ repo_from_cwd() {
   echo "$url" | sed -E 's#^(git@[^:]+:|[a-zA-Z]+://[^/]+/)##; s#\.git$##' | grep -E '^[^/]+/[^/]+$'
 }
 
+# A stale session is parked as .pruned (claim released, queue kept) so its next
+# poll revives it; one parked past 7d is deleted with its queue.
 prune_sessions() {
   local ttl_min=$(( SESSION_TTL / 60 )); [ "$ttl_min" -lt 1 ] && ttl_min=1
   local sf id
-  for sf in "$SESS"/*.json; do
+  for sf in "$SESS"/*.json "$SESS"/*.pruned; do
     [ -e "$sf" ] || continue
-    if [ -n "$(find "$sf" -mmin +"$ttl_min" 2>/dev/null)" ]; then
-      id="$(basename "$sf" .json)"
+    id="$(basename "${sf%.*}")"
+    if [ "$sf" != "${sf%.pruned}" ]; then
+      [ -z "$(find "$sf" -mtime +7 2>/dev/null)" ] || rm -f "$sf" "$QUEUES/$id.jsonl"
+    elif [ -n "$(find "$sf" -mmin +"$ttl_min" 2>/dev/null)" ]; then
       log "pruning stale session $id"
-      rm -f "$sf" "$QUEUES/$id.jsonl"
+      mv -f "$sf" "$SESS/$id.pruned"
     fi
   done
 }
@@ -109,7 +119,8 @@ broadcast_all() { # $1 = one event json line -> every session
 }
 
 # ─── mutes ──────────────────────────────────────────────────────────────────
-load_mutes() { cat "$MUTES" 2>/dev/null || echo '[]'; }
+json_array() { jq -c 'if type=="array" then . else [] end' "$1" 2>/dev/null | grep . || echo '[]'; }
+load_mutes() { json_array "$MUTES"; }
 purge_mutes() { # drop expired mutes; rewrite the file atomically
   local now m; now="$(date +%s)"
   m="$(load_mutes | jq -c --argjson now "$now" '[.[] | select(.until == null or .until > $now)]')"
@@ -118,7 +129,7 @@ purge_mutes() { # drop expired mutes; rewrite the file atomically
 active_mutes() { load_mutes | jq -c '[.[].target]'; }
 
 # ─── watches ────────────────────────────────────────────────────────────────
-watches_load() { cat "$WATCHES" 2>/dev/null || echo '[]'; }
+watches_load() { json_array "$WATCHES"; }
 watches_list() { watches_load | jq -r '.[]'; }
 
 rotate_history() { # keep the newest 2500 lines once the log passes 5000
@@ -188,6 +199,7 @@ disappeared_to_state() { # $1 = event json, $2 = PR state -> transformed event
   case "$2" in
     MERGED) echo "$1" | jq -c '.type="pr_merged"  | .title=(.title | sub(" — no longer open$"; " — merged ✓"))' ;;
     CLOSED) echo "$1" | jq -c '.type="pr_closed"  | .title=(.title | sub(" — no longer open$"; " — closed without merging"))' ;;
+    OPEN)   ;;   # only out of the search window (>50 open PRs, index lag)
     *)      echo "$1" ;;
   esac
 }
@@ -335,7 +347,9 @@ run_tick() {
   new="$(jq -c --argjson old "$old" 'def f: . == "FAILURE" or . == "ERROR";
     .mine |= with_entries(($old.mine[.key] // {}) as $p | .value |=
       (.cif = ((.ci | f) or (.ci != "SUCCESS" and ($p.cif or ($p.ci | f))))
-      | if .mergeable == "UNKNOWN" and $p.mergeable then .mergeable = $p.mergeable | .rtm = $p.rtm else . end))' <<< "$new")"
+      | if .mergeable == "UNKNOWN" and $p.mergeable then .mergeable = $p.mergeable
+        | .rtm = ((.draft | not) and .review == "APPROVED" and (.ci == "SUCCESS" or .ci == "NO_CHECKS") and .mergeable == "MERGEABLE")
+        else . end))' <<< "$new")"
   events="$(jq -cn --argjson old "$old" --argjson new "$new" --arg login "$login" -f "$SCRIPT_DIR/diff_events.jq")"
   # Enrich fired events (disappeared -> merged/closed, name failing checks).
   resolved="$(echo "$events" | jq -c '.[]' | enrich_events | jq -cs '.')"
@@ -358,7 +372,6 @@ cmd_start() {
   # Check-and-start under an atomic mkdir lock, so parallel callers start one
   # daemon; a lock held past ~5s is presumed orphaned and broken once. Released
   # by hand, not by an EXIT trap: bash 3.2 skips one inside a pipeline element.
-  rm -f "$DIR/stopped"
   local n=0 d=already_running
   until mkdir "$LOCK" 2>/dev/null; do [ $((n += 1)) -lt 50 ] || { rm -rf "$LOCK"; n=0; }; sleep 0.1; done
   if ! daemon_alive; then
@@ -397,13 +410,15 @@ cmd_attach() {
     '{session:$id, scope:(if $scope=="" then null else $scope end), created:(now|todate)}' \
     > "$SESS/$id.json"
   : > "$QUEUES/$id.jsonl"
-  jq -c --arg d "$(cmd_start | jq -r .daemon)" '. + {daemon:$d}' "$SESS/$id.json"
+  local d=stopped; [ -e "$DIR/stopped" ] || d="$(cmd_start | jq -r .daemon)"
+  jq -c --arg d "$d" '. + {daemon:$d}' "$SESS/$id.json"
 }
 
 cmd_poll() {
   local id="${1:-}"
   [ -n "$id" ] || die_json missing_session "Usage: monitor.sh poll <session-id>"
-  [ -f "$SESS/$id.json" ] || die_json unknown_session "No such session (expired or detached); attach again"
+  [ -f "$SESS/$id.json" ] || mv "$SESS/$id.pruned" "$SESS/$id.json" 2>/dev/null \
+    || die_json unknown_session "No such session (detached, or idle past 7d); attach again"
   touch "$SESS/$id.json"   # heartbeat: keeps this session's repo claim alive
   [ -e "$DIR/stopped" ] || daemon_alive || (cmd_start) >/dev/null 2>&1 || true
   local q="$QUEUES/$id.jsonl" tmp
@@ -417,7 +432,7 @@ cmd_poll() {
 cmd_detach() {
   local id="${1:-}"
   [ -n "$id" ] || die_json missing_session "Usage: monitor.sh detach <session-id>"
-  rm -f "$SESS/$id.json" "$QUEUES/$id.jsonl"
+  rm -f "$SESS/$id.json" "$SESS/$id.pruned" "$QUEUES/$id.jsonl"
   echo "{\"detached\":\"$id\"}"
 }
 
@@ -529,7 +544,7 @@ cmd_stop() {
 }
 
 case "${1:-}" in
-  start)   shift; cmd_start "$@" ;;
+  start)   shift; rm -f "$DIR/stopped"; cmd_start "$@" ;;
   attach)  shift; cmd_attach "$@" ;;
   poll)    shift; cmd_poll "$@" ;;
   detach)  shift; cmd_detach "$@" ;;

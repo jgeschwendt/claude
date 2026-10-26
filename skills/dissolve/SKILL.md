@@ -84,8 +84,9 @@ overrides by exporting the former (observed 2026-08-25).
   CLI may absorb the first interrupt as a turn-cancel. If the script reports "still
   running", tell the user to type `/exit` — the dispatcher takes the session however the
   process ends.
-- **The dispatcher is detached and silent.** Every decision it makes — `job-retired`,
-  `rm-failed`, `hook-took`, `pointer-stale`, `stub-removed`, `took`, `take-failed` — is journalled to
+- **The dispatcher is detached and silent.** Every decision it makes — `cli-exited`,
+  `job-retired`, `rm-failed`, `hook-took`, `pointer-stale`, `stub-removed`, `stub-kept`,
+  `took`, `take-failed` — is journalled to
   `~/.sandman/.trace/dissolve-<date>.log`. That file is the only way an outcome can be
   explained after the fact.
 - **`~/.claude/history.jsonl` survives.** It keeps one line per prompt and is Claude Code's
@@ -94,7 +95,10 @@ overrides by exporting the former (observed 2026-08-25).
 
 ## Completion
 
-State plainly that the conversation has left the live set and where it went.
+Only when step 3 printed `Take dispatcher armed`, state plainly that the conversation has
+left the live set and where it went:
 
 > Conversation dissolved — taken into ~/.sandman for dreaming; the transcript leaves the
 > live set once the process exits.
+
+Otherwise (non-zero exit, nothing armed) relay its fallback lines instead.

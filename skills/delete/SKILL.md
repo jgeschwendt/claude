@@ -57,8 +57,9 @@ claude stop <short-id>
 Skipping `--watch-only` is what left the regrown transcript on disk (observed
 2026-08-25): the CLI's exit flush re-creates the `.jsonl` that `forget` destroyed, and
 `claude stop` alone never removes it. The SessionEnd hook's `take --hook` runs inside the
-CLI before it dies and archives that regrown file with a queue pointer, so the watcher runs
-`sandman forget` again once the process is gone (observed 2026-10-26 · probe under a fake
+CLI before it dies and archives that regrown file with a queue pointer, so once the process
+is gone the watcher retires a live job (`claude rm`, as `/dissolve` does) and runs
+`sandman forget` again (observed 2026-10-26 · probe under a fake
 `SANDMAN_ROOT`: forget, regrow, `take --hook` archived it). (verified 2026-07-29 · live probe, Claude Code 2.1.220: `claude stop` fires
 `SessionEnd(reason=other)`.)
 
@@ -79,6 +80,10 @@ CLI before it dies and archives that regrown file with a queue pointer, so the w
 
 ## Completion
 
-State plainly that the conversation is gone and that nothing was kept.
+Only when step 3 printed `is erased; the exit flush is watched`, state plainly that the
+conversation is gone and that nothing was kept:
 
 > Conversation erased — no buffer copy left, nothing extractable, not recoverable.
+
+Otherwise (non-zero exit, nothing armed) relay its fallback: the exit flush will regrow the
+transcript, so `/exit`, then `sandman forget <sid>` from outside.

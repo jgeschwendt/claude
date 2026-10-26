@@ -16,7 +16,7 @@ def mine_pair($key; $o; $n):
     (if failing($n.ci) and (failing($o.ci) | not)
      then ev($n.repo; $key; "ci_failed"; "high";
              "\($key) \"\($n.title)\" — CI is now failing"; $n.url) else empty end),
-    (if $n.ci == "SUCCESS" and failing($o.ci)
+    (if $n.ci == "SUCCESS" and ($o.cif or failing($o.ci))
      then ev($n.repo; $key; "ci_green"; "info";
              "\($key) \"\($n.title)\" — CI is green again"; $n.url) else empty end),
     (if $n.review == "APPROVED" and $o.review != "APPROVED"

@@ -109,7 +109,8 @@ channel that survives across sessions (verified 2026-07-15):
   when there's no news.
 - Hook config is snapshotted at session start (review with `/hooks`), so it
   applies from your next session. Hook output is capped at 10k characters;
-  the adapter prints at most 30 events and tells Claude how to get the rest.
+  the adapter prints at most 30 events and requeues the rest for the next
+  prompt (or `poll`).
 
 Per message, the flow is: hook fires → reads `session_id` + `cwd` → **first
 time only:** attaches a monitor session (scope auto-detected from the cwd
@@ -145,7 +146,7 @@ still works pull-style: Claude runs `poll` when you ask "anything new?".
 | `monitor.sh mute <o/r \| o/r#N> [--for Nm\|Nh\|Nd]`    | Suppress events for a repo or item (no `--for` = until unmuted)        |
 | `monitor.sh unmute <target \| --all>`                  | Lift a mute                                                            |
 | `monitor.sh watch <o/r>` / `unwatch <o/r>`             | Opt-in activity watching of a repo's new PRs/issues + latest release   |
-| `monitor.sh start [--interval N]` / `stop`             | Daemon lifecycle (stop keeps sessions)                                 |
+| `monitor.sh start [--interval N]` / `stop`             | Daemon lifecycle (stop keeps sessions; `N` ≥ 30 seconds)               |
 | `monitor.sh tick`                                      | One foreground poll cycle (debugging)                                  |
 | `monitor.sh hook-config`                               | Print the settings.json snippet for push delivery                      |
 

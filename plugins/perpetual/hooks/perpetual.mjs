@@ -166,7 +166,9 @@ async function close($, ends, reason, timeoutMs) {
             .slice(0, 120)
             .join("")
             .trimEnd() === thread.title &&
-          !thread.messages.some((message) => /^\s*(failed|needs input):/m.test(message.body)),
+          !thread.messages.some((message) =>
+            /^[\s\u0085]*(failed|needs input):/m.test(message.body),
+          ),
       )
       .map((thread) => run($, "docket", ["resolve", thread.id, "--reason", reason], init)),
   );

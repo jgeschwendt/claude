@@ -284,7 +284,7 @@ if qhas sG release_published 'null'; then fail "failed release lookup carries th
 
 echo "== interval =="
 fresh_dir
-for iv in abc 2m 10; do
+for iv in abc 2m 10 030; do
   if bash "$MON" start --interval "$iv" >/dev/null 2>&1 || [ -e "$STATED/interval" ]; then fail "start rejects --interval $iv"; else pass "start rejects --interval $iv"; fi
   kill "$(cat "$STATED/daemon.pid" 2>/dev/null)" 2>/dev/null; rm -f "$STATED/interval" "$STATED/daemon.pid"
 done

@@ -29,8 +29,8 @@ anything `take` already archived under `~/.sandman/.archive/`, and the short-ter
 pointer — widest reach first, so an interrupted run leaves the conversation harder to
 recover, never easier. Both id variables are read because only `CLAUDE_CODE_SESSION_ID`
 is set in a background job (observed 2026-08-25). Bank memories are untouched: a memory already committed was
-asked for. The SessionEnd hook's `take --hook` then finds nothing and exits quietly —
-no pointer is minted for a transcript that no longer exists.
+asked for. The exit flush regrows the transcript and the SessionEnd hook's `take --hook` archives it
+with a pointer; step 3's watcher runs `forget` again once the CLI is gone.
 
 ## 3. End the session
 

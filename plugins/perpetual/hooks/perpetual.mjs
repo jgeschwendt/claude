@@ -145,20 +145,12 @@ async function show($, bin, args, shape = (stdout) => stdout.trim()) {
 
 /**
  * Resolves the open notification `problem` threads (every message the title: docket's Notification) keyed
- * `session:<id>` of sessions absent from Claude Code's live registry, `~/.claude/sessions/<pid>.json`
- * (`sessionId`): a killed session fires no SessionEnd. Headless `-p` sessions never register, so a thread
- * docket's Stop opened for one (a `failed:` message) is left alone. Skipped unless the registry reads and
- * lists this session — else its format changed and absence is no evidence. The list, then the resolves,
- * get 5 s each, so with the registry reads the sweep can hold SessionStart ≈10 s; it adds no context.
+ * `session:<id>` where `ends(id)`, by id: docket's Stop keys a `failed:` problem (its body the whole message)
+ * and a `needs input:` decision under the same key, and those stay for the owner. The list, then the
+ * resolves, get `timeoutMs` each.
  */
-async function sweep($) {
-  const dir = `${await homeOf($)}/.claude/sessions`;
-  const live = new Set();
-  for (const { name } of await $.fs.list(dir).catch(() => []))
-    if (name.endsWith(".json"))
-      live.add(parse(await $.fs.read(`${dir}/${name}`).catch(() => ""))?.sessionId);
-  if (!live.has(await $.session.id())) return [];
-  const init = { timeoutMs: HOOK_MS / 2 };
+async function close($, ends, reason, timeoutMs) {
+  const init = { timeoutMs };
   const threads = parse(await run($, "docket", ["list", "--json"], init));
   await Promise.all(
     (Array.isArray(threads) ? threads : [])
@@ -166,31 +158,62 @@ async function sweep($) {
         (thread) =>
           thread.kind === "problem" &&
           thread.key?.startsWith("session:") &&
-          !live.has(thread.key.slice(8)) &&
+          ends(thread.key.slice(8)) &&
           thread.messages.every((message) => message.body === thread.title),
       )
-      .map((thread) => run($, "docket", ["resolve", thread.id, "--reason", "session gone"], init)),
+      .map((thread) => run($, "docket", ["resolve", thread.id, "--reason", reason], init)),
   );
+}
+
+/**
+ * Closes the notification threads of sessions absent from Claude Code's live registry,
+ * `~/.claude/sessions/<pid>.json` (`sessionId`): a killed session fires no SessionEnd. Skipped unless the
+ * registry reads and lists this session — else its format changed and absence is no evidence. With the
+ * registry reads the sweep can hold SessionStart ≈10 s; it adds no context.
+ */
+async function sweep($) {
+  const dir = `${await homeOf($)}/.claude/sessions`;
+  const live = new Set();
+  for (const { name } of await $.fs.list(dir).catch(() => []))
+    if (name.endsWith(".json"))
+      live.add(parse(await $.fs.read(`${dir}/${name}`).catch(() => ""))?.sessionId);
+  if (live.has(await $.session.id()))
+    await close($, (id) => !live.has(id), "session gone", HOOK_MS / 2);
   return [];
 }
 
 /**
  * Persists the five-hour window to `$CLAUDE_WINDOW_FILE`, else `$XDG_STATE_HOME/claude/window.json`,
  * else `~/.local/state/claude/window.json`, for `sandman shift clock`: written to a per-session `.tmp`
- * then renamed with `mv`, since `$.fs.write` is not atomic. Skipped without both figures.
+ * then renamed with `mv`, since `$.fs.write` is not atomic. Skipped without both figures, with a
+ * percentage outside 0–100, or when the stored window is live (resets within 6 h) and ahead — a later
+ * reset, or the same with more used — the statusline's rule, so an idle session's stale reading at a
+ * reload never rolls the clock back. The statusline's directory lock is beyond the mod API, so a
+ * concurrent write can still interleave.
  */
 async function window($) {
   const five = (await $.session.usage()).rateLimits.find((limit) => limit.kind === "five_hour");
-  const resetsAt = Date.parse(five?.resetsAt);
-  if (Number.isNaN(resetsAt) || typeof five.percentUsed !== "number") return;
+  const resets_at = Math.floor(Date.parse(five?.resetsAt) / 1000);
+  const used = five?.percentUsed;
+  if (Number.isNaN(resets_at) || !(typeof used === "number" && used >= 0 && used <= 100)) return;
   const root = (await $.env.get("XDG_STATE_HOME")) || `${await homeOf($)}/.local/state`;
   const path = (await $.env.get("CLAUDE_WINDOW_FILE")) || `${root}/claude/window.json`;
+  const now = await $.clock.now();
+  const prior = parse(await $.fs.read(path).catch(() => ""))?.five_hour;
+  const lead = prior?.resets_at - Math.floor(now / 1000);
+  if (
+    lead >= 1 &&
+    lead <= 21600 &&
+    (prior.resets_at - resets_at || prior.used_percentage - used) > 0
+  )
+    return;
   const id = await $.session.id();
-  const at = new Date(await $.clock.now()).toISOString().replace(/\.\d+Z$/, "Z");
-  const five_hour = { resets_at: Math.floor(resetsAt / 1000), used_percentage: five.percentUsed };
+  const at = new Date(now).toISOString().replace(/\.\d+Z$/, "Z");
+  const five_hour = { resets_at, used_percentage: used };
   try {
     await $.fs.write(`${path}.${id}.tmp`, JSON.stringify({ at, five_hour, session_id: id }));
-    await $.process.run(["/bin/mv", "-f", `${path}.${id}.tmp`, path]);
+    const { exitCode, stderr } = await $.process.run(["/bin/mv", "-f", `${path}.${id}.tmp`, path]);
+    if (exitCode) throw `mv exited ${exitCode}: ${stderr.trim()}`;
   } catch (error) {
     $.ui.log(`perpetual: window.json write failed: ${error}`);
   }
@@ -220,16 +243,14 @@ export const register = (on) => {
   );
 
   // an ended session waits on no one: its idle or permission notification fired after the last Stop,
-  // so docket's Stop never resolved it, and docket's hook has no SessionEnd
-  on("classic.SessionEnd", ($, e, next) => {
-    const key = `session:${e.session_id}`;
-    return beside(next, e, [
+  // so docket's Stop never resolved it, and docket's hook has no SessionEnd; a `failed:` or `needs input:`
+  // thread under the same key still waits on the owner. The list and resolve split the 1.5 s budget
+  on("classic.SessionEnd", ($, e, next) =>
+    beside(next, e, [
       hook($, "sandman", ["take", "--hook"], e, TAKE_MS),
-      run($, "docket", ["resolve", "--key", key, "--reason", "session ended"], {
-        timeoutMs: TAKE_MS,
-      }),
-    ]);
-  });
+      close($, (id) => id === e.session_id, "session ended", TAKE_MS / 2),
+    ]),
+  );
 
   on("classic.SessionStart", ($, e, next) =>
     context(next, e, [

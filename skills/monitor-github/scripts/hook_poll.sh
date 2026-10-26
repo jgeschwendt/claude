@@ -60,6 +60,11 @@ echo "[github-monitor] $COUNT GitHub notification(s) for this conversation:"
 printf '%s\n' "$EVENTS" | head -30 \
   | jq -r '"- [" + (.severity | ascii_upcase) + "] " + .title + (if .url then " — " + .url else "" end)' 2>/dev/null \
   || printf '%s\n' "$EVENTS" | head -30
-if [ "$COUNT" -gt 30 ]; then echo "…and $((COUNT - 30)) more (bash $M poll $MON_SID for the rest)."; fi
+if [ "$COUNT" -gt 30 ]; then
+  # Requeue the rest ahead of anything the daemon appended since the drain.
+  Q="$DIR/queues/$MON_SID.jsonl"; mv "$Q" "$Q.$$" 2>/dev/null
+  { printf '%s\n' "$EVENTS" | tail -n +31; cat "$Q.$$" 2>/dev/null; } >> "$Q"; rm -f "$Q.$$"
+  echo "…and $((COUNT - 30)) more, requeued (next prompt, or bash $M poll $MON_SID)."
+fi
 echo "(Briefly surface high-severity items to the user, then continue with their actual request.)"
 exit 0

@@ -17,7 +17,8 @@
 #         from the cwd (a git clone => scoped to that repo; anywhere else
 #         => global). Starts the daemon if it isn't running. Prints
 #         {"session": ..., "scope": ..., "daemon": ...}
-#   monitor.sh poll <session>     Drain pending events (JSONL; empty = no news)
+#   monitor.sh poll <session>     Drain pending events (JSONL; empty = no news);
+#         restarts the daemon if it died (reboot, kill), not after `stop`
 #   monitor.sh detach <session>   Unregister (releases any repo claim)
 #   monitor.sh status             Daemon + sessions + mutes + watches (JSON)
 #   monitor.sh start [--interval N]   Start daemon explicitly (idempotent)
@@ -60,7 +61,7 @@ need_tools() {
 
 daemon_alive() { [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; }
 
-interval() { cat "$INTERVAL_FILE" 2>/dev/null || echo 120; }
+interval() { local v; v="$(cat "$INTERVAL_FILE" 2>/dev/null || true)"; [[ "$v" =~ ^[1-9][0-9]*$ ]] && echo "$v" || echo 120; }
 
 # Nm/Nh/Nd -> seconds on stdout, non-zero exit on a bad spec. Safe to call
 # inside $( ) — the case lives in this function body, not in the substitution.
@@ -225,7 +226,7 @@ query($prq: String!, $isq: String!) {
 }'
 
 watched_graphql() { gh api graphql -f query="$WATCH_QUERY" -f prq="$1" -f isq="$2" 2>/dev/null; }
-release_tag() { gh api "repos/$1/releases/latest" --jq '.tag_name' 2>/dev/null || true; }
+release_tag() { gh api "repos/$1/releases/latest" --jq '.tag_name' 2>/dev/null; }
 
 collect_watched() { # echo the watched-state map, or {} when nothing is watched
   local repos qual r prq isq resp rels tag login
@@ -241,7 +242,8 @@ collect_watched() { # echo the watched-state map, or {} when nothing is watched
   [ -n "$resp" ] || return 1
   rels='{}'
   for r in $repos; do
-    tag="$(release_tag "$r")"
+    # A failed lookup carries the last tag forward — null would re-fire on recovery.
+    tag="$(release_tag "$r")" || tag="$(jq -r --arg r "$r" '.watched[$r].release // ""' "$STATE" 2>/dev/null || true)"
     rels="$(echo "$rels" | jq -c --arg r "$r" --arg t "$tag" '. + {($r): (if $t=="" then null else $t end)}')"
   done
   echo "$resp" | jq -c --argjson rels "$rels" --arg repos "$repos" '
@@ -327,6 +329,13 @@ run_tick() {
     return 0
   fi
   old="$(cat "$STATE")"
+  # Carry across ticks: cif = CI failed with no SUCCESS since (a fix goes
+  # FAILURE → PENDING → SUCCESS); a transient mergeable UNKNOWN keeps the last
+  # known mergeable/rtm, so the flicker doesn't re-fire merge_conflict/ready_to_merge.
+  new="$(jq -c --argjson old "$old" 'def f: . == "FAILURE" or . == "ERROR";
+    .mine |= with_entries(($old.mine[.key] // {}) as $p | .value |=
+      (.cif = ((.ci | f) or (.ci != "SUCCESS" and ($p.cif or ($p.ci | f))))
+      | if .mergeable == "UNKNOWN" and $p.mergeable then .mergeable = $p.mergeable | .rtm = $p.rtm else . end))' <<< "$new")"
   events="$(jq -cn --argjson old "$old" --argjson new "$new" --arg login "$login" -f "$SCRIPT_DIR/diff_events.jq")"
   # Enrich fired events (disappeared -> merged/closed, name failing checks).
   resolved="$(echo "$events" | jq -c '.[]' | enrich_events | jq -cs '.')"
@@ -342,10 +351,14 @@ cmd_start() {
   need_tools
   local iv=""
   while [ $# -gt 0 ]; do case "$1" in --interval) iv="$2"; shift 2 ;; *) shift ;; esac; done
-  if [ -n "$iv" ]; then echo "$iv" > "$INTERVAL_FILE"; fi
+  if [ -n "$iv" ]; then
+    [[ "$iv" =~ ^[0-9]+$ ]] && [ "$iv" -ge 30 ] || die_json bad_interval "Use whole seconds, at least 30"
+    echo "$iv" > "$INTERVAL_FILE"
+  fi
   # Check-and-start under an atomic mkdir lock, so parallel callers start one
   # daemon; a lock held past ~5s is presumed orphaned and broken once. Released
   # by hand, not by an EXIT trap: bash 3.2 skips one inside a pipeline element.
+  rm -f "$DIR/stopped"
   local n=0 d=already_running
   until mkdir "$LOCK" 2>/dev/null; do [ $((n += 1)) -lt 50 ] || { rm -rf "$LOCK"; n=0; }; sleep 0.1; done
   if ! daemon_alive; then
@@ -392,6 +405,7 @@ cmd_poll() {
   [ -n "$id" ] || die_json missing_session "Usage: monitor.sh poll <session-id>"
   [ -f "$SESS/$id.json" ] || die_json unknown_session "No such session (expired or detached); attach again"
   touch "$SESS/$id.json"   # heartbeat: keeps this session's repo claim alive
+  [ -e "$DIR/stopped" ] || daemon_alive || (cmd_start) >/dev/null 2>&1 || true
   local q="$QUEUES/$id.jsonl" tmp
   [ -s "$q" ] || return 0
   tmp="$q.draining.$$"
@@ -503,6 +517,7 @@ cmd_hook_config() {
 }
 
 cmd_stop() {
+  touch "$DIR/stopped"
   if daemon_alive; then
     kill "$(cat "$PIDFILE")" 2>/dev/null || true
     rm -f "$PIDFILE"
@@ -528,5 +543,5 @@ case "${1:-}" in
   hook-config) cmd_hook_config ;;
   tick)    run_tick ;;
   _daemon) cmd__daemon ;;
-  *) sed -n '2,39p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  *) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

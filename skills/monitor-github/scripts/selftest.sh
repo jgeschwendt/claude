@@ -35,6 +35,7 @@ case "${1:-} ${2:-}" in
   "api graphql") # watched-repo collector seam; GH_WATCHED_FAIL simulates an outage
     [ -n "${GH_WATCHED_FAIL:-}" ] && exit 1
     echo '{"data":{"prs":{"nodes":[]},"issues":{"nodes":[]}}}' ;;
+  "api repos/"*) [ -n "${GH_REL_FAIL:-}" ] && exit 1; echo v1 ;;
   *) exit 0 ;;
 esac
 SH
@@ -252,6 +253,43 @@ pids="$(sed -n 's/.*daemon started pid \([0-9]*\).*/\1/p' "$STATED/daemon.log")"
 kill $pids 2>/dev/null
 if [ "$(echo "$pids" | grep -c .)" = 1 ]; then pass "parallel attaches start one daemon"; else fail "parallel attaches start one daemon (pids: $(echo $pids))"; fi
 if [ ! -e "$STATED/start.lock" ]; then pass "attach releases the start lock"; else fail "attach releases the start lock"; fi
+
+echo "== hook =="
+fresh_dir
+tick_items '[]'; echo 3600 > "$STATED/interval"
+mk_session sH ""; mkdir -p "$STATED/cc-map"; printf sH > "$STATED/cc-map/cc1"
+for i in $(seq 35); do echo "{\"severity\":\"info\",\"title\":\"e$i\",\"url\":null}"; done > "$STATED/queues/sH.jsonl"
+out="$(echo '{"session_id":"cc1"}' | bash "$SCRIPT_DIR/hook_poll.sh")"
+if kill "$(cat "$STATED/daemon.pid" 2>/dev/null)" 2>/dev/null; then pass "mapped poll restarts a dead daemon"; else fail "mapped poll restarts a dead daemon"; fi
+if [ "$(echo "$out" | grep -c '^- ')" = 30 ] && [ "$(jq -sc 'map(.title)|[length,.[0]]' "$STATED/queues/sH.jsonl" 2>/dev/null)" = '[5,"e31"]' ]
+then pass "hook requeues events past 30"; else fail "hook requeues events past 30"; fi
+bash "$MON" stop >/dev/null; bash "$MON" poll sH >/dev/null
+if [ ! -f "$STATED/daemon.pid" ]; then pass "poll leaves a stopped daemon stopped"; else kill "$(cat "$STATED/daemon.pid")"; fail "poll leaves a stopped daemon stopped"; fi
+
+echo "== snapshot carry =="
+fresh_dir
+mk_session sG ""
+for c in SUCCESS FAILURE PENDING SUCCESS; do tick_items "[$(pritem ".ci=\"$c\"")]"; done
+if qhas sG ci_green '"o/r#1"'; then pass "ci_green across FAILURE→PENDING→SUCCESS"; else fail "ci_green across FAILURE→PENDING→SUCCESS"; fi
+for m in CONFLICTING:false UNKNOWN:false CONFLICTING:false MERGEABLE:true UNKNOWN:false MERGEABLE:true; do
+  tick_items "[$(pritem ".number=2|.mergeable=\"${m%:*}\"|.ready_to_merge=${m#*:}")]"
+done
+if [ "$(jq -c 'select(.type=="merge_conflict" or .type=="ready_to_merge")' "$STATED/queues/sG.jsonl" | grep -c .)" = 1 ]
+then pass "mergeable UNKNOWN flicker does not re-fire"; else fail "mergeable UNKNOWN flicker does not re-fire"; fi
+fresh_dir
+mk_session sG ""
+printf '%s\n' '["o/r"]' > "$STATED/watches.json"
+tick_items '[]'; GH_REL_FAIL=1 tick_items '[]'; tick_items '[]'
+if qhas sG release_published 'null'; then fail "failed release lookup carries the tag forward"; else pass "failed release lookup carries the tag forward"; fi
+
+echo "== interval =="
+fresh_dir
+for iv in abc 2m 10; do
+  if bash "$MON" start --interval "$iv" >/dev/null 2>&1 || [ -e "$STATED/interval" ]; then fail "start rejects --interval $iv"; else pass "start rejects --interval $iv"; fi
+  kill "$(cat "$STATED/daemon.pid" 2>/dev/null)" 2>/dev/null; rm -f "$STATED/interval" "$STATED/daemon.pid"
+done
+echo junk > "$STATED/interval"
+if [ "$(bash "$MON" status | jq .daemon.interval_seconds)" = 120 ]; then pass "junk interval file falls back to 120"; else fail "junk interval file falls back to 120"; fi
 
 echo
 echo "== summary: $PASSED passed, $FAILED failed =="

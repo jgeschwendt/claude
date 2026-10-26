@@ -167,9 +167,11 @@ impl Environment {
 /// when the window does not reset within 6h, or when it is behind the file's live window (an
 /// earlier `resets_at`, or less used of the same one) — so readers (`sandman shift clock`, which
 /// faults on a null `resets_at`) never see a null `five_hour` field, and an idle session re-rendering stale limits
-/// never rolls the clock back. Atomic: a sibling temp file renamed into place, read-to-rename under an
-/// exclusive lock on the parent directory so concurrent ticks never race a stale read (a directory,
-/// not a lock file, leaves nothing to plant a symlink at). `Err` carries a one-line reason; the
+/// never rolls the clock back. A `used_percentage` outside 0–100 is an `Err`, never written: the reader
+/// faults on it, and the guard would then reject every later good tick of that window. Atomic: a
+/// sibling temp file renamed into place, read-to-rename under an exclusive lock on the parent
+/// directory so concurrent ticks never race a stale read (a directory, not a lock file, leaves
+/// nothing to plant a symlink at). `Err` carries a one-line reason; the
 /// caller logs it and the tick carries on.
 pub fn persist_window(input: &StatusInput, now: DateTime<Utc>, env: &Environment) -> Result<(), String> {
     // The reader's bound: a live window resets within 6h. Outside it a payload is never written and
@@ -181,6 +183,9 @@ pub fn persist_window(input: &StatusInput, now: DateTime<Utc>, env: &Environment
     else {
         return Ok(());
     };
+    if !(0.0..=100.0).contains(&used) {
+        return Err(format!("window: used_percentage {used} is outside 0–100"));
+    }
     let fail = |e: std::io::Error| format!("window: {}: {e}", path.display());
     // `./` gives a bare file name an openable parent.
     let dir = Path::new(".").join(path);
@@ -247,15 +252,18 @@ fn read_json(path: impl AsRef<Path>) -> Option<Value> {
 // The payload exposes neither the auto window nor the threshold, so mirror the CLI's resolution
 // precedence (v2.1.198, fn `G3`) from its observable inputs. Every branch is exact except a
 // statsig experiment (currently scoped to claude-opus-4-8, unreadable externally) — if the bar
-// drifts from the app on that model only, that's why.
+// drifts from the app on that model only, that's why. (unverified 2026-10-26 · 2.1.310 appears to
+// also key entries by subscriptionType and fall back from a surface to the top-level table)
 
 /// The CLI keys its window tables by base model id — strip Bedrock/Vertex region and vendor
-/// prefixes and version/date suffixes (`us.anthropic.claude-sonnet-5-20250929-v1:0` →
+/// prefixes and version/date/context suffixes (`us.anthropic.claude-sonnet-5-20250929-v1:0` →
 /// `claude-sonnet-5`).
 pub fn base_model_id(id: &str) -> String {
     let digits = |d: &str| !d.is_empty() && d.bytes().all(|b| b.is_ascii_digit());
     let lower = id.to_lowercase();
-    let s = ["apac.", "eu.", "global.", "us."].into_iter().find_map(|p| lower.strip_prefix(p)).unwrap_or(&lower);
+    // /\[[12]m\]$/ sits outermost, after the date and version.
+    let lower = lower.strip_suffix("[1m]").or(lower.strip_suffix("[2m]")).unwrap_or(&lower);
+    let s = ["apac.", "eu.", "global.", "us."].into_iter().find_map(|p| lower.strip_prefix(p)).unwrap_or(lower);
     let mut s = s.strip_prefix("anthropic.").unwrap_or(s);
     // /-v\d+(:\d+)?$/
     if let Some((head, v)) =
@@ -271,7 +279,7 @@ pub fn base_model_id(id: &str) -> String {
     {
         s = head;
     }
-    s.strip_suffix("[1m]").unwrap_or(s).to_string()
+    s.to_string()
 }
 
 /// Window-table values are a number or `{surfaces?: {<entrypoint>: entry}, default?}`.
@@ -540,7 +548,7 @@ pub fn render(
         .map(|cost| if (cost * 8.0) % 2.0 == 1.0 { cost.next_up() } else { cost })
         .map_or_else(String::new, |cost| format!("{DIM} · ${cost:.2}{RESET}"));
     let limit = input.rate_limits.as_ref().and_then(|r| r.five_hour.as_ref()).map_or_else(String::new, |five| {
-        let used = five.used_percentage.unwrap_or(0.0).floor() as i64;
+        let used = five.used_percentage.unwrap_or(0.0).floor().clamp(0.0, 100.0) as i64;
         let tier = if input.exceeds_200k_tokens == Some(true) { format!("{DIM}†{RESET}") } else { String::new() };
         let reset = truthy(five.resets_at).map_or_else(String::new, |at| format!("{DIM} ↻ {}{RESET}", clock(at)));
         format!("{DIM} · 5h {RESET}{}{used}%{RESET}{tier}{reset}", tone(used))
@@ -595,7 +603,8 @@ mod tests {
     fn base_model_id_strips_vendor_and_version_decoration() {
         assert_eq!(base_model_id("us.anthropic.claude-sonnet-5-20250929-v1:0"), "claude-sonnet-5");
         assert_eq!(base_model_id("claude-opus-4-6@20260514"), "claude-opus-4-6");
-        assert_eq!(base_model_id("claude-opus-5[1m]"), "claude-opus-5");
+        assert_eq!(base_model_id("claude-opus-5-20250929[1m]"), "claude-opus-5");
+        assert_eq!(base_model_id("claude-opus-5[2m]"), "claude-opus-5");
         assert_eq!(base_model_id("Claude-Fable-5-1"), "claude-fable-5-1");
         assert_eq!(base_model_id("claude-sonnet-4-5-v"), "claude-sonnet-4-5-v");
         assert_eq!(base_model_id("o:b-v1"), "o:b");
@@ -642,6 +651,7 @@ mod tests {
         }
         assert!(out.ends_with(&format!(" 30% · $1.20 · 5h 31%† ↻ {}", clock(1_757_018_000.0))), "{out}");
         assert_eq!(out.chars().count(), 80 - MARGIN, "{out}");
+        assert!(line(json!({ "rate_limits": { "five_hour": { "used_percentage": 101 } } })).ends_with(" 5h 100%"));
         for (cost, usd) in [(0.015, " · $0.01"), (1.125, " · $1.13")] {
             assert!(line(json!({ "cost": { "total_cost_usd": cost } })).ends_with(usd), "{cost}");
         }
@@ -682,6 +692,10 @@ mod tests {
             payload(json!({ "rate_limits": { "five_hour": { "resets_at": 1_757_018_000, "used_percentage": 31.4 } } }));
 
         persist_window(&input, now().with_timezone(&Utc), &env).unwrap();
+        for used in [101.0, -3.0] {
+            let five = json!({ "rate_limits": { "five_hour": { "resets_at": 1_757_018_000, "used_percentage": used } } });
+            assert!(persist_window(&payload(five), now().with_timezone(&Utc), &env).unwrap_err().contains("outside 0–100"));
+        }
 
         assert_eq!(
             std::fs::read_to_string(&file).unwrap(),

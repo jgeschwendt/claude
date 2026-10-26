@@ -5,7 +5,7 @@ description: The cross-session broadcast mechanism — a background monitor watc
 
 # /monitor — the cross-session broadcast plumbing
 
-This plugin registers one background monitor, `afk`, that Claude Code starts in
+This plugin registers one background monitor, `monitor`, that Claude Code starts in
 every interactive session. It polls a shared flag file and emits one
 notification on every transition, so state written in one session reaches all
 the others without any of them being asked to watch.
@@ -21,10 +21,10 @@ the notification and chooses to act. So the flow is always: one session makes a
 tool call (writes or clears the flag), the monitor observes it and dispatches a
 line of text, and each session acts on that text.
 
-- **Registration** — `monitors/monitors.json`, one entry `afk`. The command is
-  `${CLAUDE_PLUGIN_ROOT}/scripts/watch-afk.sh`, left unquoted (the expansion has
+- **Registration** — `monitors/monitors.json`, one entry `monitor`. The command is
+  `${CLAUDE_PLUGIN_ROOT}/monitor.sh`, left unquoted (the expansion has
   no spaces; a quoted path is display-hostile in the details panel).
-- **Poller** — `scripts/watch-afk.sh`, a `sleep`-loop that snapshots the flag,
+- **Poller** — `monitor.sh`, a `sleep`-loop (`AFK_POLL_SECONDS`, default 5) that snapshots the flag,
   emits an away line when it appears or changes and a return line when it clears.
   A session launched mid-absence emits the away line once at arm time, so it
   learns the state it woke into.
@@ -49,5 +49,5 @@ rm -f "$D/flag"
 - **Echo** — the session that flipped the flag hears its own transition too;
   ignore that one rather than re-writing.
 
-The `/afk` skill is the consumer: it decides *when* to write and clear the flag
-and *what posture* to hold. This skill owns only the mechanism.
+The `/afk` skill is the consumer: it decides _when_ to write and clear the flag
+and _what posture_ to hold. This skill owns only the mechanism.

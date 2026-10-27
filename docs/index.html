@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en" class="ui">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>claude — design</title>
+<link rel="stylesheet" href="https://gigantic.dev/ui/ui.css" />
+<link rel="stylesheet" href="https://gigantic.dev/ui/docs.css" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23634776'/%3E%3Cg transform='translate(2.4 2.4) scale(0.0437)' fill='white'%3E%3Cpath d='M40,88H73a32,32,0,0,0,62,0h81a8,8,0,0,0,0-16H135a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16Zm64-24A16,16,0,1,1,88,80,16,16,0,0,1,104,64ZM216,168H199a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16h97a32,32,0,0,0,62,0h17a8,8,0,0,0,0-16Zm-48,24a16,16,0,1,1,16-16A16,16,0,0,1,168,192Z'/%3E%3C/g%3E%3C/svg%3E" />
+</head>
+<body data-page="design">
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+<!-- Phosphor Icons (regular), MIT (c) 2023 Phosphor Icons — via jgeschwendt/ui icons/ -->
+<symbol id="ph-circle-half" viewBox="0 0 256 256" fill="currentColor"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm8,16.37a86.4,86.4,0,0,1,16,3V212.67a86.4,86.4,0,0,1-16,3Zm32,9.26a87.81,87.81,0,0,1,16,10.54V195.83a87.81,87.81,0,0,1-16,10.54ZM40,128a88.11,88.11,0,0,1,80-87.63V215.63A88.11,88.11,0,0,1,40,128Zm160,50.54V77.46a87.82,87.82,0,0,1,0,101.08Z"/></symbol>
+<symbol id="ph-moon" viewBox="0 0 256 256" fill="currentColor"><path d="M233.54,142.23a8,8,0,0,0-8-2,88.08,88.08,0,0,1-109.8-109.8,8,8,0,0,0-10-10,104.84,104.84,0,0,0-52.91,37A104,104,0,0,0,136,224a103.09,103.09,0,0,0,62.52-20.88,104.84,104.84,0,0,0,37-52.91A8,8,0,0,0,233.54,142.23ZM188.9,190.34A88,88,0,0,1,65.66,67.11a89,89,0,0,1,31.4-26A106,106,0,0,0,96,56,104.11,104.11,0,0,0,200,160a106,106,0,0,0,14.92-1.06A89,89,0,0,1,188.9,190.34Z"/></symbol>
+<symbol id="ph-sliders-horizontal" viewBox="0 0 256 256" fill="currentColor"><path d="M40,88H73a32,32,0,0,0,62,0h81a8,8,0,0,0,0-16H135a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16Zm64-24A16,16,0,1,1,88,80,16,16,0,0,1,104,64ZM216,168H199a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16h97a32,32,0,0,0,62,0h17a8,8,0,0,0,0-16Zm-48,24a16,16,0,1,1,16-16A16,16,0,0,1,168,192Z"/></symbol>
+<symbol id="ph-sun" viewBox="0 0 256 256" fill="currentColor"><path d="M120,40V16a8,8,0,0,1,16,0V40a8,8,0,0,1-16,0Zm72,88a64,64,0,1,1-64-64A64.07,64.07,0,0,1,192,128Zm-16,0a48,48,0,1,0-48,48A48.05,48.05,0,0,0,176,128ZM58.34,69.66A8,8,0,0,0,69.66,58.34l-16-16A8,8,0,0,0,42.34,53.66Zm0,116.68-16,16a8,8,0,0,0,11.32,11.32l16-16a8,8,0,0,0-11.32-11.32ZM192,72a8,8,0,0,0,5.66-2.34l16-16a8,8,0,0,0-11.32-11.32l-16,16A8,8,0,0,0,192,72Zm5.66,114.34a8,8,0,0,0-11.32,11.32l16,16a8,8,0,0,0,11.32-11.32ZM48,128a8,8,0,0,0-8-8H16a8,8,0,0,0,0,16H40A8,8,0,0,0,48,128Zm80,80a8,8,0,0,0-8,8v24a8,8,0,0,0,16,0V216A8,8,0,0,0,128,208Zm112-88H216a8,8,0,0,0,0,16h24a8,8,0,0,0,0-16Z"/></symbol>
+</svg>
+
+<header class="appbar">
+  <h1 class="appbar-title">
+    <svg class="icon" aria-hidden="true"><use href="#ph-sliders-horizontal" /></svg>
+    claude <small>· design</small>
+  </h1>
+  <span class="spacer"></span>
+  <div class="segmented" role="group" aria-label="theme">
+    <button type="button" data-theme-set="light" aria-pressed="false" title="light">
+      <svg class="icon icon-sm" aria-hidden="true"><use href="#ph-sun" /></svg>light
+    </button>
+    <button type="button" data-theme-set="auto" aria-pressed="true" title="follow the system">
+      <svg class="icon icon-sm" aria-hidden="true"><use href="#ph-circle-half" /></svg>auto
+    </button>
+    <button type="button" data-theme-set="dark" aria-pressed="false" title="dark">
+      <svg class="icon icon-sm" aria-hidden="true"><use href="#ph-moon" /></svg>dark
+    </button>
+  </div>
+</header>
+
+<main class="docs-shell" data-container>
+
+<header class="stack">
+  <p class="eyebrow">the Claude Code harness</p>
+  <p class="lead docs-lead">What shapes a Claude Code session is tracked here; what sessions accrete
+    stays in <code class="code">~/.claude</code>. The parts: the config linked into
+    <code class="code">~/.claude</code>, the <code class="code">perpetual</code> mod, the Rust
+    <code class="code">statusline</code> and its window clock, and the local marketplace that ships
+    the mod. <code class="code">AGENTS.md</code> is the map; this page is the design and what is
+    open.</p>
+  <nav class="row docs-toc" aria-label="sections">
+    <a class="pill" href="#link">link</a>
+    <a class="pill" href="#mod">mod</a>
+    <a class="pill" href="#statusline">statusline</a>
+    <a class="pill" href="#gate">gate</a>
+    <a class="pill" href="#plan">plan</a>
+  </nav>
+</header>
+
+<section class="docs-section" id="link" data-component="link">
+  <header>
+    <h2 class="h2">Link</h2>
+    <p class="docs-note"><code class="code">~/.claude</code> is not a repo: Claude Code's runtime
+      state, plus one symlink into this checkout per entry it reads.</p>
+  </header>
+  <!-- figures: none yet -->
+  <p><code class="code">mise run link</code> (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/.mise/tasks/link">.mise/tasks/link</a>)
+    links <code class="code">CLAUDE.md</code>, <code class="code">rules/</code>,
+    <code class="code">settings.json</code>, <code class="code">settings.local.json</code> and
+    <code class="code">skills/</code>, then compares the installed mod with the trunk's.</p>
+  <ul class="stack claims" role="list">
+    <li><strong>never overwrites</strong> — an entry that is a real file or a foreign link is
+      <code class="code">drift:</code> and left alone; merge it into the checkout by hand, then
+      re-link. Only a missing entry is linked.</li>
+    <li><strong>prunes its own</strong> — a link into this checkout for an entry no longer listed
+      is <code class="code">unlink:</code>, removed.</li>
+    <li><strong>reports the mod</strong> — <code class="code">differs:</code> when the user-scope
+      <code class="code">perpetual</code> install is not the trunk's
+      <code class="code">plugin.json</code> version, <code class="code">missing:</code> when it is
+      not installed.</li>
+    <li><strong><code class="code">--check</code></strong> changes nothing, reports
+      <code class="code">missing:</code> / <code class="code">stale:</code> instead, and exits 1 on
+      anything but <code class="code">ok</code>; a plain run exits 1 only on drift or a mod line
+      other than <code class="code">ok</code>.</li>
+  </ul>
+</section>
+
+<section class="docs-section" id="mod" data-component="mod">
+  <header>
+    <h2 class="h2">The perpetual mod</h2>
+    <p class="docs-note"><code class="code">settings.json</code> wires no hooks; the mod does. Its
+      behaviour is specified in
+      <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/perpetual/README.md">plugins/perpetual/README.md</a>.</p>
+  </header>
+  <ul class="stack claims" role="list">
+    <li><strong>session hooks</strong> — runs <code class="code">sandman</code>'s
+      (<code class="code">recall</code>, <code class="code">report</code>,
+      <code class="code">take</code>) and <code class="code">docket --hook</code> from
+      <code class="code">~/.local/bin</code>; a missing binary, timeout or non-zero exit adds
+      nothing and never blocks.</li>
+    <li><strong>guards</strong> — denies the Bash commands the house rules forbid
+      (<code class="code">pkill -f</code>, tree discards, force pushes, <code class="code">git
+      stash</code>, <code class="code">git clean</code>) and writes to <code class="code">*.yml</code>,
+      trailing each denial to sandman; pins an <code class="code">agent.spawn</code> with no
+      <code class="code">model</code> to <code class="code">opus</code>. The match is textual.</li>
+    <li><strong>window clock</strong> — pipes the session's five-hour rate limit through
+      <code class="code">statusline --window</code> (<a class="link" href="#statusline">below</a>).</li>
+    <li><strong>band and capture</strong> — the sandman shift above the prompt, corrections and
+      repeated instructions to the trail, and <code class="code">/shift</code>,
+      <code class="code">/docket</code>, <code class="code">/trail</code>.</li>
+  </ul>
+  <h3 class="h3" id="marketplace">Marketplace</h3>
+  <p>The repo is the local marketplace <code class="code">jgeschwendt</code>
+    (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/.claude-plugin/marketplace.json">.claude-plugin/marketplace.json</a>),
+    listing <code class="code">perpetual</code> and <code class="code">monitor</code>
+    (<code class="code">skills/monitor</code>). An install is a versioned copy under
+    <code class="code">~/.claude/plugins/cache/</code>, not the trunk; <code class="code">mise run
+    link</code> reports <code class="code">differs:</code> until it is updated.</p>
+</section>
+
+<section class="docs-section" id="statusline" data-component="statusline">
+  <header>
+    <h2 class="h2">Statusline</h2>
+    <p class="docs-note">The <code class="code">claude-home</code> crate; segment rules in
+      <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/src/statusline.rs">src/statusline.rs</a>.</p>
+  </header>
+  <pre class="snippet">Fable 5 (fast · low) ██████████▎░░░░░░░░░░░ 52% ≈46m · $1.20 · 5h 31%† ↻ 10:50pm</pre>
+  <ul class="stack claims" role="list">
+    <li><strong>the line</strong> — model, non-default mode flags, context use against the
+      auto-compact threshold with an ETA, session cost, the five-hour limit and its reset. Every
+      segment is conditional.</li>
+    <li><strong>installed outside <code class="code">target/</code></strong> —
+      <code class="code">mise run build</code> installs <code class="code">~/.local/bin/statusline</code>,
+      which <code class="code">settings.json</code> runs; mbx redirects
+      <code class="code">target/</code> into its cache and gc prunes it. A source change is live only
+      once rebuilt.</li>
+    <li><strong>the window clock</strong> — each tick carrying <code class="code">rate_limits</code>
+      writes <code class="code">$XDG_STATE_HOME/claude/window.json</code> atomically, under a
+      directory lock, for <code class="code">sandman shift clock</code>. Monotone: a window behind the
+      stored one, not resetting within 6 h, or with a percentage outside 0–100 writes nothing.</li>
+    <li><strong><code class="code">statusline --window</code></strong> — that write alone, the only
+      other way in; the mod uses it, so one rule and one lock cover every writer.</li>
+    <li><strong>the log</strong> — <code class="code">~/.claude/logs/statusline.log</code>, each
+      tick's payload or error, overwritten.</li>
+  </ul>
+</section>
+
+<section class="docs-section" id="gate" data-component="gate">
+  <header>
+    <h2 class="h2">Gate</h2>
+    <p class="docs-note">hk's pre-push hook
+      (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/hk.pkl">hk.pkl</a>),
+      one step.</p>
+  </header>
+  <p>The stele gate, clippy with warnings denied, <code class="code">cargo test</code> — units in
+    <code class="code">src/</code>; <code class="code">tests/</code> drive the statusline, link,
+    /delete, /dissolve and monitor-github — then the mod's own suite.</p>
+  <p class="docs-note"><code class="code">ci.yaml</code> runs clippy, the tests and the stele
+    gate on push to main, pull requests and the merge queue; never
+    <code class="code">stele build</code>, the lock's sole writer.</p>
+</section>
+
+<section class="docs-section" id="plan" data-component="plan">
+  <header>
+    <h2 class="h2">Plan</h2>
+  </header>
+  <h3 class="h3">Next</h3>
+  <p class="docs-note">The only plan, in order; a landing that changes it edits it here.</p>
+  <ol class="stack" id="next">
+    <li><strong>Guard tokenizer</strong>: proposal
+      <code class="code">proposal:jgeschwendt/claude:guard-tokenizer</code> (docket 40ebe64b) awaits
+      the owner. On approve, replace perpetual's regex Bash guard with a quote-aware tokenizer,
+      keeping the deny/allow table as the spec; ships as perpetual 0.3.0.</li>
+    <li><strong>Figures</strong>: draw the <code class="code">claude figures</code> canvas in Claude
+      Design — the link flow; the mod's hook fan-out to sandman and docket — and wire
+      <code class="code">docs/figures/</code> and <code class="code">mise run figures</code> like the
+      siblings.</li>
+    <li><strong>Publishing</strong>: enable GitHub Pages for <code class="code">docs/</code> and add
+      the gigantic.dev/claude/ proxy — owner's step.</li>
+    <li><strong>Live mod lags trunk</strong>: installed perpetual 0.2.3, trunk 0.2.11. Once the local
+      trunk is level with origin, <code class="code">claude plugin update perpetual@jgeschwendt</code>
+      — owner's step.</li>
+  </ol>
+</section>
+
+<nav class="row link-row" aria-label="links">
+  <a class="pill" href="https://github.com/jgeschwendt/claude">repo · jgeschwendt/claude</a>
+</nav>
+
+</main>
+<script>
+/* The theme contract, verbatim from jgeschwendt/ui docs.js — same localStorage
+   key, so a theme chosen on the ui pages is the theme this one opens in. */
+const THEME_KEY = "ui-theme";
+function applyTheme(mode) {
+  const root = document.documentElement;
+  if (mode === "auto") {
+    root.removeAttribute("data-theme");
+    localStorage.removeItem(THEME_KEY);
+  } else {
+    root.dataset.theme = mode;
+    localStorage.setItem(THEME_KEY, mode);
+  }
+  for (const b of document.querySelectorAll("[data-theme-set]")) {
+    b.setAttribute("aria-pressed", String(b.dataset.themeSet === mode));
+  }
+}
+for (const b of document.querySelectorAll("[data-theme-set]")) {
+  b.addEventListener("click", () => applyTheme(b.dataset.themeSet));
+}
+applyTheme(localStorage.getItem(THEME_KEY) || "auto");
+</script>
+</body>
+</html>

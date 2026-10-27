@@ -60,4 +60,4 @@ Each statusline tick whose payload carries `rate_limits` also writes the five-ho
 `$XDG_STATE_HOME/claude/window.json` (default `~/.local/state/claude/window.json`; `$CLAUDE_WINDOW_FILE` overrides it).
 The write is monotone: a `used_percentage` outside 0–100, a window not resetting within 6h, or behind the stored live one (an earlier
 `resets_at`, or less used of the same), writes nothing — an idle session never rolls the clock back.
-`statusline --window` is that write alone — no line, samples or log; a refusal or bad payload is stderr and exit 1 — and the only other way in: the perpetual mod pipes its reading through it at `session.start` and on `session.measure`, so one rule and one directory lock cover every writer.
+`statusline --window` is that write alone — no line, samples or log; a skipped write exits 0, an out-of-range percentage, bad payload or I/O failure is stderr and exit 1 — and the only other way in: the perpetual mod pipes its reading through it at `session.start` and on `session.measure`, so one rule and one directory lock cover every writer.

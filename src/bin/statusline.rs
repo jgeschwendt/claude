@@ -33,8 +33,8 @@ fn tick(raw: &str) -> Result<(String, Option<String>), String> {
 fn main() {
     let mut raw = String::new();
     let read = std::io::stdin().read_to_string(&mut raw).map_err(|e| format!("Error: {e}"));
-    // `--window` is the perpetual mod's window clock: persist only — no line, samples or log — and a
-    // failure goes to stderr with exit 1, which the mod logs.
+    // `--window` is the perpetual mod's window clock: persist only — no line, samples or log. A skipped
+    // write exits 0; a failure goes to stderr with exit 1, which the mod logs.
     if std::env::args().nth(1).as_deref() == Some("--window") {
         let now = chrono::Utc::now();
         if let Err(e) = read.and_then(|_| parse(&raw)).and_then(|input| persist_window(&input, now, &Environment::from_env())) {

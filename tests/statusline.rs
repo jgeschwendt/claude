@@ -10,7 +10,13 @@ use std::process::{Command, Stdio};
 /// debug log and the window clock (via the `HOME` fallback) land there and no real settings feed the threshold.
 /// Returns `(exit code, stdout)`.
 fn run(dir: &Path, home: impl AsRef<OsStr>, payload: impl AsRef<[u8]>) -> (i32, String) {
+    run_with(&[], dir, home, payload)
+}
+
+/// [`run`] with `args`; stderr is appended to stdout.
+fn run_with(args: &[&str], dir: &Path, home: impl AsRef<OsStr>, payload: impl AsRef<[u8]>) -> (i32, String) {
     let mut child = Command::new(env!("CARGO_BIN_EXE_statusline"))
+        .args(args)
         .current_dir(dir)
         .env("HOME", home)
         .env("TMPDIR", dir)
@@ -23,11 +29,12 @@ fn run(dir: &Path, home: impl AsRef<OsStr>, payload: impl AsRef<[u8]>) -> (i32, 
         .env_remove("XDG_STATE_HOME")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
         .unwrap();
     child.stdin.take().unwrap().write_all(payload.as_ref()).unwrap();
     let out = child.wait_with_output().unwrap();
-    (out.status.code().unwrap(), String::from_utf8(out.stdout).unwrap())
+    (out.status.code().unwrap(), String::from_utf8([out.stdout, out.stderr].concat()).unwrap())
 }
 
 /// A per-test scratch dir under cargo's target tmpdir, emptied first so reruns start clean.
@@ -115,4 +122,28 @@ fn renders_a_line_and_persists_the_window_clock() {
     });
     let window: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
     assert_eq!(window["five_hour"]["used_percentage"], 40.0);
+}
+
+#[test]
+fn window_mode_persists_only_and_fails_loudly() {
+    let dir = scratch("window-mode");
+    let file = dir.join(".local/state/claude/window.json");
+    let payload = |resets_at: i64, used: f64| {
+        let five_hour = serde_json::json!({ "resets_at": resets_at as f64 + 0.999, "used_percentage": used });
+        serde_json::json!({ "model": { "display_name": "" }, "rate_limits": { "five_hour": five_hour }, "session_id": "s" })
+            .to_string()
+    };
+    let now = chrono::Utc::now().timestamp();
+    // A window that already reset is never written — perpetual's own copy of the rule wrote it.
+    assert_eq!(run_with(&["--window"], &dir, &dir, payload(now - 1, 5.0)), (0, String::new()));
+    assert!(!file.exists());
+    assert_eq!(run_with(&["--window"], &dir, &dir, payload(now + 3600, 31.4)), (0, String::new()));
+    assert_eq!(serde_json::from_str::<serde_json::Value>(&std::fs::read_to_string(&file).unwrap()).unwrap()["five_hour"],
+        serde_json::json!({ "resets_at": now + 3600, "used_percentage": 31.4 }));
+    // No line, samples or log; a refusal or bad stdin is stderr and exit 1, the file untouched.
+    assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+    assert_eq!(run_with(&["--window"], &dir, &dir, payload(now + 3600, 100.1)), (1, "window: used_percentage 100.1 is outside 0–100\n".into()));
+    let (code, out) = run_with(&["--window"], &dir, &dir, "{");
+    assert!(code == 1 && out.starts_with("SyntaxError"), "{out}");
+    assert!(std::fs::read_to_string(&file).unwrap().contains("31.4"));
 }

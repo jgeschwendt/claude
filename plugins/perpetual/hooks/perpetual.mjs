@@ -192,40 +192,23 @@ async function sweep($) {
 }
 
 /**
- * Persists the five-hour window to `$CLAUDE_WINDOW_FILE`, else `$XDG_STATE_HOME/claude/window.json`,
- * else `~/.local/state/claude/window.json`, for `sandman shift clock`: written to a per-session `.tmp`
- * then renamed with `mv`, since `$.fs.write` is not atomic. Skipped without both figures, with a
- * percentage outside 0–100, or when the stored window is live (resets within 6 h) and ahead — a later
- * reset, or the same with more used — the statusline's rule, so an idle session's stale reading at a
- * reload never rolls the clock back. The statusline's directory lock is beyond the mod API, so a
- * concurrent write can still interleave.
+ * Hands the five-hour window to `statusline --window`, the one writer of `window.json` (its rule, its
+ * directory lock), as a statusline payload. `model` rides along so a statusline built before `--window`
+ * still parses it, persisting and rendering to a discarded stdout; a refusal is `run`'s log line.
  */
 async function window($) {
   const five = (await $.session.usage()).rateLimits.find((limit) => limit.kind === "five_hour");
-  const resets_at = Math.floor(Date.parse(five?.resetsAt) / 1000);
-  const used = five?.percentUsed;
-  if (Number.isNaN(resets_at) || !(typeof used === "number" && used >= 0 && used <= 100)) return;
-  const root = (await $.env.get("XDG_STATE_HOME")) || `${await homeOf($)}/.local/state`;
-  const path = (await $.env.get("CLAUDE_WINDOW_FILE")) || `${root}/claude/window.json`;
-  const now = await $.clock.now();
-  const prior = parse(await $.fs.read(path).catch(() => ""))?.five_hour;
-  const lead = prior?.resets_at - Math.floor(now / 1000);
-  if (
-    lead >= 1 &&
-    lead <= 21600 &&
-    (prior.resets_at - resets_at || prior.used_percentage - used) > 0
-  )
-    return;
-  const id = await $.session.id();
-  const at = new Date(now).toISOString().replace(/\.\d+Z$/, "Z");
-  const five_hour = { resets_at, used_percentage: used };
-  try {
-    await $.fs.write(`${path}.${id}.tmp`, JSON.stringify({ at, five_hour, session_id: id }));
-    const { exitCode, stderr } = await $.process.run(["/bin/mv", "-f", `${path}.${id}.tmp`, path]);
-    if (exitCode) throw `mv exited ${exitCode}: ${stderr.trim()}`;
-  } catch (error) {
-    $.ui.log(`perpetual: window.json write failed: ${error}`);
-  }
+  if (!five) return;
+  const five_hour = {
+    resets_at: Date.parse(five.resetsAt) / 1000,
+    used_percentage: five.percentUsed,
+  };
+  const payload = {
+    model: { display_name: "" },
+    rate_limits: { five_hour },
+    session_id: await $.session.id(),
+  };
+  await run($, "statusline", ["--window"], { stdin: JSON.stringify(payload), timeoutMs: 5000 });
 }
 
 /** Runs side-effect hooks beside the chain beneath and returns its result untouched. */

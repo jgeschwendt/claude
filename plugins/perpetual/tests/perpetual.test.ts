@@ -32,7 +32,6 @@ function world(
   const reads: string[] = [];
   const registered: object[] = [];
   const runs: string[][] = [];
-  const writes: [string, string][] = [];
   on("env.get", ($, e) => ({ value: ({ HOME, ...env } as Record<string, string>)[e.name] }));
   const clock = mock.clock(on, { now: NOW });
   for (const [name, answer] of [
@@ -62,10 +61,6 @@ function world(
     if (!names.length) return { deny: `ENOENT: ${e.path}` };
     return { value: names.map((path) => ({ name: path.slice(e.path.length + 1) })) as any };
   });
-  on("fs.write", ($, e: any) => {
-    writes.push([e.path, e.text]);
-    return e.path.includes("/denied/") ? { deny: "EACCES" } : { value: undefined };
-  });
   on("process.run", async ($, e): Promise<any> => {
     runs.push([...e.argv]);
     inits.push(e.init);
@@ -78,7 +73,7 @@ function world(
     logs.push(e.text);
     return { value: undefined };
   });
-  return { clock, env, inits, logs, reads, registered, runs, writes };
+  return { clock, inits, logs, reads, registered, runs };
 }
 
 const command = ($: any, command: string, args = "") => $.command.run({ args, command });
@@ -406,55 +401,31 @@ test("SessionStart resolves the notification problems of unregistered sessions, 
   expect(inits.filter((init) => !init.stdin)).toEqual(Array(3).fill({ timeoutMs: 5000 }));
 });
 
-test("the five-hour window is written atomically at a headless start and on each measure with both figures, in range, unless the stored window is ahead, to $CLAUDE_WINDOW_FILE, else $XDG_STATE_HOME (a failed write or mv logged), else ~/.local/state", async ($, on) => {
-  const usage = [
-    [{ kind: "seven_day", percentUsed: 9 }, FIVE],
-    [],
-    [{ kind: "five_hour", percentUsed: 3 }],
-    [{ ...FIVE, percentUsed: undefined }],
-    [{ ...FIVE, percentUsed: 100.1 }],
-    [{ ...FIVE, percentUsed: -1 }],
-  ];
-  const files: Record<string, string> = {};
-  const { env, logs, reads, runs, writes } = world(on, files, {
-    env: { CLAUDE_WINDOW_FILE: "", XDG_STATE_HOME: "" },
-    outs: { "/bin/mv -f /x.json.sess-1.tmp /x.json": { exitCode: 1, stderr: "busy\n" } },
-    rateLimits: () => usage.shift() ?? [FIVE],
-  });
-  await start($, null);
-  const path = `${HOME}/.local/state/claude/window.json`;
-  expect(reads).toEqual([path]);
-  const stored = (resets_at: number, used_percentage = 0) =>
-    JSON.stringify({ five_hour: { resets_at, used_percentage } });
-  const R = 1791558000;
-  for (const [set, text] of [
-    ...Array(5).fill([{}]),
-    [{ XDG_STATE_HOME: "/denied" }],
-    [{ CLAUDE_WINDOW_FILE: "/w.json" }],
-    [{}, stored(R + 1)],
-    [{}, stored(R, 31.5)],
-    [{}, stored(R, 31.3)],
-    [{}, stored(R + 86400, 99)],
-    [{ CLAUDE_WINDOW_FILE: "/x.json" }, "{"],
-  ]) {
-    Object.assign(env, set);
-    files[env.CLAUDE_WINDOW_FILE] = text;
-    await measure($);
-  }
-  const json =
-    '{"at":"2026-10-09T12:00:00Z","five_hour":{"resets_at":1791558000,"used_percentage":31.4},"session_id":"sess-1"}';
-  const done = [path, "/w.json", "/w.json", "/w.json", "/x.json"];
-  expect(writes).toEqual(
-    [path, "/denied/claude/window.json", ...done.slice(1)].map((file) => [
-      `${file}.sess-1.tmp`,
-      json,
-    ]),
+test("the five-hour window goes to `statusline --window` at a headless start and on each measure; a refusal is logged", async ($, on) => {
+  const usage = [[{ kind: "seven_day", percentUsed: 9 }, FIVE], [], [{ kind: "five_hour" }]];
+  const { inits, logs, runs } = world(
+    on,
+    {},
+    {
+      outs: { "statusline --window": { exitCode: 1, stderr: "window: refused\n" } },
+      rateLimits: () => usage.shift() ?? [],
+    },
   );
-  expect(runs).toEqual(done.map((file) => ["/bin/mv", "-f", `${file}.sess-1.tmp`, file]));
-  expect(logs).toEqual([
-    expect.stringMatching(/^perpetual: window.json write failed: /),
-    "perpetual: window.json write failed: mv exited 1: busy",
+  await start($, null);
+  await measure($);
+  await measure($);
+  expect(runs).toEqual(Array(2).fill([`${BIN}/statusline`, "--window"]));
+  const payload = (five_hour: object) =>
+    JSON.stringify({
+      model: { display_name: "" },
+      rate_limits: { five_hour },
+      session_id: "sess-1",
+    });
+  expect(inits).toEqual([
+    { stdin: payload({ resets_at: 1791558000.999, used_percentage: 31.4 }), timeoutMs: 5000 },
+    { stdin: payload({ resets_at: null }), timeoutMs: 5000 },
   ]);
+  expect(logs).toEqual(Array(2).fill("perpetual: statusline --window exited 1: window: refused"));
 });
 
 test("guards deny the house-forbidden commands and .yml writes, trailing each denial", async ($, on) => {

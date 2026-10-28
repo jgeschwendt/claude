@@ -100,7 +100,11 @@
       (<code class="code">pkill -f</code>, tree discards, force pushes, <code class="code">git
       stash</code>, <code class="code">git clean</code>) and writes to <code class="code">*.yml</code>,
       trailing each denial to sandman; pins an <code class="code">agent.spawn</code> with no
-      <code class="code">model</code> to <code class="code">opus</code>. The match is textual.</li>
+      <code class="code">model</code> to <code class="code">opus</code>. The guard tokenizes the
+      command as Bash would — quotes removed, each <code class="code">$(…)</code>, backtick,
+      <code class="code">sh -c</code> or <code class="code">eval</code> string a command of its own,
+      heredoc bodies skipped — then matches each command's argv, so quoted text never trips it and
+      quoting never hides a command.</li>
     <li><strong>window clock</strong> — pipes the session's five-hour rate limit through
       <code class="code">statusline --window</code> (<a class="link" href="#statusline">below</a>).</li>
     <li><strong>band and capture</strong> — the sandman shift above the prompt, corrections and
@@ -165,17 +169,14 @@
   <h3 class="h3">Next</h3>
   <p class="docs-note">The only plan, in order; a landing that changes it edits it here.</p>
   <ol class="stack" id="next">
-    <li><strong>Guard tokenizer</strong>: proposal
-      <code class="code">proposal:jgeschwendt/claude:guard-tokenizer</code> (docket 40ebe64b) awaits
-      the owner. On approve, replace perpetual's regex Bash guard with a quote-aware tokenizer,
-      keeping the deny/allow table as the spec; ships as perpetual 0.3.0.</li>
     <li><strong>Figures</strong>: draw the <code class="code">claude figures</code> canvas in Claude
       Design — the link flow; the mod's hook fan-out to sandman and docket — and wire
       <code class="code">docs/figures/</code> and <code class="code">mise run figures</code> like the
       siblings.</li>
     <li><strong>Publishing</strong>: enable GitHub Pages for <code class="code">docs/</code> and add
       the gigantic.dev/claude/ proxy — owner's step.</li>
-    <li><strong>Live mod lags trunk</strong>: installed perpetual 0.2.3, trunk 0.2.11. Once the local
+    <li><strong>Live mod lags trunk</strong>: installed perpetual 0.2.3, trunk 0.2.12 (the
+      tokenizer guard). Once the local
       trunk is level with origin, <code class="code">claude plugin update perpetual@jgeschwendt</code>
       — owner's step.</li>
   </ol>

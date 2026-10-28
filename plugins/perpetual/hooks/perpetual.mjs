@@ -4,64 +4,316 @@
 const CORRECTION =
   /^no(?:[,.!\s]|$)|\bdon'?t\b|\bi said\b|\bnever\b|\bnot what i\b|\bstop\b|\bwrong\b/i;
 
-/** an optional quote, backslash or directory before a command word: `"git"`, `\git`, `/usr/bin/git` */
-const W = String.raw`[\\'"]?(?:[\w./~-]*\/)?`;
-/**
- * one piece of a word: a quoted string, a backtick, `(…)` or `{…}` group (`$(pwd)`, `${HOME}`, `{}`), or a character
- * no command position follows — each piece parses one way, and none runs past a separator unquoted, so a long
- * spaceless line (minified JS, a query string) is scanned once, not once per `;`
- */
-const V = String.raw`(?:"[^"]*"|'[^']*'|\`[^\`]*\`|\([^()]*\)|\{[^{}]*\}|[^\s;&|(){}\`"'])`;
-/** a statement keyword or a wrapper that runs the command after it, shells (`bash -c`) and `eval` included */
-const PRE = String.raw`(?:if|elif|while|until|then|do|else|!|${W}(?:builtin|command|doas|env|eval|exec|mise\s+(?:x|exec)|nice|nohup|(?:ba|da|k|z)?sh|sudo|time|timeout|xargs))(?=\s)`;
-/** a `tool@version` word (`mise x node@22 --`): never a value, so it parses one way */
-const TOOL = String.raw`(?![-\d])[\w./:+-]+@${V}*`;
-/**
- * a command word at a command position: line start, after `;`, `&`, `|`, `(` or `{`, or after an
- * `-exec`/`-execdir`/`-ok`/`-okdir` word (`find`'s; any command's counts), then any `VAR=value` or PRE, a PRE taking options (`--`, `-u me`: a
- * value is never a PRE, a `VAR=`, a TOOL, nor leads with `-` or a digit, and `--` takes none, so each word parses one way;
- * an option is never `-exec`, so each run of options ends at the next one, which starts its own),
- * TOOLs and bare numbers (`timeout 5`)
- */
-const AT = String.raw`(?:^|[;&|({]|\s-(?:exec|ok)(?:dir)?(?=\s))\s*(?:${PRE}(?:[^\S\n]+(?:-(?!(?:exec|ok)(?:dir)?\s)(?:-(?=\s)|(?!-\s)${V}+(?:[^\S\n]+(?![-\d]|${PRE}|${TOOL}|\w+=)${V}+)?)|${TOOL}|\d${V}*))*[^\S\n]+|\w+=${V}*[^\S\n]+)*${W}`;
-/** the rest of one command: up to a separator or the end of the line */
-const ARGS = String.raw`[^;&|\n]*`;
-/**
- * `git`, closing quote and all, and its global options, then the subcommand's opening quote (`git "stash"`): `-C <path>`, quoted or not, `-c k=v`, a lone letter (`-P`), any
- * long option with `=` only, a value-taking one also with a separate value (`--git-dir <dir>`) — a
- * separate value for every `--opt` would read `git --no-pager show stash@{0}` as `stash`, and backtrack exponentially
- */
-const GIT = String.raw`git['"]?(?:\s+-[Cc]\s+${V}+|\s+-[abd-zABD-Z]\b|\s+--(?:git-dir|work-tree|namespace|super-prefix|config-env)\s+(?!-)${V}+|\s+--[\w-]+(?:=${V}+)?)*\s+['"]?`;
-/** Bash commands the house rules forbid, each after a command position, with the rule that forbids it */
-const GUARDS = [
-  [
-    String.raw`pkill\b['"]?${ARGS}\s(?:-[a-z]*f|--full\b)`,
+/** Bash commands the house rules forbid, by guard, each with the rule that forbids it */
+const DENY = {
+  checkout:
+    "never mutate to inspect — `git checkout --`/`.`/`-f`/`<rev> <path>`/`--ours`/`--pathspec-from-file`, `git switch -f`, a worktree `git restore`, `git read-tree -u`/`--reset` and a `git -c alias.…` that can hide any of them discard every uncommitted change to the path, co-resident work included; undo your own edit by re-editing",
+  clean: "never mutate to inspect — `git clean` deletes untracked files, co-resident work included",
+  force: "never force-push — push a new branch or a new commit instead",
+  pkill:
     "pkill -f matches every process's full argv — kill by resolved PID: `lsof -ti :<port>` or `pgrep -x <name>`, inspect, then `kill <pid>`",
-  ],
-  [
-    // a `-c`/`--config-env` alias or include (any case: git lowercases the section) is denied outright, since it can name any of these
-    String.raw`${GIT}(?:(?:-c\s+|--config-env[=\s]\s*)['"]?(?:[Aa][Ll][Ii][Aa][Ss]|[Ii][Nn][Cc][Ll][Uu][Dd][Ee](?:[Ii][Ff])?)\.|checkout\b${ARGS}\s(?:(?:--(?:f\w*)?|\.)(?=[\s'";&|)]|$)|['"]?--pathspec-fr|-[dlmpqt]*f)|switch\b${ARGS}\s(?:--(?:di[\w-]*|force(?![\w-]))|-[dmqt]*f)|restore(?![\w-])(?!\s+(?:-h|--help)\b)(?:${ARGS}\s(?:--w\w*|-[mpqS]*W)|(?!${ARGS}\s(?:--st\w*|-[mpqW]*S)))|read-tree(?![\w-])${ARGS}\s(?:--res|-[imnqv]*u))`,
-    "never mutate to inspect — `git checkout --`/`.`/`-f`/`--pathspec-from-file`, `git switch -f`, a worktree `git restore`, `git read-tree -u`/`--reset` and a `git -c alias.…` that can hide any of them discard every uncommitted change to the path, co-resident work included; undo your own edit by re-editing",
-  ],
-  [
-    String.raw`${GIT}reset\b${ARGS}\s--ha(?:rd?)?\b`,
+  reset:
     "never mutate to inspect — `git reset --hard` discards the working tree; commit, or fast-forward with `git update-ref`",
-  ],
-  [
-    String.raw`${GIT}push\b${ARGS}\s['"]?(?:--forc(?:e(?:-w[\w-]*)?)?(?:=\S*)?|-[a-zA-Z]*f[a-zA-Z]*|\+\S+)(?=[\s'";&|)]|$)`,
-    "never force-push — push a new branch or a new commit instead",
-  ],
-  [
-    String.raw`${GIT}stash\b(?!['"]?\s+(?:list|show|-h|--help)\b)`,
+  stash:
     "never `git stash` — the stash stack is shared across worktrees and sessions; set work aside with a WIP commit",
-  ],
-  [
-    String.raw`${GIT}clean\b(?!${ARGS}\s(?:-[dfiqxX]*n|--d))`,
-    "never mutate to inspect — `git clean` deletes untracked files, co-resident work included",
-  ],
-];
-/** every guard in one pass, so a long command is walked once, not once per guard; the capture names the guard */
-const GUARD = new RegExp(`${AT}(?:${GUARDS.map(([pattern]) => `(${pattern})`).join("|")})`, "m");
+};
+/** words that only open a statement; `function` also takes the name after it */
+const KEYWORDS = new Set([
+  "!",
+  "coproc",
+  "do",
+  "elif",
+  "else",
+  "function",
+  "if",
+  "then",
+  "until",
+  "while",
+  "{",
+  "}",
+]);
+/** long options of a wrapper that take a separate value */
+const LONG = ["--adjustment", "--cd", "--chdir", "--group", "--kill-after", "--signal", "--user"];
+/** a wrapper's positional words before the command it runs (`timeout 5`, `script -q <file>`) */
+const LEADS = { script: 1, timeout: 1 };
+/** commands that run the argv after their options, each with its short options that take a value */
+const WRAPPERS = {
+  builtin: "",
+  caffeinate: "tw",
+  command: "",
+  doas: "Cu",
+  env: "CSu",
+  exec: "a",
+  nice: "n",
+  nohup: "",
+  parallel: "",
+  script: "F",
+  stdbuf: "eio",
+  sudo: "CDghpRrTtUu",
+  time: "fo",
+  timeout: "ks",
+  watch: "dn",
+  xargs: "adEILnPs",
+};
+
+/**
+ * Splits a Bash command line into the argv of every simple command it runs, each word after quote removal:
+ * a `$(…)`, backtick or `<(…)` group is a command of its own (its word keeps a NUL in its place), a
+ * redirection and its target drop out, a heredoc's body is skipped (an unquoted one's groups still run),
+ * a `#` comment ends the line. `body` reads `src` as an unquoted heredoc's body. One pass, no
+ * backtracking; an unclosed quote or group runs to the end.
+ */
+function commands(src, body = false) {
+  const out = [];
+  const frames = []; // the commands enclosing each open group
+  const heredocs = []; // [delimiter, quoted, strip tabs], read at the next newline
+  let argv = [];
+  let ender = ""; // what ends the innermost group: `)`, a backtick, or nothing at the top
+  let dq = body; // inside `"…"`
+  let quoted = false; // the current word has a quoted part
+  let target = 0; // the next word is a redirection's target (1) or `<<`'s delimiter (2, `<<-`: 3)
+  let word; // undefined between words
+  const to = (j) => (j < 0 ? src.length : j);
+  const add = (text) => (word = (word ?? "") + text);
+  const end = () => {
+    if (word === undefined) return;
+    if (target > 1) heredocs.push([word, quoted, target === 3]);
+    else if (!target) argv.push(word);
+    target = 0;
+    quoted = false;
+    word = undefined;
+  };
+  const flush = () => {
+    end();
+    if (argv.length) out.push(argv);
+    argv = [];
+  };
+  const open = (by) => {
+    frames.push([argv, word ?? "", ender, dq, quoted, target]);
+    [argv, word, ender, dq, quoted, target] = [[], undefined, by, false, false, 0];
+  };
+  const shut = () => {
+    flush();
+    [argv, word, ender, dq, quoted, target] = frames.pop();
+    word += "\0";
+  };
+  /** the index of the `}` or `)` closing the group opened at `i`, or the end */
+  const match = (i, l, r) => {
+    for (let depth = 0; i < src.length; i++)
+      if (src[i] === l) depth++;
+      else if (src[i] === r && !--depth) return i;
+    return src.length;
+  };
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    const next = src[i + 1];
+    if (c === "\\") {
+      quoted = true;
+      if (dq && !'$`"\\\n'.includes(next)) add(c);
+      else if (src[++i] !== "\n") add(next ?? "");
+    } else if (c === "$" && next === "{") add(src.slice(i, (i = match(i + 1, "{", "}")) + 1));
+    else if (c === "$" && src.startsWith("((", i + 1)) {
+      i = match(i + 1, "(", ")");
+      add("\0");
+    } else if (c === "$" && next === "(") {
+      open(")");
+      i++;
+    } else if (c === "`") {
+      if (ender === "`" && !dq) shut();
+      else open("`");
+    } else if (dq) {
+      if (c !== '"' || (body && !frames.length)) add(c);
+      else dq = false;
+    } else if (c === '"') {
+      dq = quoted = true;
+      add("");
+    } else if (c === "'" || (c === "$" && next === "'")) {
+      // `$'…'` decodes its escapes, which can hide a quote; `'…'` has none
+      let j = c === "'" ? i + 1 : i + 2;
+      const from = j;
+      while (j < src.length && src[j] !== "'") j += c === "$" && src[j] === "\\" ? 2 : 1;
+      add(c === "'" ? src.slice(from, j) : ansi(src.slice(from, j)));
+      quoted = true;
+      i = j;
+    } else if ((c === "<" || c === ">") && next === "(") {
+      end();
+      open(")");
+      i++;
+    } else if (c === "<" || c === ">" || (c === "&" && next === ">")) {
+      if (/^\d+$/.test(word) && !quoted) word = undefined;
+      end();
+      const op = /^(?:<<<|<<-?|[<>&|]+)/.exec(src.slice(i, i + 3))[0];
+      target = op === "<<" ? 2 : op === "<<-" ? 3 : 1;
+      i += op.length - 1;
+    } else if (c === "#" && word === undefined) i = to(src.indexOf("\n", i)) - 1;
+    else if (c === " " || c === "\t" || c === "\r") end();
+    else if (c === ")" && ender === ")") shut();
+    else if (c === "\n") {
+      flush();
+      let p = i + 1; // where the next body starts
+      for (const [delimiter, isQuoted, strip] of heredocs.splice(0)) {
+        let j = p;
+        for (let eol; j < src.length; j = eol + 1) {
+          eol = to(src.indexOf("\n", j));
+          if (src.slice(j, eol).replace(strip ? /^\t+/ : /^$/, "") === delimiter) break;
+        }
+        if (!isQuoted) out.push(...commands(src.slice(p, j), true));
+        p = to(src.indexOf("\n", j)) + 1;
+      }
+      i = p - 1;
+    } else if (";&|()".includes(c)) flush();
+    else add(c);
+  }
+  while (frames.length) shut();
+  flush();
+  return out;
+}
+
+/** Decodes a `$'…'` string's escapes. */
+const ansi = (text) =>
+  text.replace(/\\(x[\da-fA-F]{1,2}|u[\da-fA-F]{1,4}|[0-7]{1,3}|.)/gs, (_, e) =>
+    /^[xu]/.test(e)
+      ? String.fromCodePoint(Number.parseInt(e.slice(1), 16))
+      : /^[0-7]/.test(e)
+        ? String.fromCharCode(Number.parseInt(e, 8))
+        : ({ a: "\x07", b: "\b", e: "\x1b", f: "\f", n: "\n", r: "\r", t: "\t", v: "\v" }[e] ?? e),
+  );
+
+/** Whether option word `w` takes the next word as its value: a long one in `long`, or a short cluster ending in a letter of `takes`. */
+const valued = (w, takes, long) =>
+  w.startsWith("--")
+    ? long.includes(w)
+    : !!takes && new RegExp(`^-[^-${takes}]*[${takes}]$`).test(w);
+
+/** Splits arguments, options anywhere, into option words (`--` excluded) and positionals, a value skipped. */
+function opts(args, takes, long = []) {
+  const flags = [];
+  const pos = [];
+  for (let k = 0, dd = false; k < args.length; k++) {
+    const w = args[k];
+    if (dd || !w.startsWith("-") || w === "-") pos.push(w);
+    else if (w === "--") dd = true;
+    else {
+      flags.push(w);
+      if (valued(w, takes, long)) k++;
+    }
+  }
+  return { flags, pos };
+}
+
+/** The guard a git invocation's arguments trip; `alias` when an inline config set an alias or include. */
+function git(args, alias) {
+  let k = 0;
+  for (let w; (w = args[k])?.startsWith("-"); k++) {
+    if (w === "--exec-path") return; // prints the path and exits
+    const value = /^(?:-[Cc]|--(?:config-env|git-dir|namespace|super-prefix|work-tree))$/.test(w)
+      ? args[++k]
+      : /^(?:-c|--config-env=)(.*)/s.exec(w)?.[1];
+    alias ||= /^-c|^--config-env/.test(w) && /^(?:alias|include(?:if)?)\./i.test(value ?? "");
+  }
+  if (alias) return "checkout";
+  const [sub, ...rest] = args.slice(k);
+  if (rest[0] === "-h" || rest[0] === "--help") return;
+  const any = (takes, long, re) => opts(rest, takes, long).flags.some((w) => re.test(w));
+  switch (sub) {
+    case "checkout": {
+      const { flags, pos } = opts(rest, "bB", ["--orphan"]);
+      const tripped =
+        rest.includes("--") ||
+        pos.length > 1 ||
+        pos.includes(".") ||
+        flags.some((w) => /^--(?:f\w*|ours|theirs|pathspec-fr[\w-]*(?:=.*)?)$|^-[^-bB]*f/s.test(w));
+      return tripped ? "checkout" : undefined;
+    }
+    case "clean":
+      return any("e", ["--exclude"], /^--d|^-[^-e]*n/) ? undefined : "clean";
+    case "push": {
+      const { flags, pos } = opts(rest, "o", ["--push-option", "--repo"]);
+      const force = flags.some((w) => /^--forc(?:e(?:-w[\w-]*)?)?(?:=|$)|^-[^-o]*f/.test(w));
+      return force || pos.some((w) => w.startsWith("+")) ? "force" : undefined;
+    }
+    case "read-tree":
+      return any("", [], /^--res|^-[^-]*u/) ? "checkout" : undefined;
+    case "reset":
+      return rest.some((w) => /^--ha(?:rd?)?(?:=|$)/.test(w)) ? "reset" : undefined;
+    case "restore":
+      return any("s", ["--source"], /^--w|^-[^-s]*W/) || !any("s", ["--source"], /^--st|^-[^-s]*S/)
+        ? "checkout"
+        : undefined;
+    case "stash":
+      return /^(?:list|show)$/.test(rest[0]) ? undefined : "stash";
+    case "switch":
+      return any("cC", [], /^--(?:di[\w-]*|force)$|^-[^-cC]*f/) ? "checkout" : undefined;
+  }
+}
+
+/**
+ * The guard one command's argv trips: past `VAR=value` words, keywords and wrappers with their options
+ * (`sudo -u me`, `mise x node@22 --`, `timeout 5`), into `sh -c`/`eval` strings and `find -exec` commands,
+ * the command word matched by basename. An inline `GIT_CONFIG_KEY_<n>=alias.…` counts as `git -c alias.…`.
+ */
+function judge(argv) {
+  let alias = false;
+  for (let i = 0; ;) {
+    const w = argv[i];
+    if (w === undefined) return;
+    if (/^[A-Za-z_]\w*\+?=/.test(w)) {
+      alias ||= /^GIT_CONFIG_KEY_\d+=(?:alias|include(?:if)?)\./i.test(w);
+      i++;
+      continue;
+    }
+    if (KEYWORDS.has(w)) {
+      i += w === "function" ? 2 : 1;
+      continue;
+    }
+    const name = w.slice(w.lastIndexOf("/") + 1);
+    const tool = name === "mise" && /^(?:x|exec)$/.test(argv[i + 1]);
+    if (tool || Object.hasOwn(WRAPPERS, name)) {
+      for (i += tool ? 2 : 1; argv[i]?.startsWith("-") && argv[i] !== "-"; i++) {
+        if (argv[i] === "--") {
+          i++;
+          break;
+        }
+        if (valued(argv[i], tool ? "Cj" : WRAPPERS[name], LONG)) i++;
+      }
+      while (tool && /^[^-].*@/.test(argv[i] ?? "")) i++;
+      if (tool && argv[i] === "--") i++;
+      i += LEADS[name] ?? 0;
+      continue;
+    }
+    if (name === "eval") return verdict(argv.slice(i + 1).join(" "));
+    if (/^(?:ba|da|fi|k|z)?sh$/.test(name)) {
+      const c = argv.findIndex((a, k) => k > i && /^-[^-]*c/.test(a));
+      return c < 0 ? undefined : verdict(argv[c + 1] ?? "");
+    }
+    if (name === "find")
+      for (let k = i + 1; k < argv.length; k++) {
+        if (!/^-(?:exec|ok)(?:dir)?$/.test(argv[k])) continue;
+        let stop = k + 1;
+        while (stop < argv.length && argv[stop] !== ";" && argv[stop] !== "+") stop++;
+        const found = judge(argv.slice(k + 1, stop));
+        if (found) return found;
+        k = stop;
+      }
+    if (name === "git") return git(argv.slice(i + 1), alias);
+    if (name === "pkill")
+      return opts(argv.slice(i + 1), "FGgJPstUu").flags.some((f) =>
+        /^--full$|^-[^-FGgJPstUu]*f/.test(f),
+      )
+        ? "pkill"
+        : undefined;
+    return;
+  }
+}
+
+/** The first guard any command in a Bash command line trips. */
+function verdict(src) {
+  for (const argv of commands(src)) {
+    const found = judge(argv);
+    if (found) return found;
+  }
+}
+
 const HOOK_MS = 10000;
 const TAKE_MS = 1500;
 
@@ -314,8 +566,7 @@ export const register = (on) => {
   });
 
   on("tool.call", { tool: "Bash" }, async ($, e, next) => {
-    const command = e.command.replace(/\\\r?\n/g, " ");
-    const reason = GUARDS[GUARD.exec(command)?.slice(1).findIndex(Boolean)]?.[1];
+    const reason = DENY[verdict(e.command)];
     if (!reason) return next(e);
     await append($, "guard", `${reason}: ${e.command.slice(0, 200)}`);
     return { deny: `perpetual: ${reason}.` };

@@ -146,10 +146,12 @@ function commands(src, body = false) {
       else if (src[i] === r && !--depth) return i;
     return src.length;
   };
-  /** whether the `((` at `i` is arithmetic: it closes with `))`, or never closes */
+  /** where the `((` at `i` ends if it is arithmetic (it closes with `))`, or never), its groups run; else -1 */
   const arithmetic = (i) => {
     const j = match(i, "(", ")");
-    return j === src.length || src[j - 1] === ")";
+    if (j < src.length && src[j - 1] !== ")") return -1;
+    text(i + 2, j - 1);
+    return j;
   };
   /** reads `src[from, to)` as text whose groups still run (`${…}`, an array literal) */
   const text = (from, to) => out.push(...nested(() => commands(src.slice(from, to), true)));
@@ -167,8 +169,9 @@ function commands(src, body = false) {
       i = j;
     } else if (c === "$" && next === "(") {
       // `$((…))` is arithmetic; `$((cmd) …)` a group opening a subshell
-      if (next === src[i + 2] && arithmetic(i + 1)) {
-        i = match(i + 1, "(", ")");
+      const j = next === src[i + 2] ? arithmetic(i + 1) : -1;
+      if (j >= 0) {
+        i = j;
         add("\0");
       } else {
         open(")");
@@ -208,7 +211,13 @@ function commands(src, body = false) {
       text(i + 1, j);
       add("\0");
       i = j;
-    } else if (c === "(" && next === "(" && word === undefined && !argv.length && arithmetic(i))
+    } else if (
+      c === "(" &&
+      next === "(" &&
+      word === undefined &&
+      !argv.length &&
+      arithmetic(i) >= 0
+    )
       i = match(i, "(", ")"); // `((…))` arithmetic, whose `<<` is a shift
     else if (c === "(" && ender === ")") {
       parens++;

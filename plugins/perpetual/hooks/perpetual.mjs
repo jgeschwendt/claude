@@ -615,8 +615,10 @@ export const register = (on) => {
 
   on("classic.Stop", ($, e, next) => beside(next, e, [hook($, "docket", ["--hook"], e)]));
 
+  // interim (owner 2026-10-28): docket runs for its answered-thread closing, but its pull is not
+  // relayed — open decisions made it ~13k tokens on every prompt; the fix belongs in docket
   on("classic.UserPromptSubmit", ($, e, next) =>
-    context(next, e, [hook($, "docket", ["--hook"], e)]),
+    beside(next, e, [hook($, "docket", ["--hook"], e)]),
   );
 
   on("command.run", { command: "docket" }, ($) => show($, "docket", ["list"]));

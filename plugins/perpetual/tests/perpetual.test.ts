@@ -272,11 +272,9 @@ test("a failing or contextless hook binary is a log line or nothing, and adds no
   expect(logs).toEqual(["perpetual: sandman recall --hook exited 1: boom"]);
 });
 
-test("UserPromptSubmit adds docket's pull; Stop and permission notifications run docket beside", async ($, on) => {
+test("UserPromptSubmit, Stop and permission notifications run docket beside; none relays its pull", async ($, on) => {
   const { inits, runs } = world(on, {}, { outs: { "docket --hook": { stdout: "- t1\n" } } });
-  expect(await $.classic.UserPromptSubmit({ prompt: "hi" })).toEqual({
-    additionalContext: ["- t1"],
-  });
+  expect(await $.classic.UserPromptSubmit({ prompt: "hi" })).toEqual({});
   expect(
     await $.classic.Stop({ last_assistant_message: "result: done", stop_hook_active: false }),
   ).toEqual({});

@@ -8,6 +8,7 @@ const CORRECTION =
 const DENY = {
   checkout:
     "never mutate to inspect — `git checkout --`/`.`/`-f`/`<rev> <path>`/`--ours`/`--pathspec-from-file`, `git switch -f`, a worktree `git restore`, `git read-tree -u`/`--reset` and a `git -c alias.…` that can hide any of them discard every uncommitted change to the path, co-resident work included; undo your own edit by re-editing",
+  deep: "the guard cannot read a command nested this deep — split it into plain commands",
   clean: "never mutate to inspect — `git clean` deletes untracked files, co-resident work included",
   force: "never force-push — push a new branch or a new commit instead",
   pkill:
@@ -33,27 +34,47 @@ const KEYWORDS = new Set([
   "}",
 ]);
 /** long options of a wrapper that take a separate value */
-const LONG = ["--adjustment", "--cd", "--chdir", "--group", "--kill-after", "--signal", "--user"];
+const LONG = [
+  "--adjustment",
+  "--cd",
+  "--chdir",
+  "--close-from",
+  "--env",
+  "--group",
+  "--host",
+  "--kill-after",
+  "--prompt",
+  "--role",
+  "--signal",
+  "--type",
+  "--user",
+];
+/** how deep a command string may nest in another (`sh -c`, `eval`, `find -exec`, heredoc, `${…}`) or a group in a line */
+const NEST = 16;
 /** a wrapper's positional words before the command it runs (`timeout 5`, `script -q <file>`) */
-const LEADS = { script: 1, timeout: 1 };
+const LEADS = { gtimeout: 1, script: 1, timeout: 1 };
 /** commands that run the argv after their options, each with its short options that take a value */
 const WRAPPERS = {
   builtin: "",
   caffeinate: "tw",
   command: "",
   doas: "Cu",
-  env: "CSu",
+  gtimeout: "ks",
+  env: "CLPSUu",
   exec: "a",
   nice: "n",
+  nocorrect: "",
+  noglob: "",
   nohup: "",
-  parallel: "",
-  script: "F",
+  parallel: "j",
+  script: "Ft",
   stdbuf: "eio",
   sudo: "CDghpRrTtUu",
   time: "fo",
   timeout: "ks",
-  watch: "dn",
-  xargs: "adEILnPs",
+  watch: "n",
+  xargs: "adEIJLnPRSs",
+  xcrun: "",
 };
 
 /**
@@ -69,6 +90,8 @@ function commands(src, body = false) {
   const heredocs = []; // [delimiter, quoted, strip tabs], read at the next newline
   let argv = [];
   let ender = ""; // what ends the innermost group: `)`, a backtick, or nothing at the top
+  let parens = 0; // subshells open inside the innermost `$(…)`
+  let cases = 0; // `case` statements open there, whose patterns end in `)`
   let dq = body; // inside `"…"`
   let quoted = false; // the current word has a quoted part
   let target = 0; // the next word is a redirection's target (1) or `<<`'s delimiter (2, `<<-`: 3)
@@ -78,7 +101,10 @@ function commands(src, body = false) {
   const end = () => {
     if (word === undefined) return;
     if (target > 1) heredocs.push([word, quoted, target === 3]);
-    else if (!target) argv.push(word);
+    else if (!target) {
+      if (!argv.length) cases += word === "case" ? 1 : word === "esac" ? -1 : 0;
+      argv.push(word);
+    }
     target = 0;
     quoted = false;
     word = undefined;
@@ -89,12 +115,22 @@ function commands(src, body = false) {
     argv = [];
   };
   const open = (by) => {
-    frames.push([argv, word ?? "", ender, dq, quoted, target]);
-    [argv, word, ender, dq, quoted, target] = [[], undefined, by, false, false, 0];
+    if (frames.length > 4 * NEST) throw new RangeError("nested too deep");
+    frames.push([argv, word ?? "", ender, dq, quoted, target, parens, cases]);
+    [argv, word, ender, dq, quoted, target, parens, cases] = [
+      [],
+      undefined,
+      by,
+      false,
+      false,
+      0,
+      0,
+      0,
+    ];
   };
   const shut = () => {
     flush();
-    [argv, word, ender, dq, quoted, target] = frames.pop();
+    [argv, word, ender, dq, quoted, target, parens, cases] = frames.pop();
     word += "\0";
   };
   /** the index of the `}` or `)` closing the group opened at `i`, or the end */
@@ -111,13 +147,22 @@ function commands(src, body = false) {
       quoted = true;
       if (dq && !'$`"\\\n'.includes(next)) add(c);
       else if (src[++i] !== "\n") add(next ?? "");
-    } else if (c === "$" && next === "{") add(src.slice(i, (i = match(i + 1, "{", "}")) + 1));
-    else if (c === "$" && src.startsWith("((", i + 1)) {
-      i = match(i + 1, "(", ")");
-      add("\0");
+    } else if (c === "$" && next === "{") {
+      // `${x:-$(…)}` runs its groups
+      const j = match(i + 1, "{", "}");
+      out.push(...nested(() => commands(src.slice(i + 2, j))));
+      add(src.slice(i, j + 1));
+      i = j;
     } else if (c === "$" && next === "(") {
-      open(")");
-      i++;
+      // `$((…))` is arithmetic; `$((cmd) …)` a group opening a subshell
+      const j = next === src[i + 2] ? match(i + 1, "(", ")") : -1;
+      if (j === src.length || src[j - 1] === ")") {
+        i = j;
+        add("\0");
+      } else {
+        open(")");
+        i++;
+      }
     } else if (c === "`") {
       if (ender === "`" && !dq) shut();
       else open("`");
@@ -147,7 +192,18 @@ function commands(src, body = false) {
       i += op.length - 1;
     } else if (c === "#" && word === undefined) i = to(src.indexOf("\n", i)) - 1;
     else if (c === " " || c === "\t" || c === "\r") end();
-    else if (c === ")" && ender === ")") shut();
+    else if (c === "(" && word?.endsWith("=")) {
+      i = match(i, "(", ")"); // an array literal
+      add("\0");
+    } else if (c === "(" && next === "(" && word === undefined && !argv.length)
+      i = match(i, "(", ")"); // `((…))` arithmetic, whose `<<` is a shift
+    else if (c === "(" && ender === ")") {
+      parens++;
+      flush();
+    } else if (c === ")" && ender === ")" && (parens || cases > 0)) {
+      if (parens) parens--;
+      flush();
+    } else if (c === ")" && ender === ")") shut();
     else if (c === "\n") {
       flush();
       let p = i + 1; // where the next body starts
@@ -157,7 +213,7 @@ function commands(src, body = false) {
           eol = to(src.indexOf("\n", j));
           if (src.slice(j, eol).replace(strip ? /^\t+/ : /^$/, "") === delimiter) break;
         }
-        if (!isQuoted) out.push(...commands(src.slice(p, j), true));
+        if (!isQuoted) out.push(...nested(() => commands(src.slice(p, j), true)));
         p = to(src.indexOf("\n", j)) + 1;
       }
       i = p - 1;
@@ -206,9 +262,10 @@ function git(args, alias) {
   let k = 0;
   for (let w; (w = args[k])?.startsWith("-"); k++) {
     if (w === "--exec-path") return; // prints the path and exits
-    const value = /^(?:-[Cc]|--(?:config-env|git-dir|namespace|super-prefix|work-tree))$/.test(w)
-      ? args[++k]
-      : /^(?:-c|--config-env=)(.*)/s.exec(w)?.[1];
+    const value =
+      /^(?:-[Cc]|--(?:attr-source|config-env|git-dir|namespace|super-prefix|work-tree))$/.test(w)
+        ? args[++k]
+        : /^(?:-c|--config-env=)(.*)/s.exec(w)?.[1];
     alias ||= /^-c|^--config-env/.test(w) && /^(?:alias|include(?:if)?)\./i.test(value ?? "");
   }
   if (alias) return "checkout";
@@ -221,10 +278,12 @@ function git(args, alias) {
       const tripped =
         rest.includes("--") ||
         pos.length > 1 ||
-        pos.includes(".") ||
+        /^[.:]|\/$|[*?[]/.test(pos[0]) ||
         flags.some((w) => /^--(?:f\w*|ours|theirs|pathspec-fr[\w-]*(?:=.*)?)$|^-[^-bB]*f/s.test(w));
       return tripped ? "checkout" : undefined;
     }
+    case "checkout-index":
+      return any("", ["--prefix"], /^--f|^-[^-]*f/) ? "checkout" : undefined;
     case "clean":
       return any("e", ["--exclude"], /^--d|^-[^-e]*n/) ? undefined : "clean";
     case "push": {
@@ -258,40 +317,49 @@ function judge(argv) {
     const w = argv[i];
     if (w === undefined) return;
     if (/^[A-Za-z_]\w*\+?=/.test(w)) {
-      alias ||= /^GIT_CONFIG_KEY_\d+=(?:alias|include(?:if)?)\./i.test(w);
+      alias ||= /^GIT_CONFIG_(?:KEY_\d+|PARAMETERS)=(?:.*[\s'"])?(?:alias|include(?:if)?)\./is.test(
+        w,
+      );
       i++;
       continue;
     }
+    if (/^command$/i.test(w) && /^-[^-]*[vV]/.test(argv[i + 1])) return; // names, never runs
     if (KEYWORDS.has(w)) {
       i += w === "function" ? 2 : 1;
       continue;
     }
-    const name = w.slice(w.lastIndexOf("/") + 1);
-    const tool = name === "mise" && /^(?:x|exec)$/.test(argv[i + 1]);
+    // a case-insensitive filesystem runs `GIT` as git
+    const name = w.slice(w.lastIndexOf("/") + 1).toLowerCase();
+    let x = i + 1; // mise's `x`/`exec`, past its global options
+    while (name === "mise" && argv[x]?.startsWith("-")) x += valued(argv[x], "CEj", LONG) ? 2 : 1;
+    const tool = name === "mise" && /^(?:x|exec)$/.test(argv[x]);
     if (tool || Object.hasOwn(WRAPPERS, name)) {
-      for (i += tool ? 2 : 1; argv[i]?.startsWith("-") && argv[i] !== "-"; i++) {
+      for (i = tool ? x + 1 : i + 1; argv[i]?.startsWith("-") && argv[i] !== "-"; i++) {
         if (argv[i] === "--") {
           i++;
           break;
         }
-        if (valued(argv[i], tool ? "Cj" : WRAPPERS[name], LONG)) i++;
+        if (valued(argv[i], tool ? "CEj" : WRAPPERS[name], LONG)) i++;
       }
       while (tool && /^[^-].*@/.test(argv[i] ?? "")) i++;
       if (tool && argv[i] === "--") i++;
       i += LEADS[name] ?? 0;
       continue;
     }
-    if (name === "eval") return verdict(argv.slice(i + 1).join(" "));
+    if (name === "eval") {
+      while (argv[++i]?.toLowerCase() === "eval");
+      return nested(() => verdict(argv.slice(i).join(" ")));
+    }
     if (/^(?:ba|da|fi|k|z)?sh$/.test(name)) {
       const c = argv.findIndex((a, k) => k > i && /^-[^-]*c/.test(a));
-      return c < 0 ? undefined : verdict(argv[c + 1] ?? "");
+      return c < 0 ? undefined : nested(() => verdict(argv[c + 1] ?? ""));
     }
     if (name === "find")
       for (let k = i + 1; k < argv.length; k++) {
         if (!/^-(?:exec|ok)(?:dir)?$/.test(argv[k])) continue;
         let stop = k + 1;
         while (stop < argv.length && argv[stop] !== ";" && argv[stop] !== "+") stop++;
-        const found = judge(argv.slice(k + 1, stop));
+        const found = nested(() => judge(argv.slice(k + 1, stop)));
         if (found) return found;
         k = stop;
       }
@@ -303,6 +371,19 @@ function judge(argv) {
         ? "pkill"
         : undefined;
     return;
+  }
+}
+
+let nesting = 0;
+
+/** Reads one level deeper into a nested command; past NEST levels it throws, and the hook denies. */
+function nested(read) {
+  if (nesting >= NEST) throw new RangeError("nested too deep");
+  nesting++;
+  try {
+    return read();
+  } finally {
+    nesting--;
   }
 }
 
@@ -566,7 +647,12 @@ export const register = (on) => {
   });
 
   on("tool.call", { tool: "Bash" }, async ($, e, next) => {
-    const reason = DENY[verdict(e.command)];
+    let reason;
+    try {
+      reason = DENY[verdict(e.command)];
+    } catch {
+      reason = DENY.deep; // what the guard cannot read, it cannot pass
+    }
     if (!reason) return next(e);
     await append($, "guard", `${reason}: ${e.command.slice(0, 200)}`);
     return { deny: `perpetual: ${reason}.` };

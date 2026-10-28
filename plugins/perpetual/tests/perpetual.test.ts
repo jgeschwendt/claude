@@ -602,6 +602,8 @@ test("guards deny the house-forbidden commands and .yml writes, trailing each de
       "local a=(`git stash`)",
       "((git stash) )",
       "mise x --jobs 2 -- git stash",
+      "echo $(( $(git stash) + 1 ))",
+      "(( $(git stash | wc -l) > 0 ))",
       'echo "${x:-{}"; git stash',
       'echo "${x:-\\{}"; git stash',
       'echo "$(case a in a) true;; esac; git stash)"',

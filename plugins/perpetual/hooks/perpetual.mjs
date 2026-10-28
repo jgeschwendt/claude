@@ -42,6 +42,7 @@ const LONG = [
   "--env",
   "--group",
   "--host",
+  "--jobs",
   "--kill-after",
   "--prompt",
   "--role",
@@ -92,6 +93,7 @@ function commands(src, body = false) {
   let ender = ""; // what ends the innermost group: `)`, a backtick, or nothing at the top
   let parens = 0; // subshells open inside the innermost `$(…)`
   let cases = 0; // `case` statements open there, whose patterns end in `)`
+  let lead = true; // every word of the current command so far is a keyword
   let dq = body; // inside `"…"`
   let quoted = false; // the current word has a quoted part
   let target = 0; // the next word is a redirection's target (1) or `<<`'s delimiter (2, `<<-`: 3)
@@ -102,7 +104,8 @@ function commands(src, body = false) {
     if (word === undefined) return;
     if (target > 1) heredocs.push([word, quoted, target === 3]);
     else if (!target) {
-      if (!argv.length) cases += word === "case" ? 1 : word === "esac" ? -1 : 0;
+      if (lead) cases += word === "case" ? 1 : word === "esac" ? -1 : 0;
+      lead &&= KEYWORDS.has(word);
       argv.push(word);
     }
     target = 0;
@@ -113,11 +116,12 @@ function commands(src, body = false) {
     end();
     if (argv.length) out.push(argv);
     argv = [];
+    lead = true;
   };
   const open = (by) => {
     if (frames.length > 4 * NEST) throw new RangeError("nested too deep");
-    frames.push([argv, word ?? "", ender, dq, quoted, target, parens, cases]);
-    [argv, word, ender, dq, quoted, target, parens, cases] = [
+    frames.push([argv, word ?? "", ender, dq, quoted, target, parens, cases, lead]);
+    [argv, word, ender, dq, quoted, target, parens, cases, lead] = [
       [],
       undefined,
       by,
@@ -126,20 +130,29 @@ function commands(src, body = false) {
       0,
       0,
       0,
+      true,
     ];
   };
   const shut = () => {
     flush();
-    [argv, word, ender, dq, quoted, target, parens, cases] = frames.pop();
+    [argv, word, ender, dq, quoted, target, parens, cases, lead] = frames.pop();
     word += "\0";
   };
-  /** the index of the `}` or `)` closing the group opened at `i`, or the end */
+  /** the index of the `}` or `)` closing the group opened at `i`, or the end; only `${` nests a brace */
   const match = (i, l, r) => {
     for (let depth = 0; i < src.length; i++)
-      if (src[i] === l) depth++;
+      if (src[i] === "\\") i++;
+      else if (src[i] === l && (l === "(" || src[i - 1] === "$")) depth++;
       else if (src[i] === r && !--depth) return i;
     return src.length;
   };
+  /** whether the `((` at `i` is arithmetic: it closes with `))`, or never closes */
+  const arithmetic = (i) => {
+    const j = match(i, "(", ")");
+    return j === src.length || src[j - 1] === ")";
+  };
+  /** reads `src[from, to)` as text whose groups still run (`${…}`, an array literal) */
+  const text = (from, to) => out.push(...nested(() => commands(src.slice(from, to), true)));
   for (let i = 0; i < src.length; i++) {
     const c = src[i];
     const next = src[i + 1];
@@ -148,16 +161,14 @@ function commands(src, body = false) {
       if (dq && !'$`"\\\n'.includes(next)) add(c);
       else if (src[++i] !== "\n") add(next ?? "");
     } else if (c === "$" && next === "{") {
-      // `${x:-$(…)}` runs its groups
       const j = match(i + 1, "{", "}");
-      out.push(...nested(() => commands(src.slice(i + 2, j))));
+      text(i + 2, j);
       add(src.slice(i, j + 1));
       i = j;
     } else if (c === "$" && next === "(") {
       // `$((…))` is arithmetic; `$((cmd) …)` a group opening a subshell
-      const j = next === src[i + 2] ? match(i + 1, "(", ")") : -1;
-      if (j === src.length || src[j - 1] === ")") {
-        i = j;
+      if (next === src[i + 2] && arithmetic(i + 1)) {
+        i = match(i + 1, "(", ")");
         add("\0");
       } else {
         open(")");
@@ -193,18 +204,23 @@ function commands(src, body = false) {
     } else if (c === "#" && word === undefined) i = to(src.indexOf("\n", i)) - 1;
     else if (c === " " || c === "\t" || c === "\r") end();
     else if (c === "(" && word?.endsWith("=")) {
-      i = match(i, "(", ")"); // an array literal
+      const j = match(i, "(", ")"); // an array literal
+      text(i + 1, j);
       add("\0");
-    } else if (c === "(" && next === "(" && word === undefined && !argv.length)
+      i = j;
+    } else if (c === "(" && next === "(" && word === undefined && !argv.length && arithmetic(i))
       i = match(i, "(", ")"); // `((…))` arithmetic, whose `<<` is a shift
     else if (c === "(" && ender === ")") {
       parens++;
       flush();
-    } else if (c === ")" && ender === ")" && (parens || cases > 0)) {
-      if (parens) parens--;
-      flush();
-    } else if (c === ")" && ender === ")") shut();
-    else if (c === "\n") {
+    } else if (c === ")" && ender === ")") {
+      end(); // counts a pending `esac`
+      if (parens) {
+        parens--;
+        flush();
+      } else if (cases > 0) flush();
+      else shut();
+    } else if (c === "\n") {
       flush();
       let p = i + 1; // where the next body starts
       for (const [delimiter, isQuoted, strip] of heredocs.splice(0)) {
@@ -278,12 +294,14 @@ function git(args, alias) {
       const tripped =
         rest.includes("--") ||
         pos.length > 1 ||
-        /^[.:]|\/$|[*?[]/.test(pos[0]) ||
+        /^\.|^:\/?$|\/$|[*?[]/.test(pos[0]) ||
         flags.some((w) => /^--(?:f\w*|ours|theirs|pathspec-fr[\w-]*(?:=.*)?)$|^-[^-bB]*f/s.test(w));
       return tripped ? "checkout" : undefined;
     }
     case "checkout-index":
-      return any("", ["--prefix"], /^--f|^-[^-]*f/) ? "checkout" : undefined;
+      return any("", ["--prefix"], /^--f|^-[^-]*f/) && !rest.some((w) => w.startsWith("--prefix"))
+        ? "checkout"
+        : undefined;
     case "clean":
       return any("e", ["--exclude"], /^--d|^-[^-e]*n/) ? undefined : "clean";
     case "push": {

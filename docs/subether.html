@@ -91,8 +91,9 @@ svg.is-focus .chart-node.is-lit rect:first-child { stroke: var(--ui-fg); }
   <p class="eyebrow">the harness's Claude Code mod</p>
   <p class="lead docs-lead"><code class="code">subether</code> is the from-scratch successor of
     <code class="code">perpetual</code>, built on native mod events: the gauge row under the prompt,
-    the injected pane, the Bash and <code class="code">.yml</code> guards and the daily tool log are
-    live; the System One markers, docket, session end and the shift band are to come. Its contract is
+    the injected pane, the Bash and <code class="code">.yml</code> guards, the daily tool log, the System
+    One judged markers and the shadow check are live; the subagent pin, docket, the session-end take and
+    the shift band are to come. Its contract is
     <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/README.md">plugins/subether/README.md</a>;
     this page is the design and what is open.</p>
   <nav class="row docs-toc" aria-label="sections">
@@ -154,7 +155,11 @@ svg.is-focus .chart-node.is-lit rect:first-child { stroke: var(--ui-fg); }
     <li><strong>at cutover</strong> — <code class="code">claude plugin install
       subether@jgeschwendt</code> from the marketplace
       (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/.claude-plugin/marketplace.json">.claude-plugin/marketplace.json</a>),
-      then the <code class="code">CLAUDE_CODE_PLUGIN_DIRS</code> entry is dropped.</li>
+      then the <code class="code">CLAUDE_CODE_PLUGIN_DIRS</code> entry is dropped. A relative-path plugin
+      of a marketplace added from a local path loads in place too (Claude Code 2.1.318 docs), so no
+      <code class="code">version</code> bump per change; check its <code class="code">installPath</code>
+      then. Until cutover <code class="code">mise run link</code>'s mod check is broken on this branch: it
+      still reads <code class="code">plugins/perpetual</code>.</li>
     <li><strong>perpetual is gone</strong> — uninstalled 2026-11-06 (owner: "make sure we are no
       longer running perpetual too, remove the plugin definition to be safe"): its
       <code class="code">enabledPlugins</code> row and cache removed. Until chunks 5–8 land there is no
@@ -176,7 +181,8 @@ claude plugin test plugins/subether</pre>
     <div class="chart" id="hook-graph"><noscript><p class="docs-note">The hook graph needs JavaScript; its data is <a class="link" href="data/hooks.json">docs/data/hooks.json</a>.</p></noscript></div>
     <figcaption>The hook graph: every registration in register.tsx, what it reads and writes, and where its effects land. Data: <a href="data/hooks.json">docs/data/hooks.json</a>, checked by the gate.</figcaption>
   </figure>
-  <table>
+  <div class="table-wrap">
+  <table data-table>
     <thead>
       <tr><th>event</th><th>matcher</th><th>does</th><th>status</th></tr>
     </thead>
@@ -184,15 +190,17 @@ claude plugin test plugins/subether</pre>
       <tr><td><code class="code">agent.spawn</code></td><td>—</td><td>pin a spawn with no <code class="code">model</code>, not a fork, to <code class="code">opus</code></td><td>chunk 5</td></tr>
       <tr><td><code class="code">classic.Notification</code></td><td><code class="code">agent_needs_input</code>, <code class="code">idle_prompt</code>, <code class="code">permission_prompt</code></td><td><code class="code">docket --hook</code> with <code class="code">e</code></td><td>chunk 6</td></tr>
       <tr><td><code class="code">command.run</code></td><td><code class="code">subether</code></td><td>open the injected pane</td><td>live</td></tr>
-      <tr><td rowspan="2"><code class="code">prompt.submit</code></td><td rowspan="2">—</td><td>first prompt: <code class="code">sandman recall</code> as one capped <code class="code">context</code> block</td><td>live</td></tr>
-      <tr><td>System One markers; per-prompt docket digest; the other first-prompt sources</td><td>chunks 5, 6, 7</td></tr>
-      <tr><td><code class="code">session.end</code></td><td>—</td><td><code class="code">sandman take</code> and the session's docket resolve under the 1.5 s budget</td><td>chunks 5, 6</td></tr>
+      <tr><td rowspan="3"><code class="code">prompt.submit</code></td><td rowspan="2">—</td><td>first prompt: <code class="code">sandman recall</code> as one capped <code class="code">context</code> block</td><td>live</td></tr>
+      <tr><td>per-prompt docket digest; the other first-prompt sources</td><td>chunks 6, 7</td></tr>
+      <tr><td><code class="code">composer</code></td><td>the System One <a class="link" href="#markers">markers</a>, unawaited; each at 0.8 trailed</td><td>live</td></tr>
+      <tr><td><code class="code">session.end</code></td><td>—</td><td><code class="code">sandman take --hook</code>, then the session's docket resolve beside it, under the 1.5 s budget</td><td>chunks 5, 6</td></tr>
       <tr><td><code class="code">session.measure</code></td><td>—</td><td>the gauge reading; the five-hour window → <code class="code">window.json</code></td><td>live</td></tr>
       <tr><td rowspan="2"><code class="code">session.start</code></td><td>—</td><td>the gauge's first reading and 15 s poll; later the band's commands and timer</td><td>live · chunk 8</td></tr>
       <tr><td><code class="code">isInteractive</code></td><td>open the pane unasked, register <code class="code">/subether</code></td><td>live</td></tr>
       <tr><td rowspan="3"><code class="code">tool.call</code></td><td>—</td><td>the daily tool log; registered first, so outermost</td><td>live</td></tr>
       <tr><td><code class="code">Bash</code></td><td>the Bash guard</td><td>live</td></tr>
       <tr><td><code class="code">Edit</code>, <code class="code">Write</code></td><td>deny a <code class="code">.yml</code> path</td><td>live</td></tr>
+      <tr><td><code class="code">tool.check</code></td><td>—</td><td>the shadow check: core's decision unchanged, an asked call judged beside it</td><td>live</td></tr>
       <tr><td><code class="code">turn.step</code></td><td>—</td><td>the gauge's effort flag</td><td>live</td></tr>
       <tr><td><code class="code">turn.complete</code></td><td>main loop</td><td><code class="code">docket --hook</code> with a synthesized Stop payload</td><td>chunk 6</td></tr>
       <tr><td rowspan="3"><code class="code">ui.render</code></td><td><code class="code">PromptHint</code></td><td>the gauge row</td><td>live</td></tr>
@@ -200,6 +208,7 @@ claude plugin test plugins/subether</pre>
       <tr><td><code class="code">AbovePrompt</code></td><td>the shift row</td><td>chunk 8</td></tr>
     </tbody>
   </table>
+  </div>
   <p class="docs-note">Every binary runs from <code class="code">~/.local/bin</code> and never
     raises: a failure is one dim log line
     (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/sandman.ts">plugins/subether/hooks/sandman.ts</a>).</p>
@@ -252,16 +261,22 @@ claude plugin test plugins/subether</pre>
       <code class="code">· failed</code>); a press expands it over its text or error.</li>
     <li><strong>opening</strong> — unasked at an interactive session's start, placed from 144
       columns; <code class="code">/subether</code> opens it at any width, mid-turn too.</li>
-    <li><strong>the judge line</strong> — the System One gate's state will show here
-      (<a class="link" href="#markers">markers</a>); landing with chunk 5.</li>
+    <li><strong>the judge line</strong> — first, dim: <code class="code">judge · typesafe up · kev
+      up</code>, or a judge down until a time or for the session, with why
+      (<a class="link" href="#markers">markers</a>). Beneath the injected rows, a row per judged prompt
+      (the newest 20), its likeliest marker and probability, expanding to all four and the judge's
+      tokens.</li>
   </ul>
 </section>
 
 <section class="docs-section" id="markers" data-component="markers">
   <header>
     <h2 class="h2">Markers</h2>
-    <p class="docs-note">Designed, landing with chunk 5: no marker hook is in the tree yet. A System
-      One judge replaces perpetual's regex correction capture.</p>
+    <p class="docs-note">Live:
+      <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/markers.ts">plugins/subether/hooks/markers.ts</a>
+      on <code class="code">prompt.submit</code>, the client
+      <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/judge.ts">plugins/subether/hooks/judge.ts</a>.
+      A System One judge replaces perpetual's regex correction capture.</p>
   </header>
   <p>Owner, 2026-11-06: "lets only classify sessions when we have tokens available in the typesafe
     api or local classification model … fan out and detect markers to add to the trail"; "drop the
@@ -280,6 +295,15 @@ claude plugin test plugins/subether</pre>
     <li><strong>a learned gate</strong> — a free <code class="code">GET /v1/models</code> at start;
       429/529 marks a backend down for its retry-after, 401/403 for the session, a Kev timeout busy for
       60 s. Its state shows in the pane.</li>
+    <li><strong>check</strong> — the same judge shadows auto mode's classifier
+      (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/check.ts">plugins/subether/hooks/check.ts</a>,
+      on <code class="code">tool.check</code>): core's decision is returned unchanged, and each
+      <code class="code">ask</code> on a real call the tool does not report read-only is judged unawaited on
+      <code class="code">destructive</code>, <code class="code">outbound</code>,
+      <code class="code">secrets</code> and <code class="code">routine</code>, the answer a
+      <code class="code">check</code> line in the <a class="link" href="#log">tool log</a> joined to the
+      call's. Shadow only, until a week of lines sets the thresholds at which it answers
+      <code class="code">allow</code> or <code class="code">deny</code> itself.</li>
   </ul>
 </section>
 
@@ -346,12 +370,16 @@ claude plugin test plugins/subether</pre>
   </header>
   <ul class="stack claims" role="list">
     <li><strong>in use</strong> — <code class="code">effort</code> (the gauge's flag),
-      <code class="code">expanded</code> (the pane's open rows), <code class="code">gauge</code> (the
-      last usage reading), <code class="code">injected</code> (the attached blocks, failures too),
+      <code class="code">expanded</code> (the pane's open rows), <code class="code">gate</code> (each
+      judge's availability), <code class="code">gauge</code> (the last usage reading),
+      <code class="code">injected</code> (the attached blocks, failures too),
+      <code class="code">judged</code> (the newest 20 judged prompts), <code class="code">opened</code>
+      (whether a composer prompt was seen, to tell a <code class="code">--bg</code> brief apart),
+      <code class="code">prompts</code> (the last 3 judged heads, for the repeat question),
       <code class="code">samples</code> (the token trend for the ETA).</li>
-    <li><strong>declared for later chunks</strong> — <code class="code">last</code> and
-      <code class="code">shift</code> (the band), <code class="code">opened</code>,
-      <code class="code">prompts</code>, <code class="code">seen</code>.</li>
+    <li><strong>declared, planned</strong> — <code class="code">last</code> and
+      <code class="code">shift</code> (the band, chunk 8), <code class="code">seen</code> (the docket
+      threads the per-prompt digest has shown, chunk 7).</li>
     <li><strong>reset</strong> — <code class="code">/clear</code>, <code class="code">/resume</code>
       and <code class="code">/branch</code> reset every atom to its default: the next prompt recalls
       again, the pane empties and the gauge waits for its next reading.</li>
@@ -404,10 +432,14 @@ claude plugin test plugins/subether</pre>
       default.</li>
     <li>✔ 2026-11-06 <strong>Guard and tool log</strong> (owner: "lets do the next bit the tool calls
       … i also want every tool call logged to a file, one log per day").</li>
-    <li><strong>Sandman</strong>: the System One <a class="link" href="#markers">markers</a> (owner:
-      "we will abandon the dowse work for this path"), the <code class="code">agent.spawn</code> pin,
-      <code class="code">session.end</code> → <code class="code">sandman take</code>, and the context
-      cap's <code class="code">guard</code> trail.</li>
+    <li><strong>Sandman</strong>: ✔ 2026-11-06 the System One <a class="link" href="#markers">markers</a>
+      (owner: "we will abandon the dowse work for this path"); still to come: the
+      <code class="code">agent.spawn</code> pin, <code class="code">session.end</code> →
+      <code class="code">sandman take --hook</code>, and the context cap's <code class="code">guard</code>
+      trail.</li>
+    <li>✔ 2026-11-06 <strong>Shadow check</strong> (owner: "i'd rather use my typesafe tokens for
+      automode than my anthropic ones, lets shadow so we can shift spend to my typesafe subscription"):
+      the <a class="link" href="#markers">check</a>.</li>
     <li><strong>Docket</strong>: digest, dead-session sweep, synthesized Stop, Notification and
       UserPromptSubmit payloads, the session's resolve at end.</li>
     <li><strong>Context</strong>: the other first-prompt sources (report, docket digest, sweep) and
@@ -421,7 +453,8 @@ claude plugin test plugins/subether</pre>
   <ol class="stack">
     <li><code class="code">mise run link</code>
       (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/.mise/tasks/link">.mise/tasks/link</a>)
-      still reads <code class="code">plugins/perpetual</code>; point it at subether.</li>
+      still reads <code class="code">plugins/perpetual</code>, so it is broken on this branch; point it at
+      subether.</li>
     <li>AGENTS "Working here", and this repo's design page sections for the mod and marketplace.</li>
     <li>The README behaviour table brought level with the tree; the version bumped.</li>
     <li><code class="code">settings.json</code>: <code class="code">enabledPlugins</code> gains

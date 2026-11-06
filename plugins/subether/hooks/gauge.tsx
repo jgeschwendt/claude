@@ -1,5 +1,5 @@
 /**
-The gauge row under the prompt: the retired Rust statusline's line (docs/index.html#gauge), drawn at the hint line's site
+The gauge row under the prompt: the retired Rust statusline's line (docs/subether.html#gauge), drawn at the hint line's site
 instead of a statusLine command, the engine's hint kept beneath.
 */
 import {

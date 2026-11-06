@@ -42,15 +42,12 @@
   <p class="eyebrow">the Claude Code harness</p>
   <p class="lead docs-lead">What shapes a Claude Code session is tracked here; what sessions accrete
     stays in <code class="code">~/.claude</code>. The parts: the config linked into
-    <code class="code">~/.claude</code>, the <code class="code">perpetual</code> mod, the gauge row,
-    window clock and injected pane of its successor <code class="code">subether</code>, and the local marketplace that
+    <code class="code">~/.claude</code>, the <code class="code">subether</code> mod, and the local marketplace that
     ships the mods. <code class="code">AGENTS.md</code> is the map; this page is the design and what is
     open.</p>
   <nav class="row docs-toc" aria-label="sections">
     <a class="pill" href="#link">link</a>
-    <a class="pill" href="#mod">mod</a>
-    <a class="pill" href="#gauge">gauge</a>
-    <a class="pill" href="#pane">pane</a>
+    <a class="pill" href="#subether">subether</a>
     <a class="pill" href="#gate">gate</a>
     <a class="pill" href="#plan">plan</a>
   </nav>
@@ -66,7 +63,9 @@
   <p><code class="code">mise run link</code> (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/.mise/tasks/link">.mise/tasks/link</a>)
     links <code class="code">CLAUDE.md</code>, <code class="code">rules/</code>,
     <code class="code">settings.json</code>, <code class="code">settings.local.json</code> and
-    <code class="code">skills/</code>, then compares the installed mod with the trunk's.</p>
+    <code class="code">skills/</code>, then compares the installed mod with the trunk's. On the
+    <code class="code">perpetual/rewrite</code> branch that compare is broken until cutover: it still reads
+    <code class="code">plugins/perpetual/.claude-plugin/plugin.json</code>.</p>
   <ul class="stack claims" role="list">
     <li><strong>never overwrites</strong> — an entry that is a real file or a foreign link is
       <code class="code">drift:</code> and left alone; merge it into the checkout by hand, then
@@ -84,95 +83,22 @@
   </ul>
 </section>
 
-<section class="docs-section" id="mod" data-component="mod">
+<section class="docs-section" id="subether" data-component="subether">
   <header>
-    <h2 class="h2">The perpetual mod</h2>
-    <p class="docs-note"><code class="code">settings.json</code> wires no hooks; the mod does. Its
-      behaviour is specified in
-      <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/perpetual/README.md">plugins/perpetual/README.md</a>.</p>
+    <h2 class="h2">The subether mod</h2>
+    <p class="docs-note"><code class="code">settings.json</code> wires no hooks; the mod does. Its design is
+      <a class="link" href="subether.html">subether.html</a>, its contract
+      <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/README.md">plugins/subether/README.md</a>.</p>
   </header>
-  <ul class="stack claims" role="list">
-    <li><strong>session hooks</strong> — runs <code class="code">sandman</code>'s
-      (<code class="code">recall</code>, <code class="code">report</code>,
-      <code class="code">take</code>) and <code class="code">docket --hook</code> from
-      <code class="code">~/.local/bin</code>; a missing binary, timeout or non-zero exit adds
-      nothing and never blocks.</li>
-    <li><strong>guards</strong> — denies the Bash commands the house rules forbid
-      (<code class="code">pkill -f</code>, tree discards, force pushes, <code class="code">git
-      stash</code>, <code class="code">git clean</code>) and writes to <code class="code">*.yml</code>,
-      trailing each denial to sandman; pins an <code class="code">agent.spawn</code> with no
-      <code class="code">model</code> to <code class="code">opus</code>. The guard tokenizes the
-      command as Bash would — quotes removed, each <code class="code">$(…)</code>, backtick,
-      <code class="code">sh -c</code> or <code class="code">eval</code> string a command of its own,
-      heredoc bodies skipped — then matches each command's argv, so quoted text never trips it and
-      quoting never hides a command. In <code class="code">subether</code> the guard is live on
-      <code class="code">tool.call</code>, its tokenizer the same one, typed.</li>
-    <li><strong>tool log</strong> — <code class="code">subether</code> appends one JSON line per tool
-      call (arguments cut at 2,000 characters, outcome, size of what the model read; never the
-      result) to <code class="code">~/.local/state/subether/tools/&lt;local day&gt;.jsonl</code>.</li>
-    <li><strong>window clock</strong> — now the <code class="code">subether</code> gauge's
-      (<a class="link" href="#gauge">below</a>).</li>
-    <li><strong>judged markers</strong> — <code class="code">subether</code> asks a System One judge
-      (TypeSafe, then the local Kev, nothing when both are down) whether each typed prompt corrects,
-      repeats an instruction, states a preference or approves, and trails each judged at 0.8 or more
-      as a <code class="code">correction</code> event.</li>
-    <li><strong>band</strong> — the sandman shift above the prompt, and <code class="code">/shift</code>,
-      <code class="code">/docket</code>, <code class="code">/trail</code>.</li>
-  </ul>
-  <h3 class="h3" id="marketplace">Marketplace</h3>
-  <p>The repo is the local marketplace <code class="code">jgeschwendt</code>
+  <p><code class="code">subether</code>, the from-scratch successor of <code class="code">perpetual</code>
+    (uninstalled 2026-11-06), attaches <code class="code">sandman recall</code> to a session's first prompt
+    and shows it in a pane, guards Bash and <code class="code">*.yml</code> writes by the house rules,
+    logs every tool call, judges typed prompts and asked tool calls with a System One model, and keeps the
+    gauge row and five-hour window clock; the docket hooks, the session-end take and the shift band are to
+    come. The repo is the local marketplace <code class="code">jgeschwendt</code>
     (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/.claude-plugin/marketplace.json">.claude-plugin/marketplace.json</a>),
-    listing <code class="code">perpetual</code> and <code class="code">monitor</code>
-    (<code class="code">skills/monitor</code>). An install is a versioned copy under
-    <code class="code">~/.claude/plugins/cache/</code>, not the trunk; <code class="code">mise run
-    link</code> reports <code class="code">differs:</code> until it is updated.</p>
-</section>
-
-<section class="docs-section" id="gauge" data-component="gauge">
-  <header>
-    <h2 class="h2">Gauge</h2>
-    <p class="docs-note">The <code class="code">subether</code> mod's row under the prompt, in the hint line's place; segment
-      rules in
-      <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/gauge.tsx">plugins/subether/hooks/gauge.tsx</a>.
-      It replaces the Rust <code class="code">statusline</code> crate, retired 2026-11-05, and
-      <code class="code">settings.json</code> sets no <code class="code">statusLine</code>.</p>
-  </header>
-  <pre class="snippet">Fable 5 (low) ██████████▎░░░░░░░░░░░ 52% ≈46m · $1.20 · 5h 31%† ↻ 10:50pm</pre>
-  <ul class="stack claims" role="list">
-    <li><strong>the row</strong> — model, the main loop's effort, context use against the
-      auto-compact threshold with an ETA, session cost, the five-hour limit and its reset. Every
-      segment is conditional; the bar takes the width the rest leaves.</li>
-    <li><strong>the reading</strong> — <code class="code">$.session.usage()</code>, on each
-      <code class="code">session.measure</code> and a 15 s poll in interactive sessions, so
-      mid-turn growth shows.</li>
-    <li><strong>the window clock</strong> — each reading carrying a five-hour window writes
-      <code class="code">$XDG_STATE_HOME/claude/window.json</code> for
-      <code class="code">sandman shift clock</code>, through a temp file moved into place. Never
-      rolls back: a window behind the stored live one, not resetting within 6 h, or with a
-      percentage outside 0–100 writes nothing.</li>
-  </ul>
-</section>
-
-<section class="docs-section" id="pane" data-component="pane">
-  <header>
-    <h2 class="h2">Injected pane</h2>
-    <p class="docs-note">The <code class="code">subether</code> mod's right pane,
-      <code class="code">subether · injected</code>:
-      <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/context.ts">plugins/subether/hooks/context.ts</a>
-      attaches,
-      <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/pane.tsx">plugins/subether/hooks/pane.tsx</a>
-      draws.</p>
-  </header>
-  <ul class="stack claims" role="list">
-    <li><strong>the stand-in</strong> — no native event injects at session start, so the
-      session's first prompt (and the first after <code class="code">/clear</code>) attaches
-      <code class="code">sandman recall</code> as one context block, capped at 10,000 characters.
-      Until cutover the installed <code class="code">perpetual</code> injects it too, so a session
-      carries it twice.</li>
-    <li><strong>the pane</strong> — each attached block, newest first: its time, source and size,
-      then its text. Opened unasked in interactive sessions from 144 columns;
-      <code class="code">/subether</code> opens it at any width.</li>
-  </ul>
+    listing <code class="code">subether</code> and <code class="code">monitor</code>
+    (<code class="code">skills/monitor</code>).</p>
 </section>
 
 <section class="docs-section" id="gate" data-component="gate">
@@ -198,16 +124,14 @@
   <h3 class="h3">Next</h3>
   <p class="docs-note">The only plan, in order; a landing that changes it edits it here.</p>
   <ol class="stack" id="next">
-    <li><strong>Figures</strong>: draw the <code class="code">claude figures</code> canvas in Claude
-      Design — the link flow; the mod's hook fan-out to sandman and docket — and wire
-      <code class="code">docs/figures/</code> and <code class="code">mise run figures</code> like the
-      siblings.</li>
+    <li><strong>Figures</strong>: the <code class="code">claude figures</code> canvas,
+      <code class="code">docs/figures/</code> and <code class="code">mise run figures</code> are wired, with
+      subether's session-events board; still to draw: the link flow.</li>
     <li><strong>Publishing</strong>: enable GitHub Pages for <code class="code">docs/</code> and add
       the gigantic.dev/claude/ proxy — owner's step.</li>
-    <li><strong>Live mod lags trunk</strong>: installed perpetual 0.2.3, trunk 0.2.12 (the
-      tokenizer guard). Once the local
-      trunk is level with origin, <code class="code">claude plugin update perpetual@jgeschwendt</code>
-      — owner's step.</li>
+    <li><strong>subether cutover</strong>: chunks 5–9 on
+      <a class="link" href="subether.html#plan">subether.html</a>; then
+      <code class="code">claude plugin install subether@jgeschwendt</code> — owner's step.</li>
   </ol>
 </section>
 

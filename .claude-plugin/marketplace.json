@@ -13,7 +13,7 @@
     {
       "name": "subether",
       "source": "./plugins/subether",
-      "description": "The harness's session hooks, house-rule guards, window clock and shift band."
+      "description": "The harness's first-prompt recall, injected pane, house-rule guards, tool log, judged markers, shadow check, gauge and window clock."
     }
   ]
 }

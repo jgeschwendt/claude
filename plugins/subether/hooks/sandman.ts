@@ -1,6 +1,6 @@
 /**
-The `~/.local/bin` runner, and the trail append perpetual's `append($, kind, rationale)` made. Each is a function
-declaration: past an import the engine follows `$` only into one (`claude plugin validate`)
+The `~/.local/bin` runner, the trail append perpetual's `append($, kind, rationale)` made, and the daily tool log's
+append. Each is a function declaration: past an import the engine follows `$` only into one (`claude plugin validate`)
 */
 import type { EngineInterface, ProcessRunInit } from 'claude-code';
 
@@ -50,4 +50,28 @@ async function trail($: EngineInterface, kind: string, rationale: string): Promi
   await run($, [...argv, '--ref', `session:${id}`, ...tail], { timeoutMs: TRAIL_TIMEOUT });
 }
 
-export { run, trail };
+/**
+Appends one JSON line to the daily tool log, `<dir>/<yyyy-mm-dd>.jsonl` for the local day of `at`: `<dir>` is
+`$CLAUDE_TOOL_LOG_DIR`, else `$XDG_STATE_HOME/subether/tools`, else `~/.local/state/subether/tools`. `cat >>` opens it
+O_APPEND, so a line written in one `write` lands whole beside other sessions' lines; a failed append rejects
+*/
+async function append($: EngineInterface, at: number, line: string): Promise<void> {
+  const day = Temporal.Instant.fromEpochMilliseconds(at)
+    .toZonedDateTimeISO(Temporal.Now.timeZoneId())
+    .toPlainDate()
+    .toString();
+  const [override = '', state = '', home = ''] = await Promise.all([
+    $.env.get('CLAUDE_TOOL_LOG_DIR'),
+    $.env.get('XDG_STATE_HOME'),
+    $.env.get('HOME'),
+  ]);
+  const base = state === '' ? `${home}/.local/state` : state;
+  const path = `${override === '' ? `${base}/subether/tools` : override}/${day}.jsonl`;
+  const script = 'mkdir -p "$(dirname "$1")" && cat >> "$1"';
+  const appended = await $.process.run(['/bin/sh', '-c', script, '_', path], { stdin: line });
+  if (appended.exitCode !== 0) {
+    throw new Error(`${path}: ${appended.stderr.trim()}`);
+  }
+}
+
+export { append, run, trail };

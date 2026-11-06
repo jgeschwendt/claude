@@ -4,6 +4,7 @@ The daily tool log: one JSON line per tool call, built-in and MCP, main loop and
 */
 import type { EngineInterface, Hook, ToolCallInput, ToolCallResult } from 'claude-code';
 import { field } from './gauge';
+import { append } from './sandman';
 
 /**
 how much of each string argument a line keeps
@@ -14,23 +15,22 @@ the keys `tool.call` carries beside the tool's own arguments
 */
 const RESERVED = new Set(['agentId', 'consent', 'requestMeta', 'tool', 'tool_use_id']);
 
-const present = (value: string | undefined): string | undefined =>
-  value === '' ? undefined : value;
-
 /**
-Every string in `value` cut at 2,000 characters, `…[cut <n> chars]` naming the rest
+Every string in `value` cut at `limit` characters (2,000 by default), `…[cut <n> chars]` naming the rest
 */
-const cut = (value: unknown): unknown => {
+const cut = (value: unknown, limit = CUT): unknown => {
   if (typeof value === 'string') {
-    return value.length > CUT ? `${value.slice(0, CUT)}…[cut ${value.length - CUT} chars]` : value;
+    return value.length > limit
+      ? `${value.slice(0, limit)}…[cut ${value.length - limit} chars]`
+      : value;
   }
   if (Array.isArray(value)) {
-    return value.map((item: unknown) => cut(item));
+    return value.map((item: unknown) => cut(item, limit));
   }
   if (typeof value !== 'object' || value === null) {
     return value;
   }
-  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, cut(item)]));
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, cut(item, limit)]));
 };
 
 /**
@@ -53,18 +53,6 @@ const bashOf = (tool: string, result: ToolCallResult): string | undefined => {
 };
 
 /**
-The log directory: `$CLAUDE_TOOL_LOG_DIR`, else `$XDG_STATE_HOME/subether/tools`, else `~/.local/state/subether/tools`
-*/
-const directory = async ($: EngineInterface): Promise<string> => {
-  const [override, state, home] = await Promise.all([
-    $.env.get('CLAUDE_TOOL_LOG_DIR'),
-    $.env.get('XDG_STATE_HOME'),
-    $.env.get('HOME'),
-  ]);
-  return present(override) ?? `${present(state) ?? `${home ?? ''}/.local/state`}/subether/tools`;
-};
-
-/**
 `value` as JSON, `null` when absent
 */
 const nullable = (value: string | undefined): string =>
@@ -78,7 +66,7 @@ const outcomeOf = (result: ToolCallResult): 'denied' | 'error' | 'ok' => {
 };
 
 /**
-The call's line, keys in the wire order: at, session, agent, cwd, tool, id, ms, outcome, deny (a denial only), error,
+The call's line, keys in the wire order: kind (`call`), at, session, agent, cwd, tool, id, ms, outcome, deny (a denial only), error,
 readOnly, chars (what the model read, counted), bash (a Bash record only), input
 */
 const lineOf = async (
@@ -90,6 +78,7 @@ const lineOf = async (
   const [session, cwd] = await Promise.all([$.session.id(), $.session.cwd()]);
   // each value as JSON, absent ones left out
   const pairs: [string, string | undefined][] = [
+    ['kind', '"call"'],
     [
       'at',
       JSON.stringify(
@@ -117,37 +106,20 @@ const lineOf = async (
 };
 
 /**
-Appends the call's line to the day's file, the day local: `cat >>` opens it O_APPEND, so a line written in one `write` lands whole beside other sessions' lines
-*/
-const record = async (
-  $: EngineInterface,
-  e: ToolCallInput,
-  call: { at: number; ms: number; result: ToolCallResult },
-): Promise<void> => {
-  const day = Temporal.Instant.fromEpochMilliseconds(call.at)
-    .toZonedDateTimeISO(Temporal.Now.timeZoneId())
-    .toPlainDate()
-    .toString();
-  const [line, folder] = await Promise.all([lineOf($, e, call), directory($)]);
-  const path = `${folder}/${day}.jsonl`;
-  const script = 'mkdir -p "$(dirname "$1")" && cat >> "$1"';
-  const appended = await $.process.run(['/bin/sh', '-c', script, '_', path], { stdin: line });
-  if (appended.exitCode !== 0) {
-    throw new Error(`${path}: ${appended.stderr.trim()}`);
-  }
-};
-
-/**
 Logs every tool call once it settles, denied ones included, since this hook runs before the guards. The append is not awaited, so the model's turn never waits on it; a failed one is one dim log line
 */
 const log: Hook<'tool.call'> = async ($, e, next) => {
   const at = await $.clock.now();
   const result = await next(e);
   const ms = (await $.clock.now()) - at;
-  record($, e, { at, ms, result }).catch((error: unknown) => {
-    $.ui.log(`subether tool log: ${String(error)}`);
-  });
+  lineOf($, e, { at, ms, result })
+    .then(async (line) => {
+      await append($, at, line);
+    })
+    .catch((error: unknown) => {
+      $.ui.log(`subether tool log: ${String(error)}`);
+    });
   return result;
 };
 
-export { log };
+export { cut, log };

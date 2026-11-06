@@ -96,7 +96,7 @@ test('a call appends one line, keys in wire order, to the local day’s file', a
   expect(appends).toEqual([
     {
       argv: ['/bin/sh', '-c', SCRIPT, '_', `/logs/${DAY}.jsonl`],
-      line: `{"at":"${AT}","session":"s1","agent":null,"cwd":"/w","tool":"Read","id":"tu1","ms":${TOOK},"outcome":"ok","error":false,"readOnly":true,"chars":5,"input":{"file_path":"/w/a.md"}}\n`,
+      line: `{"kind":"call","at":"${AT}","session":"s1","agent":null,"cwd":"/w","tool":"Read","id":"tu1","ms":${TOOK},"outcome":"ok","error":false,"readOnly":true,"chars":5,"input":{"file_path":"/w/a.md"}}\n`,
     },
   ]);
 });
@@ -130,6 +130,7 @@ test('a denied call is logged with its deny, the guard beneath this hook', async
     outcome: 'denied',
   });
   expect(Object.keys(line ?? {})).toEqual([
+    'kind',
     'at',
     'session',
     'agent',

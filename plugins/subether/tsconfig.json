@@ -1,0 +1,5 @@
+{
+  "compilerOptions": { "lib": ["es2023", "esnext.temporal"] },
+  "extends": "./.claude-plugin/types/tsconfig.json",
+  "include": [".claude-plugin/types", "hooks", "tests", "types"]
+}

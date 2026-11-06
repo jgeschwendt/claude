@@ -14,7 +14,7 @@ The question type determines the opening moves, what "done" looks like, and the 
 ## Causal / explanatory — "why did X happen", "what's driving Y"
 
 - **Done** = a ranked set of explanations with the evidence that discriminates between them.
-- Run lightweight Analysis of Competing Hypotheses: list the plausible explanations up front — including the boring ones (measurement change, base-rate shift, selection effect, coincidence) — then hunt evidence that *distinguishes* them. Evidence consistent with your favorite hypothesis is usually consistent with its rivals too; only diagnostic evidence moves the ranking.
+- Run lightweight Analysis of Competing Hypotheses: list the plausible explanations up front — including the boring ones (measurement change, base-rate shift, selection effect, coincidence) — then hunt evidence that _distinguishes_ them. Evidence consistent with your favorite hypothesis is usually consistent with its rivals too; only diagnostic evidence moves the ranking.
 - Track each hypothesis as a `claims.md` entry with evidence for and against.
 - Prefer disconfirmation — the fastest progress is killing hypotheses, not accumulating support.
 - Trap: narrative gravity. The most-retold story wins retellings, not evidence. Weight contemporaneous and primary accounts over retrospectives.
@@ -43,5 +43,5 @@ The question type determines the opening moves, what "done" looks like, and the 
 - **Done** = a taxonomy the reader can navigate, the current frontier with its trajectory, and the load-bearing actors named.
 - Build the taxonomy early from hubs (review papers, awesome-lists, conference tracks) and let it structure the sub-questions; revise it when the evidence disagrees with it.
 - Weight recency and date the frontier explicitly ("as of [month year]").
-- Name the camps and their disputes: fields disagree along predictable lines, and mapping the disagreement *is* the landscape.
+- Name the camps and their disputes: fields disagree along predictable lines, and mapping the disagreement _is_ the landscape.
 - Trap: hub-era lag — reviews describe the field as of a year or more ago. Run the recency sweep on each branch of the taxonomy, not just the topic as a whole.

@@ -1,0 +1,4 @@
+{
+  "description": "subether: session hooks, guards, window clock, shift band, /docket /shift /trail",
+  "modules": ["./register.tsx"]
+}

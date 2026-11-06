@@ -1,9 +1,34 @@
 amends "package://github.com/jdx/hk/releases/download/v2.5.0/hk@2.5.0#/Config.pkl"
+// --no-error-on-unmatched-pattern is load-bearing on both pre-commit steps: hk
+// selects files by glob, but bun fmt and oxlint then apply their own ignores, and
+// when every selected file is ignored (a commit touching only .stele/ lock and
+// index files, or only oxfmt.config.ts / oxlint.config.ts) oxlint exits 1 ("No
+// files found to lint") and bun fmt exits 2 ("Expected at least one target
+// file"), aborting the commit.
 hooks {
+  // Check-only: a fix step rewrites and stages the whole file, so a partly
+  // staged file would carry its unstaged hunks into the commit, and hk's only
+  // guard is `git stash`, whose stack every worktree and session shares.
+  // `bun fmt` fixes what the fmt step reports.
+  ["pre-commit"] {
+    steps {
+      ["fmt"] {
+        glob = "*.{cjs,css,js,json,jsonc,jsx,md,mdx,mjs,toml,ts,tsx,yaml}"
+        check = "bun fmt --no-error-on-unmatched-pattern --check {{files}}"
+      }
+      // No --report-unused-disable-directives: the flag would lower the config's
+      // options.reportUnusedDisableDirectives from error to warn.
+      ["oxlint"] {
+        glob = "*.{cjs,js,jsx,mjs,ts,tsx}"
+        check = "bunx --bun oxlint --no-error-on-unmatched-pattern {{files}}"
+      }
+    }
+  }
+  // The unset keeps git's hook-exported GIT_DIR & co. out of child processes.
   ["pre-push"] {
     steps {
       ["gate"] {
-        check = "unset $(git rev-parse --local-env-vars); stele check && stele emit --check && cargo clippy --all-targets -- -D warnings && cargo test && claude plugin test plugins/perpetual"
+        check = "unset $(git rev-parse --local-env-vars); bun run test && stele check && stele emit --check"
       }
     }
   }

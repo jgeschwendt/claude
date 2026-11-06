@@ -89,7 +89,7 @@ is the Workflow opt-in), every call pinned `model: 'opus'`:
 
 - One agent per subsystem (split by top-level dirs or build units),
   schema-forced: `{components: [{name, files, responsibility, dependsOn,
-dependedOnBy, publicSurface, stateOwned, smells}]}` — the `smells` field
+  dependedOnBy, publicSurface, stateOwned, smells}]}` — the `smells` field
   cites `references/smells.md` entries by name, so briefs include that file.
 - Cross-cutting agents alongside: **dependency-graph** (cycles, layering
   violations) · **duplication** · **data-flow** (who owns which state) ·
@@ -97,7 +97,7 @@ dependedOnBy, publicSurface, stateOwned, smells}]}` — the `smells` field
 - **Deterministic tools first**: the map is built from exact instruments —
   LSP where a server is installed, `mix xref graph` / `madge` /
   `cargo-modules` for dependency graphs, `jscpd` for clones, `git log
---name-only` for churn and co-change — with agent reading layered on top.
+  --name-only` for churn and co-change — with agent reading layered on top.
   Embedding/RAG retrieval is deliberately omitted: the totality gate reads
   everything anyway, and retrieval solves "what to read when you can't read
   it all", a regime this skill refuses to map in. Revisit only when the

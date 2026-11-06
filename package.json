@@ -1,0 +1,22 @@
+{
+  "name": "claude",
+  "private": true,
+  "license": "UNLICENSED",
+  "author": "joshua@geschwendt.com",
+  "repository": "git@github.com:jgeschwendt/claude.git",
+  "type": "module",
+  "scripts": {
+    "test": "scripts/test.ts",
+    "update": "scripts/update.ts",
+    "upgrade": "scripts/upgrade.ts"
+  },
+  "devDependencies": {
+    "@jlg/oxfmt": "0.1.2",
+    "@jlg/oxlint": "0.1.5",
+    "@jlg/tsconfig": "0.1.2",
+    "@types/bun": "1.4.4",
+    "oxlint": "1.91.0",
+    "oxlint-tsgolint": "7.0.2006",
+    "tsrs": "0.22.0-ts7.1.0-beta"
+  }
+}

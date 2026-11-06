@@ -87,7 +87,7 @@ return [
 
 ```typescript
 // constants/prompts.ts:114-115
-export const SYSTEM_PROMPT_DYNAMIC_BOUNDARY = "__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__";
+export const SYSTEM_PROMPT_DYNAMIC_BOUNDARY = '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__';
 ```
 
 The marker is a sentinel string. It's placed in the array, then **filtered out** during API assembly. `splitSysPromptPrefix()` (`api.ts:321-435`) finds it and splits the array into cache blocks.
@@ -110,14 +110,14 @@ The dynamic-section list is built once per prompt assembly and the individual se
 
 ```typescript
 const dynamicSections = [
-  systemPromptSection("session_guidance", () =>
+  systemPromptSection('session_guidance', () =>
     getSessionSpecificGuidanceSection(enabledTools, skillToolCommands),
   ),
-  systemPromptSection("memory", () => loadMemoryPrompt()),
+  systemPromptSection('memory', () => loadMemoryPrompt()),
   DANGEROUS_uncachedSystemPromptSection(
-    "mcp_instructions",
+    'mcp_instructions',
     () => getMcpInstructionsSection(mcpClients),
-    "MCP servers can connect/disconnect mid-session",
+    'MCP servers can connect/disconnect mid-session',
   ),
   // ...
 ];
@@ -130,7 +130,7 @@ const resolvedDynamicSections = await resolveSystemPromptSections(dynamicSection
 
 ```typescript
 return splitSysPromptPrefix(systemPrompt, opts).map((block) => ({
-  type: "text" as const,
+  type: 'text' as const,
   text: block.text,
   ...(enablePromptCaching &&
     block.cacheScope !== null && {
@@ -548,13 +548,13 @@ Intentionally **not cleared** during compaction (`postCompactCleanup.ts:65-69`).
 
 ```typescript
 const isMainThreadCompact =
-  querySource === undefined || querySource.startsWith("repl_main_thread") || querySource === "sdk";
+  querySource === undefined || querySource.startsWith('repl_main_thread') || querySource === 'sdk';
 
 resetMicrocompactState();
-if (feature("CONTEXT_COLLAPSE") && isMainThreadCompact) resetContextCollapse();
+if (feature('CONTEXT_COLLAPSE') && isMainThreadCompact) resetContextCollapse();
 if (isMainThreadCompact) {
   getUserContext.cache.clear?.(); // re-read CLAUDE.md
-  resetGetMemoryFilesCache("compact"); // re-check memory files
+  resetGetMemoryFilesCache('compact'); // re-check memory files
 }
 clearSystemPromptSections(); // rebuild pwd, git status, etc.
 clearClassifierApprovals();

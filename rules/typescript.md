@@ -1,6 +1,6 @@
 ---
 paths:
-  - "**/*.{cts,mts,ts,tsx}"
+  - '**/*.{cts,mts,ts,tsx}'
 ---
 
 # TypeScript

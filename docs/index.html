@@ -42,14 +42,15 @@
   <p class="eyebrow">the Claude Code harness</p>
   <p class="lead docs-lead">What shapes a Claude Code session is tracked here; what sessions accrete
     stays in <code class="code">~/.claude</code>. The parts: the config linked into
-    <code class="code">~/.claude</code>, the <code class="code">perpetual</code> mod, the Rust
-    <code class="code">statusline</code> and its window clock, and the local marketplace that ships
-    the mod. <code class="code">AGENTS.md</code> is the map; this page is the design and what is
+    <code class="code">~/.claude</code>, the <code class="code">perpetual</code> mod, the gauge row,
+    window clock and injected pane of its successor <code class="code">subether</code>, and the local marketplace that
+    ships the mods. <code class="code">AGENTS.md</code> is the map; this page is the design and what is
     open.</p>
   <nav class="row docs-toc" aria-label="sections">
     <a class="pill" href="#link">link</a>
     <a class="pill" href="#mod">mod</a>
-    <a class="pill" href="#statusline">statusline</a>
+    <a class="pill" href="#gauge">gauge</a>
+    <a class="pill" href="#pane">pane</a>
     <a class="pill" href="#gate">gate</a>
     <a class="pill" href="#plan">plan</a>
   </nav>
@@ -105,8 +106,8 @@
       <code class="code">sh -c</code> or <code class="code">eval</code> string a command of its own,
       heredoc bodies skipped — then matches each command's argv, so quoted text never trips it and
       quoting never hides a command.</li>
-    <li><strong>window clock</strong> — pipes the session's five-hour rate limit through
-      <code class="code">statusline --window</code> (<a class="link" href="#statusline">below</a>).</li>
+    <li><strong>window clock</strong> — now the <code class="code">subether</code> gauge's
+      (<a class="link" href="#gauge">below</a>).</li>
     <li><strong>band and capture</strong> — the sandman shift above the prompt, corrections and
       repeated instructions to the trail, and <code class="code">/shift</code>,
       <code class="code">/docket</code>, <code class="code">/trail</code>.</li>
@@ -120,30 +121,50 @@
     link</code> reports <code class="code">differs:</code> until it is updated.</p>
 </section>
 
-<section class="docs-section" id="statusline" data-component="statusline">
+<section class="docs-section" id="gauge" data-component="gauge">
   <header>
-    <h2 class="h2">Statusline</h2>
-    <p class="docs-note">The <code class="code">claude-home</code> crate; segment rules in
-      <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/src/statusline.rs">src/statusline.rs</a>.</p>
+    <h2 class="h2">Gauge</h2>
+    <p class="docs-note">The <code class="code">subether</code> mod's row under the prompt, in the hint line's place; segment
+      rules in
+      <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/gauge.tsx">plugins/subether/hooks/gauge.tsx</a>.
+      It replaces the Rust <code class="code">statusline</code> crate, retired 2026-11-05, and
+      <code class="code">settings.json</code> sets no <code class="code">statusLine</code>.</p>
   </header>
-  <pre class="snippet">Fable 5 (fast · low) ██████████▎░░░░░░░░░░░ 52% ≈46m · $1.20 · 5h 31%† ↻ 10:50pm</pre>
+  <pre class="snippet">Fable 5 (low) ██████████▎░░░░░░░░░░░ 52% ≈46m · $1.20 · 5h 31%† ↻ 10:50pm</pre>
   <ul class="stack claims" role="list">
-    <li><strong>the line</strong> — model, non-default mode flags, context use against the
+    <li><strong>the row</strong> — model, the main loop's effort, context use against the
       auto-compact threshold with an ETA, session cost, the five-hour limit and its reset. Every
-      segment is conditional.</li>
-    <li><strong>installed outside <code class="code">target/</code></strong> —
-      <code class="code">mise run build</code> installs <code class="code">~/.local/bin/statusline</code>,
-      which <code class="code">settings.json</code> runs; mbx redirects
-      <code class="code">target/</code> into its cache and gc prunes it. A source change is live only
-      once rebuilt.</li>
-    <li><strong>the window clock</strong> — each tick carrying <code class="code">rate_limits</code>
-      writes <code class="code">$XDG_STATE_HOME/claude/window.json</code> atomically, under a
-      directory lock, for <code class="code">sandman shift clock</code>. Monotone: a window behind the
-      stored one, not resetting within 6 h, or with a percentage outside 0–100 writes nothing.</li>
-    <li><strong><code class="code">statusline --window</code></strong> — that write alone, the only
-      other way in; the mod uses it, so one rule and one lock cover every writer.</li>
-    <li><strong>the log</strong> — <code class="code">~/.claude/logs/statusline.log</code>, each
-      tick's payload or error, overwritten.</li>
+      segment is conditional; the bar takes the width the rest leaves.</li>
+    <li><strong>the reading</strong> — <code class="code">$.session.usage()</code>, on each
+      <code class="code">session.measure</code> and a 15 s poll in interactive sessions, so
+      mid-turn growth shows.</li>
+    <li><strong>the window clock</strong> — each reading carrying a five-hour window writes
+      <code class="code">$XDG_STATE_HOME/claude/window.json</code> for
+      <code class="code">sandman shift clock</code>, through a temp file moved into place. Never
+      rolls back: a window behind the stored live one, not resetting within 6 h, or with a
+      percentage outside 0–100 writes nothing.</li>
+  </ul>
+</section>
+
+<section class="docs-section" id="pane" data-component="pane">
+  <header>
+    <h2 class="h2">Injected pane</h2>
+    <p class="docs-note">The <code class="code">subether</code> mod's right pane,
+      <code class="code">subether · injected</code>:
+      <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/context.ts">plugins/subether/hooks/context.ts</a>
+      attaches,
+      <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/pane.tsx">plugins/subether/hooks/pane.tsx</a>
+      draws.</p>
+  </header>
+  <ul class="stack claims" role="list">
+    <li><strong>the stand-in</strong> — no native event injects at session start, so the
+      session's first prompt (and the first after <code class="code">/clear</code>) attaches
+      <code class="code">sandman recall</code> as one context block, capped at 10,000 characters.
+      Until cutover the installed <code class="code">perpetual</code> injects it too, so a session
+      carries it twice.</li>
+    <li><strong>the pane</strong> — each attached block, newest first: its time, source and size,
+      then its text. Opened unasked in interactive sessions from 144 columns;
+      <code class="code">/subether</code> opens it at any width.</li>
   </ul>
 </section>
 
@@ -154,11 +175,12 @@
       (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/hk.pkl">hk.pkl</a>),
       one step.</p>
   </header>
-  <p>The stele gate, clippy with warnings denied, <code class="code">cargo test</code> — units in
-    <code class="code">src/</code>; <code class="code">tests/</code> drive the statusline, link,
-    /delete, /dissolve and monitor-github — then the mod's own suite.</p>
-  <p class="docs-note"><code class="code">ci.yaml</code> runs clippy, the tests and the stele
-    gate on push to main, pull requests and the merge queue; never
+  <p><code class="code">bun run test</code>
+    (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/scripts/test.ts">scripts/test.ts</a>)
+    runs every step at once — fmt, lint, tsc, the unit tests (link, /delete, /dissolve),
+    monitor-github's selftest, the mod's validate and suite — then the stele gate.</p>
+  <p class="docs-note"><code class="code">ci.yaml</code> runs the same gate, the claude CLI
+    installed at a pinned version, on push to main, pull requests and the merge queue; never
     <code class="code">stele build</code>, the lock's sole writer.</p>
 </section>
 

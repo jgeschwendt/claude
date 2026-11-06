@@ -7,7 +7,7 @@ when_to_use: >
   "/execute-plan", "execute the plan", "run the plan", "carry out the plan",
   "ultracode the plan", "build it". Execution happens in-session, with the
   model split pushed into the workflow agents.
-argument-hint: "[plan file — defaults to newest in ~/.claude/plans/]"
+argument-hint: '[plan file — defaults to newest in ~/.claude/plans/]'
 allowed-tools:
   - Agent
   - AskUserQuestion
@@ -122,50 +122,50 @@ routable. Scaffold (API — `pipeline`, `opts.phase`, `opts.effort`, `schema`,
 
 ```js
 export const meta = {
-  name: "execute-plan",
-  description: "Implement the approved plan; pinned opus agents, session model reviews after",
+  name: 'execute-plan',
+  description: 'Implement the approved plan; pinned opus agents, session model reviews after',
   phases: [
-    { title: "Implement", model: "opus" },
-    { title: "Verify", model: "opus" },
+    { title: 'Implement', model: 'opus' },
+    { title: 'Verify', model: 'opus' },
   ],
 };
 const IMPL = {
-  type: "object",
-  required: ["commands", "deviations", "filesTouched", "verification"],
+  type: 'object',
+  required: ['commands', 'deviations', 'filesTouched', 'verification'],
   properties: {
     clarify: {
-      type: "string",
+      type: 'string',
       description:
         "set ONLY if the brief is underspecified — the blocking question; the other fields then carry empties and verification carries 'blocked — see clarify'",
     },
-    commands: { type: "array", items: { type: "string" }, description: "commands run" },
-    deviations: { type: "string", description: "every departure from the brief, or 'none'" },
-    filesTouched: { type: "array", items: { type: "string" } },
+    commands: { type: 'array', items: { type: 'string' }, description: 'commands run' },
+    deviations: { type: 'string', description: "every departure from the brief, or 'none'" },
+    filesTouched: { type: 'array', items: { type: 'string' } },
     verification: {
-      type: "string",
+      type: 'string',
       description:
         "the verification you EXECUTED and its output — a done-claim without executed verification is invalid; 'blocked — see clarify' on a clarify return. PLAIN TEXT, under 3000 chars, no angle brackets or backslash escapes; every required key present in the SAME call (2026-07-20 · stele run: an implementer finished its work, then lost the whole report to 5 failed StructuredOutput attempts — omitted a required key while fighting escaping; the tree held the work but the workflow crashed)",
     },
   },
 };
 const VERDICT = {
-  type: "object",
-  required: ["evidence", "pass"],
+  type: 'object',
+  required: ['evidence', 'pass'],
   properties: {
-    evidence: { type: "string", description: "probe output grounding the verdict" },
-    pass: { type: "boolean" },
+    evidence: { type: 'string', description: 'probe output grounding the verdict' },
+    pass: { type: 'boolean' },
   },
 };
 // args has been observed arriving JSON-encoded — parse defensively.
-const A = typeof args === "string" ? JSON.parse(args) : args;
+const A = typeof args === 'string' ? JSON.parse(args) : args;
 const results = await pipeline(
   A.steps, // [{brief, mechanical, name, successCriteria}]
   (s) =>
     agent(s.brief, {
-      ...(s.mechanical ? { effort: "low" } : {}),
+      ...(s.mechanical ? { effort: 'low' } : {}),
       label: `implement:${s.name}`,
-      model: "opus",
-      phase: "Implement",
+      model: 'opus',
+      phase: 'Implement',
       schema: IMPL,
     }),
   (report, s) =>
@@ -175,7 +175,7 @@ const results = await pipeline(
         ? { clarify: report.clarify, step: s.name } // answer it, re-dispatch — never let a guess proceed
         : agent(
             `Verify against these success criteria by running the probes yourself, at rung 3 of sequential-thinking's ladder — the report is a claim, not evidence (premise inheritance):\n${s.successCriteria}\n\nImplementer's report:\n${JSON.stringify(report)}`,
-            { label: `verify:${s.name}`, model: "opus", phase: "Verify", schema: VERDICT },
+            { label: `verify:${s.name}`, model: 'opus', phase: 'Verify', schema: VERDICT },
           ).then((verdict) => ({ report, step: s.name, verdict })),
 );
 return results;

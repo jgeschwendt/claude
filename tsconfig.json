@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "lib": ["esnext"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "types": ["bun"]
+  },
+  "exclude": ["node_modules", "plugins"],
+  "extends": "@jlg/tsconfig",
+  "include": [".mise/tasks", "oxfmt.config.ts", "oxlint.config.ts", "scripts", "skills"]
+}

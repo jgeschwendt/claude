@@ -10,30 +10,30 @@ Pass `args` as real JSON: `{ws, context, targets: [{slug, brief}]}` — `brief` 
 
 ```js
 export const meta = {
-  name: "gigaresearch-wave",
-  description: "One discovery wave: an agent per target, structured findings + leads back",
-  phases: [{ title: "Discover" }],
+  name: 'gigaresearch-wave',
+  description: 'One discovery wave: an agent per target, structured findings + leads back',
+  phases: [{ title: 'Discover' }],
 };
 const FINDINGS = {
-  type: "object",
-  required: ["file", "leads", "queries", "summary"],
+  type: 'object',
+  required: ['file', 'leads', 'queries', 'summary'],
   properties: {
-    file: { type: "string", description: "absolute path of the findings file written" },
+    file: { type: 'string', description: 'absolute path of the findings file written' },
     leads: {
-      type: "array",
-      items: { type: "string" },
-      description: "cited-but-unfetched sources, terms of art, people/orgs worth looking up",
+      type: 'array',
+      items: { type: 'string' },
+      description: 'cited-but-unfetched sources, terms of art, people/orgs worth looking up',
     },
     queries: {
-      type: "array",
-      items: { type: "string" },
-      description: "every query run, including duds",
+      type: 'array',
+      items: { type: 'string' },
+      description: 'every query run, including duds',
     },
-    summary: { type: "string", description: "5 lines max" },
+    summary: { type: 'string', description: '5 lines max' },
   },
 };
-const A = typeof args === "string" ? JSON.parse(args) : args; // args can arrive JSON-encoded
-phase("Discover");
+const A = typeof args === 'string' ? JSON.parse(args) : args; // args can arrive JSON-encoded
+phase('Discover');
 const results = await parallel(
   A.targets.map(
     (t) => () =>
@@ -43,7 +43,7 @@ const results = await parallel(
 Context: ${A.context}
 Load WebSearch and WebFetch via ToolSearch before starting.
 Write findings to ${A.ws}/findings/${t.slug}.md — create it even if thin, and say why it is thin.`,
-        { label: t.slug, model: "opus", schema: FINDINGS },
+        { label: t.slug, model: 'opus', schema: FINDINGS },
       ),
   ),
 );
@@ -58,21 +58,21 @@ Draft 2–3 open-form questions per load-bearing claim, then pass `{claims: [{id
 
 ```js
 export const meta = {
-  name: "gigaresearch-verify",
-  description: "Blind factored verification of load-bearing claims",
-  phases: [{ title: "Verify" }],
+  name: 'gigaresearch-verify',
+  description: 'Blind factored verification of load-bearing claims',
+  phases: [{ title: 'Verify' }],
 };
 const ANSWER = {
-  type: "object",
-  required: ["answer", "confidence", "sources"],
+  type: 'object',
+  required: ['answer', 'confidence', 'sources'],
   properties: {
-    answer: { type: "string" },
-    confidence: { enum: ["high", "medium", "low"] },
-    sources: { type: "array", items: { type: "string" }, description: "URLs actually fetched" },
+    answer: { type: 'string' },
+    confidence: { enum: ['high', 'medium', 'low'] },
+    sources: { type: 'array', items: { type: 'string' }, description: 'URLs actually fetched' },
   },
 };
-const A = typeof args === "string" ? JSON.parse(args) : args; // args can arrive JSON-encoded
-phase("Verify");
+const A = typeof args === 'string' ? JSON.parse(args) : args; // args can arrive JSON-encoded
+phase('Verify');
 const out = await parallel(
   A.claims.flatMap((c) =>
     c.questions.map(
@@ -81,7 +81,7 @@ const out = await parallel(
           `Answer from fresh web evidence only — load WebSearch and WebFetch via ToolSearch first. Do not speculate; if the answer is unfindable, say so and return confidence: low.
 
 ${q}`,
-          { label: `${c.id}.q${i + 1}`, model: "opus", schema: ANSWER },
+          { label: `${c.id}.q${i + 1}`, model: 'opus', schema: ANSWER },
         ).then((a) => ({ claim: c.id, question: q, ...a })),
     ),
   ),

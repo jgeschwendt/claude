@@ -6,7 +6,7 @@ staged rebuild quietly stops being always-green. Compose stages from these; cite
 by name in implementation briefs.
 
 Attribution: names stamped `(per <url>, verified 2026-07-15)` are canonical catalog
-entries. Feathers material cites *Working Effectively with Legacy Code, Feathers*.
+entries. Feathers material cites _Working Effectively with Legacy Code, Feathers_.
 Names presented without a stamp are descriptive, not canonical — use them, but don't
 attribute them.
 
@@ -94,7 +94,7 @@ matters more.
 
 Feathers' techniques for changing behavior at a boundary without editing the code on the
 far side of it. These create the places a restructuring move can act. All cite
-*Working Effectively with Legacy Code, Feathers* unless stamped otherwise.
+_Working Effectively with Legacy Code, Feathers_ unless stamped otherwise.
 
 - **Seam** — a place where you can alter behavior without editing the code there, by
   changing what's invoked at an enabling point. (Feathers)
@@ -106,7 +106,7 @@ far side of it. These create the places a restructuring move can act. All cite
   that's not a seam until you introduce an enabling point (inject, extract-interface).
 
 - **Extract interface / behaviour** — pull an explicit contract type out of a concrete
-  implementation so alternatives can stand in. (Feathers — *Extract Interface*; note:
+  implementation so alternatives can stand in. (Feathers — _Extract Interface_; note:
   not a second-edition catalog entry, so descriptive here, not attributed to
   refactoring.com)
   · **use when** design needs two implementations (old + new) to coexist behind one type.
@@ -118,7 +118,7 @@ far side of it. These create the places a restructuring move can act. All cite
   interface locks in the coupling you meant to break.
 
 - **Sprout module** — write the new behavior as a new component in the target structure;
-  the old code calls into it. (Feathers — *Sprout Method / Sprout Class* at component
+  the old code calls into it. (Feathers — _Sprout Method / Sprout Class_ at component
   scale)
   · **use when** you can't safely restructure the old component yet, but new work can be
   born correct; design's target shape exists for the new slice.
@@ -128,7 +128,7 @@ far side of it. These create the places a restructuring move can act. All cite
   from the old component — sprout is for genuinely new behavior, not a copy.
 
 - **Wrap module** — put a new component around an old one to add or redirect behavior
-  without editing the original. (Feathers — *Wrap Method / Wrap Class*)
+  without editing the original. (Feathers — _Wrap Method / Wrap Class_)
   · **use when** you need cross-cutting behavior (logging, adaptation, gating) around an
   untouchable component; design inserts a layer.
   · **stays green by** the wrapper delegating to the unchanged original for the core path
@@ -214,13 +214,13 @@ a sequence of them.
 
 - **Characterization-test harness first** — before moving anything, pin current behavior
   with tests written at the boundary you're about to restructure. (Feathers —
-  *characterization tests*)
+  _characterization tests_)
   · **use when** the map reveals under-specified behavior — you don't fully know what the
   old structure does, so you can't prove the new one matches.
   · **stays green by** capturing actual current outputs as the assertion baseline (not
   intended behavior) so any behavior drift during the move fails a test immediately.
-  · **watch for** asserting what the code *should* do — characterization tests pin what it
-  *does*, bugs included; fix behavior in a separate, labeled stage, never silently mid-move.
+  · **watch for** asserting what the code _should_ do — characterization tests pin what it
+  _does_, bugs included; fix behavior in a separate, labeled stage, never silently mid-move.
 
 ---
 

@@ -42,10 +42,10 @@ export default defineConfig({
       },
     },
     {
-      // the runner other hook files call with `$`: past an import the engine follows `$` only into a function declaration
-      // (`claude plugin validate`: "$ is passed to \"run\", a name bound to a function expression, outside the hook's own
-      // file"), so every function there is one. (2026-11-06)
-      files: ['plugins/*/hooks/sandman.ts'],
+      // the runner and the System One client other hook files call with `$`: past an import the engine follows `$` only
+      // into a function declaration (`claude plugin validate`: "$ is passed to \"run\", a name bound to a function
+      // expression, outside the hook's own file"), so every function there is one. (2026-11-06)
+      files: ['plugins/*/hooks/{judge,sandman}.ts'],
       rules: { 'func-style': ['error', 'declaration'] },
     },
     {

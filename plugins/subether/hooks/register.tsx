@@ -2,7 +2,9 @@
 import type { Register } from 'claude-code';
 import { context } from './context';
 import { hint, measure, start, step } from './gauge';
+import { bash, bashFailed, yml, ymlFailed } from './guard';
 import { command, opening, pane } from './pane';
+import { log } from './toollog';
 
 export const register: Register = (on) => {
   // chunk 5 · pin an unpinned, unforked subagent to opus
@@ -29,14 +31,14 @@ export const register: Register = (on) => {
   on('session.start', { isInteractive: true }, opening);
   // chunk 8 · /docket /shift /trail and the shift row's timer join `start`. The commands stay
   // perpetual's until cutover: a name registered twice throws in the second mod's session.start
-  // chunk 4 · Bash guard: deny house-forbidden commands, trail each denial
-  on('tool.call', { tool: 'Bash' }, async ($, e, next) => await next(e)).catch(
-    async ($, e, next) => await next(e),
-  );
-  // chunk 4 · deny an Edit/Write to a `.yml` path, trail the denial
-  on('tool.call', { tool: ['Edit', 'Write'] }, async ($, e, next) => await next(e)).catch(
-    async ($, e, next) => await next(e),
-  );
+  // every tool call → the day's tool log. First of the `tool.call` hooks, so outermost (hooks within one module run
+  // in the order `register` called `on`): it sees each call the guards below deny
+  on('tool.call', log).catch(async ($, e, next) => await next(e));
+  // the Bash guard: deny a house-forbidden command, trail each denial. `decide` denies what it cannot read by returning
+  // a reason; a guard that fails anyway denies the call through its `.catch`, fail closed
+  on('tool.call', { tool: 'Bash' }, bash).catch(bashFailed);
+  // deny an Edit/Write to a `.yml` path, trail the denial; fail closed too
+  on('tool.call', { tool: ['Edit', 'Write'] }, yml).catch(ymlFailed);
   // the gauge's effort flag
   on('turn.step', step);
   // chunk 6 · hand the main loop's answer to `docket --hook` as a Stop payload

@@ -3,7 +3,7 @@ import { defineConfig, namingConvention } from '@jlg/oxlint';
 /**
 Claude Code's hook payload fields, a snake_case wire format the mod matches on
 */
-const wireFields = '^(file_path|notification_type)$';
+const wireFields = '^(file_path|notification_type|tool_use_id)$';
 
 export default defineConfig({
   ignorePatterns: ['**/*.d.ts', 'docs/**', 'node_modules', 'plugins/*/.claude-plugin/types/**'],
@@ -40,6 +40,13 @@ export default defineConfig({
         // `on(…).catch(handler)` registers a hook's error handler, a mods API call with no awaitable form. (2026-11-05)
         'unicorn-js/prefer-await': 'off',
       },
+    },
+    {
+      // the runner other hook files call with `$`: past an import the engine follows `$` only into a function declaration
+      // (`claude plugin validate`: "$ is passed to \"run\", a name bound to a function expression, outside the hook's own
+      // file"), so every function there is one. (2026-11-06)
+      files: ['plugins/*/hooks/sandman.ts'],
+      rules: { 'func-style': ['error', 'declaration'] },
     },
     {
       // the gate script prints each step's result; console is its output. (2026-11-05)

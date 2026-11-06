@@ -105,7 +105,11 @@
       command as Bash would — quotes removed, each <code class="code">$(…)</code>, backtick,
       <code class="code">sh -c</code> or <code class="code">eval</code> string a command of its own,
       heredoc bodies skipped — then matches each command's argv, so quoted text never trips it and
-      quoting never hides a command.</li>
+      quoting never hides a command. In <code class="code">subether</code> the guard is live on
+      <code class="code">tool.call</code>, its tokenizer the same one, typed.</li>
+    <li><strong>tool log</strong> — <code class="code">subether</code> appends one JSON line per tool
+      call (arguments cut at 2,000 characters, outcome, size of what the model read; never the
+      result) to <code class="code">~/.local/state/subether/tools/&lt;local day&gt;.jsonl</code>.</li>
     <li><strong>window clock</strong> — now the <code class="code">subether</code> gauge's
       (<a class="link" href="#gauge">below</a>).</li>
     <li><strong>band and capture</strong> — the sandman shift above the prompt, corrections and

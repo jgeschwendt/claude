@@ -1,0 +1,168 @@
+{
+  "atoms": [
+    { "doc": "the gauge's effort flag: the main loop's last turn.step effort", "file": "gauge.tsx", "name": "effort", "resetBy": "/clear · /resume · /branch" },
+    { "doc": "the pane's expanded rows, by header key; every row collapsed until pressed", "file": "pane.tsx", "name": "expanded", "resetBy": "/clear · /resume · /branch" },
+    { "doc": "each System One judge's availability, learned from the probe and each call", "file": "judge.ts", "name": "gate", "resetBy": "/clear · /resume · /branch" },
+    { "doc": "the gauge's last usage reading", "file": "gauge.tsx", "name": "gauge", "resetBy": "/clear · /resume · /branch" },
+    { "doc": "the context blocks the first prompt attached, failures too", "file": "context.ts", "name": "injected", "resetBy": "/clear · /resume · /branch" },
+    { "doc": "the newest 20 judged prompts", "file": "markers.ts", "name": "judged", "resetBy": "/clear · /resume · /branch" },
+    { "doc": "the band's last trail event; declared for chunk 8, no atom yet", "file": null, "name": "last", "resetBy": "/clear · /resume · /branch" },
+    { "doc": "whether a composer prompt was seen yet, to tell a --bg opening brief apart", "file": "markers.ts", "name": "opened", "resetBy": "/clear · /resume · /branch" },
+    { "doc": "the heads of the last 3 judged prompts, for the repeat question", "file": "markers.ts", "name": "prompts", "resetBy": "/clear · /resume · /branch" },
+    { "doc": "the gauge's token trend for its ETA, the newest 40", "file": "gauge.tsx", "name": "samples", "resetBy": "/clear · /resume · /branch" },
+    { "doc": "declared, no atom yet", "file": null, "name": "seen", "resetBy": "/clear · /resume · /branch" },
+    { "doc": "the sandman shift the band shows; declared for chunk 8, no atom yet", "file": null, "name": "shift", "resetBy": "/clear · /resume · /branch" }
+  ],
+  "events": [
+    { "doc": "a subagent is about to spawn", "kind": "agent", "name": "agent.spawn" },
+    { "doc": "the settings-hook Notification, relayed; no native notification event exists", "kind": "classic", "name": "classic.Notification" },
+    { "doc": "a slash command the mod registered runs", "kind": "prompt", "name": "command.run" },
+    { "doc": "a prompt is submitted, before the model sees it", "kind": "prompt", "name": "prompt.submit" },
+    { "doc": "the session ends, under the end budget", "kind": "lifecycle", "name": "session.end" },
+    { "doc": "the engine reports a usage reading", "kind": "lifecycle", "name": "session.measure" },
+    { "doc": "the session starts", "kind": "lifecycle", "name": "session.start" },
+    { "doc": "a tool call, built-in or MCP, main loop or subagent", "kind": "tool", "name": "tool.call" },
+    { "doc": "core's permission decision for a call, before it runs", "kind": "tool", "name": "tool.check" },
+    { "doc": "the main loop's answer is done (the Stop moment)", "kind": "turn", "name": "turn.complete" },
+    { "doc": "one model request inside a turn, streamed", "kind": "turn", "name": "turn.step" },
+    { "doc": "a part of the interface is drawn", "kind": "render", "name": "ui.render" }
+  ],
+  "hooks": [
+    {
+      "catch": "pass", "chunk": 5, "does": "pin a spawn with no model, not a fork, to opus",
+      "effects": [{ "kind": "reply", "target": "spawn model" }],
+      "event": "agent.spawn", "file": "register.tsx", "fn": null, "id": "stub:agent.spawn", "matcher": null,
+      "reads": [], "status": "stub", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 6, "does": "hand the notification to docket --hook",
+      "effects": [{ "kind": "process", "target": "docket" }],
+      "event": "classic.Notification", "file": "register.tsx", "fn": null, "id": "stub:classic.Notification",
+      "matcher": { "notification_type": ["agent_needs_input", "idle_prompt", "permission_prompt"] },
+      "reads": [], "status": "stub", "writes": []
+    },
+    {
+      "catch": "none", "chunk": 3, "does": "/subether opens the injected pane asked",
+      "effects": [{ "kind": "ui", "target": "pane" }],
+      "event": "command.run", "file": "pane.tsx", "fn": "command", "id": "pane.command", "matcher": { "command": "subether" },
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 3, "does": "the first prompt attaches sandman recall as one capped context block",
+      "effects": [
+        { "kind": "process", "target": "sandman recall" },
+        { "kind": "reply", "target": "prompt context" },
+        { "kind": "ui", "target": "log line" },
+        { "kind": "ui", "target": "re-render" }
+      ],
+      "event": "prompt.submit", "file": "context.ts", "fn": "context", "id": "context.context", "matcher": null,
+      "reads": ["injected"], "status": "live", "writes": ["injected"]
+    },
+    {
+      "catch": "pass", "chunk": 5, "does": "judge a typed prompt for four markers, unawaited; each at 0.8 trailed",
+      "effects": [
+        { "kind": "http", "target": "api.typesafe.ai" },
+        { "kind": "http", "target": "127.0.0.1:1703" },
+        { "kind": "trail", "target": "~/.sandman/trail" },
+        { "kind": "ui", "target": "log line" },
+        { "kind": "ui", "target": "re-render" }
+      ],
+      "event": "prompt.submit", "file": "markers.ts", "fn": "markers", "id": "markers.markers", "matcher": { "origin": { "kind": "composer" } },
+      "reads": ["gate", "opened", "prompts"], "status": "live", "writes": ["gate", "judged", "opened", "prompts"]
+    },
+    {
+      "catch": "none", "chunk": 6, "does": "sandman take and the session's docket resolve under the end budget",
+      "effects": [{ "kind": "process", "target": "docket" }, { "kind": "process", "target": "sandman take" }],
+      "event": "session.end", "file": "register.tsx", "fn": null, "id": "stub:session.end", "matcher": null,
+      "reads": [], "status": "stub", "writes": []
+    },
+    {
+      "catch": "none", "chunk": 2, "does": "take the gauge reading; persist the five-hour window",
+      "effects": [{ "kind": "file", "target": "window.json" }, { "kind": "ui", "target": "log line" }],
+      "event": "session.measure", "file": "gauge.tsx", "fn": "measure", "id": "gauge.measure", "matcher": null,
+      "reads": ["gauge", "samples"], "status": "live", "writes": ["gauge", "samples"]
+    },
+    {
+      "catch": "none", "chunk": 2, "does": "the gauge's first reading, then a 15 s usage poll in interactive sessions",
+      "effects": [{ "kind": "file", "target": "window.json" }, { "kind": "ui", "target": "log line" }],
+      "event": "session.start", "file": "gauge.tsx", "fn": "start", "id": "gauge.start", "matcher": null,
+      "reads": ["gauge", "samples"], "status": "live", "writes": ["gauge", "samples"]
+    },
+    {
+      "catch": "none", "chunk": 3, "does": "probe both judges, open the pane unasked, register /subether",
+      "effects": [
+        { "kind": "http", "target": "api.typesafe.ai" },
+        { "kind": "http", "target": "127.0.0.1:1703" },
+        { "kind": "ui", "target": "/subether" },
+        { "kind": "ui", "target": "log line" },
+        { "kind": "ui", "target": "pane" },
+        { "kind": "ui", "target": "re-render" }
+      ],
+      "event": "session.start", "file": "pane.tsx", "fn": "opening", "id": "pane.opening", "matcher": { "isInteractive": true },
+      "reads": [], "status": "live", "writes": ["gate"]
+    },
+    {
+      "catch": "pass", "chunk": 4, "does": "append every call to the day's tool log; outermost, so it sees denials",
+      "effects": [{ "kind": "file", "target": "tools/<day>.jsonl" }, { "kind": "ui", "target": "log line" }],
+      "event": "tool.call", "file": "toollog.ts", "fn": "log", "id": "toollog.log", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "deny", "chunk": 4, "does": "deny a house-forbidden Bash command, trailed first; fail closed",
+      "effects": [{ "kind": "reply", "target": "tool deny" }, { "kind": "trail", "target": "~/.sandman/trail" }, { "kind": "ui", "target": "log line" }],
+      "event": "tool.call", "file": "guard.ts", "fn": "bash", "id": "guard.bash", "matcher": { "tool": "Bash" },
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "deny", "chunk": 4, "does": "deny an Edit/Write to a .yml path, trailed first; fail closed",
+      "effects": [{ "kind": "reply", "target": "tool deny" }, { "kind": "trail", "target": "~/.sandman/trail" }, { "kind": "ui", "target": "log line" }],
+      "event": "tool.call", "file": "guard.ts", "fn": "yml", "id": "guard.yml", "matcher": { "tool": ["Edit", "Write"] },
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": "5b", "does": "shadow: judge an asked call beside core's decision, unawaited; a check line in the tool log",
+      "effects": [
+        { "kind": "file", "target": "tools/<day>.jsonl" },
+        { "kind": "http", "target": "api.typesafe.ai" },
+        { "kind": "http", "target": "127.0.0.1:1703" },
+        { "kind": "ui", "target": "log line" },
+        { "kind": "ui", "target": "re-render" }
+      ],
+      "event": "tool.check", "file": "check.ts", "fn": "check", "id": "check.check", "matcher": null,
+      "reads": ["gate"], "status": "live", "writes": ["gate"]
+    },
+    {
+      "catch": "none", "chunk": 2, "does": "keep the main loop's effort for the gauge's flag",
+      "effects": [],
+      "event": "turn.step", "file": "gauge.tsx", "fn": "step", "id": "gauge.step", "matcher": null,
+      "reads": ["effort"], "status": "live", "writes": ["effort"]
+    },
+    {
+      "catch": "none", "chunk": 6, "does": "hand the main loop's answer to docket --hook as a Stop payload",
+      "effects": [{ "kind": "process", "target": "docket" }],
+      "event": "turn.complete", "file": "register.tsx", "fn": null, "id": "stub:turn.complete", "matcher": null,
+      "reads": [], "status": "stub", "writes": []
+    },
+    {
+      "catch": "none", "chunk": 2, "does": "draw the gauge row under the prompt, the engine's hint beneath",
+      "effects": [{ "kind": "ui", "target": "hint line" }],
+      "event": "ui.render", "file": "gauge.tsx", "fn": "hint", "id": "gauge.hint", "matcher": { "component": "PromptHint" },
+      "reads": ["effort", "gauge", "samples"], "status": "live", "writes": []
+    },
+    {
+      "catch": "none", "chunk": 3, "does": "draw the pane's body: judge line, injected and judged rows",
+      "effects": [{ "kind": "ui", "target": "pane" }],
+      "event": "ui.render", "file": "pane.tsx", "fn": "pane", "id": "pane.pane", "matcher": { "component": "Pane" },
+      "reads": ["expanded", "gate", "injected", "judged"], "status": "live", "writes": ["expanded"]
+    }
+  ],
+  "kinds": [
+    { "doc": "a $.state atom written", "name": "state" },
+    { "doc": "a file on disk written", "name": "file" },
+    { "doc": "a sandman trail event appended", "name": "trail" },
+    { "doc": "a ~/.local/bin binary run", "name": "process" },
+    { "doc": "an HTTP request to a System One judge", "name": "http" },
+    { "doc": "what the hook hands back to the engine", "name": "reply" },
+    { "doc": "the interface: the pane, the hint line, a log line, a command", "name": "ui" }
+  ]
+}

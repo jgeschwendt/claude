@@ -2,7 +2,7 @@
 
 ```stele
 kind: container
-purpose: "index.html — the design page: link, the perpetual mod, the subether gauge and window clock, the gate, and the plan (ol#next), in order."
+purpose: "index.html — the harness design page: link, a subether paragraph, the gate, the plan (ol#next); subether.html — the mod's design page, its hook graph fed by data/hooks.json."
 ```
 
 <!-- @stele -->

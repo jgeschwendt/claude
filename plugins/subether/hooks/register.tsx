@@ -1,4 +1,5 @@
-// subether: the harness's session hooks, guards and window clock, plus the gauge, the injected pane and shift band.
+// subether: first-prompt recall and the injected pane, guards and the tool log, judged markers and the shadow check, the
+// gauge and window clock; the docket hooks, the session-end take, the subagent pin and the shift band are stubs or to come.
 import type { Register } from 'claude-code';
 import { check } from './check';
 import { context } from './context';
@@ -27,7 +28,7 @@ export const register: Register = (on) => {
   on('prompt.submit', { origin: { kind: 'composer' } }, markers).catch(
     async ($, e, next) => await next(e),
   );
-  // chunk 6 · `sandman take` and the session's docket resolve under the end budget
+  // chunk 5 · `sandman take --hook` under the end budget; chunk 6 · the session's docket resolve beside it
   on('session.end', async ($, e, next) => await next(e));
   // the gauge reading; the five-hour window → window.json
   on('session.measure', measure);
@@ -36,8 +37,8 @@ export const register: Register = (on) => {
   // the injected pane, opened unasked, `/subether`, and the judges' probe: a matcher of its own, since a second
   // unmatched `session.start` fails the load and `$` crosses an import only into a function declaration
   on('session.start', { isInteractive: true }, opening);
-  // chunk 8 · /docket /shift /trail and the shift row's timer join `start`. The commands stay
-  // perpetual's until cutover: a name registered twice throws in the second mod's session.start
+  // chunk 8 · /docket /shift /trail and the shift row's timer join `start`; perpetual, which registered those names,
+  // is uninstalled (2026-11-06), so subether may take them
   // every tool call → the day's tool log. First of the `tool.call` hooks, so outermost (hooks within one module run
   // in the order `register` called `on`): it sees each call the guards below deny
   on('tool.call', log).catch(async ($, e, next) => await next(e));
@@ -54,7 +55,7 @@ export const register: Register = (on) => {
   // chunk 6 · hand the main loop's answer to `docket --hook` as a Stop payload
   on('turn.complete', async ($, e, next) => await next(e));
   // the gauge row under the prompt, the engine's hint beneath; chunk 8 · the shift row in the band
-  // (AbovePrompt): shift · theme · repo · handoff · last trail event, left to perpetual until then
+  // (AbovePrompt): shift · theme · repo · handoff · last trail event, the band left to the engine until then
   on('ui.render', { component: 'PromptHint' }, hint);
   // the injected pane's body
   on('ui.render', { component: 'Pane' }, pane);

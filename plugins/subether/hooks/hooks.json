@@ -1,4 +1,4 @@
 {
-  "description": "subether: session hooks, guards, window clock, shift band, /docket /shift /trail",
+  "description": "subether: first-prompt recall, injected pane, guards, tool log, judged markers, shadow check, gauge, window clock",
   "modules": ["./register.tsx"]
 }

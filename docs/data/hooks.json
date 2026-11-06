@@ -6,12 +6,12 @@
     { "doc": "the gauge's last usage reading", "file": "gauge.tsx", "name": "gauge", "resetBy": "/clear · /resume · /branch" },
     { "doc": "the context blocks the first prompt attached, failures too", "file": "context.ts", "name": "injected", "resetBy": "/clear · /resume · /branch" },
     { "doc": "the newest 20 judged prompts", "file": "markers.ts", "name": "judged", "resetBy": "/clear · /resume · /branch" },
-    { "doc": "the band's last trail event; declared for chunk 8, no atom yet", "file": null, "name": "last", "resetBy": "/clear · /resume · /branch" },
+    { "doc": "planned · chunk 8: the band's last trail event; no atom yet", "file": null, "name": "last", "resetBy": "/clear · /resume · /branch" },
     { "doc": "whether a composer prompt was seen yet, to tell a --bg opening brief apart", "file": "markers.ts", "name": "opened", "resetBy": "/clear · /resume · /branch" },
     { "doc": "the heads of the last 3 judged prompts, for the repeat question", "file": "markers.ts", "name": "prompts", "resetBy": "/clear · /resume · /branch" },
     { "doc": "the gauge's token trend for its ETA, the newest 40", "file": "gauge.tsx", "name": "samples", "resetBy": "/clear · /resume · /branch" },
-    { "doc": "declared, no atom yet", "file": null, "name": "seen", "resetBy": "/clear · /resume · /branch" },
-    { "doc": "the sandman shift the band shows; declared for chunk 8, no atom yet", "file": null, "name": "shift", "resetBy": "/clear · /resume · /branch" }
+    { "doc": "planned · chunk 7: the docket threads the per-prompt digest has shown; no atom yet", "file": null, "name": "seen", "resetBy": "/clear · /resume · /branch" },
+    { "doc": "planned · chunk 8: the sandman shift the band shows; no atom yet", "file": null, "name": "shift", "resetBy": "/clear · /resume · /branch" }
   ],
   "events": [
     { "doc": "a subagent is about to spawn", "kind": "agent", "name": "agent.spawn" },
@@ -71,7 +71,7 @@
       "reads": ["gate", "opened", "prompts"], "status": "live", "writes": ["gate", "judged", "opened", "prompts"]
     },
     {
-      "catch": "none", "chunk": 6, "does": "sandman take and the session's docket resolve under the end budget",
+      "catch": "none", "chunk": 5, "does": "sandman take and the session's docket resolve under the end budget",
       "effects": [{ "kind": "process", "target": "docket" }, { "kind": "process", "target": "sandman take" }],
       "event": "session.end", "file": "register.tsx", "fn": null, "id": "stub:session.end", "matcher": null,
       "reads": [], "status": "stub", "writes": []

@@ -23,8 +23,8 @@ separately, and the split explains most of the API confusion:
 
 ## Coverage table
 
-| Data you want                                            | GraphQL                       | REST                                         | `gh pr view --json`                              |
-| -------------------------------------------------------- | ----------------------------- | -------------------------------------------- | ------------------------------------------------ |
+| Data you want                                            | GraphQL                      | REST                                        | `gh pr view --json`                             |
+| -------------------------------------------------------- | ---------------------------- | ------------------------------------------- | ----------------------------------------------- |
 | Review submissions (state + summary body)                | ✓ `reviews`                  | ✓ `/pulls/N/reviews`                        | ✓ `reviews`, `latestReviews`                    |
 | Inline review comment bodies                             | ✓ inside `reviewThreads`     | ✓ `/pulls/N/comments` (flat list)           | ✗ — its `comments` field is issue comments only |
 | Comments grouped into threads                            | ✓ native                     | ⚠ reconstruct manually via `in_reply_to_id` | ✗ no field                                      |

@@ -2,7 +2,7 @@
 name: craft-prompt
 description: Craft, refine, or debug a prompt in the house style — imperative voice, rule-first structure, explicit rationale, XML-tagged exemplars, silence on success.
 when_to_use: "Use when the user asks to write, refine, review, or improve any prompt — tool prompts, skill/workflow prompts, sub-agent personas, system prompts, or general LLM instructions. Also use when the user pastes a draft asking for feedback, or when a prompt or agent misbehaves ('my agent keeps doing X', 'why does it ignore my instructions') — the Debug branch diagnoses from the symptom. Trigger phrases: 'craft a prompt', 'write a prompt', 'refine this prompt', 'debug this prompt', 'make this more house-style', '/craft-prompt'."
-argument-hint: "[draft to refine OR description of what you want to craft]"
+argument-hint: '[draft to refine OR description of what you want to craft]'
 allowed-tools:
   - AskUserQuestion
   - Edit
@@ -144,7 +144,7 @@ name: skill-name
 description: one-line description
 when_to_use: "Use when... Examples: 'trigger phrase', 'another phrase'"
 allowed-tools: [Bash(gh:*), Read, Write, AskUserQuestion]
-argument-hint: "[hint showing argument placeholders]"
+argument-hint: '[hint showing argument placeholders]'
 arguments: [foo, bar] # @internal alias of argument-hint, the documented form (CLI 2.1.215); use $foo in body
 context: fork # omit for inline; use for self-contained workflows
 ---

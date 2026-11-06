@@ -7,6 +7,7 @@ Organizing principles for WHOLE candidate designs in the REIMAGINE phase. Each c
 ## Layered (technical-concern strata)
 
 Stack the system into presentation → domain → data, each layer depending only downward.
+
 - **fits when**
   - dependency graph already sorts cleanly into technical tiers with few upward edges
   - one domain, or domain logic thin relative to I/O plumbing
@@ -17,13 +18,14 @@ Stack the system into presentation → domain → data, each layer depending onl
   - state ownership is per-feature, not per-tier
 - **canonical seam** · extract the data-access layer behind repository interfaces first — fewest upward callers, most stable contract.
 - **migration cost profile** · cheap to introduce (mechanical file moves, interface extraction); expensive to keep honest — cross-layer changes stay costly forever, the reason to reject it when churn cuts vertically.
-- Layering by technical concern should not be the *highest*-level split for a multi-domain system — domain modules internally layered scale better (per https://martinfowler.com/bliki/PresentationDomainDataLayering.html, verified 2026-07-15).
+- Layering by technical concern should not be the _highest_-level split for a multi-domain system — domain modules internally layered scale better (per https://martinfowler.com/bliki/PresentationDomainDataLayering.html, verified 2026-07-15).
 
 ## Hexagonal / ports-and-adapters
 
 An isolated application core surrounded by ports (interfaces it owns) with technology-specific adapters plugged in; intent: "allow an application to equally be driven by users, programs, automated test or batch scripts, and to be developed and tested in isolation from its eventual run-time devices and databases."
+
 - **fits when**
-  - business logic is tangled into I/O (framework, DB, UI) and the map shows core rules that *want* isolated testing
+  - business logic is tangled into I/O (framework, DB, UI) and the map shows core rules that _want_ isolated testing
   - multiple driving actors already exist (HTTP + CLI + cron hitting the same logic)
   - you need to swap a driven dependency (DB, external service) or mock it in tests
 - **fights when**
@@ -37,6 +39,7 @@ An isolated application core surrounded by ports (interfaces it owns) with techn
 ## Modular monolith (domain modules behind explicit public surfaces)
 
 One deployable, partitioned into domain modules that expose a narrow public API and hide internals; cross-module calls go only through published surfaces.
+
 - **fits when**
   - the map reveals 3–8 natural domain clusters (bounded contexts) with dense internal edges and sparse edges between them
   - state ownership already aligns to those clusters (each owns its tables)
@@ -52,6 +55,7 @@ One deployable, partitioned into domain modules that expose a narrow public API 
 ## Vertical slice / feature folders
 
 Organize by feature/request, each slice owning its full stack front-to-back; "minimize coupling between slices, and maximize coupling in a slice."
+
 - **fits when**
   - churn data shows changes arrive as whole features (a request end-to-end), rarely as horizontal layer sweeps
   - features are largely independent — little shared domain logic between them
@@ -67,6 +71,7 @@ Organize by feature/request, each slice owning its full stack front-to-back; "mi
 ## Event-driven (pub-sub backbone)
 
 Components communicate by publishing events to a shared bus; subscribers react, with no direct calls between producers and consumers.
+
 - **fits when**
   - the map shows one action fanning out to many independent reactions (order placed → notify, bill, ship, log)
   - producers and consumers change on different schedules and shouldn't know each other
@@ -82,6 +87,7 @@ Components communicate by publishing events to a shared bus; subscribers react, 
 ## Pipeline / dataflow (pipes and filters)
 
 Decompose processing into a linear chain of stages, each transforming a stream and passing it on; stages are independent and composable.
+
 - **fits when**
   - the map's core responsibility is transformation — input flows through recognizable stages (parse → validate → enrich → emit)
   - stages have single responsibilities and share only the data passing between them
@@ -92,11 +98,12 @@ Decompose processing into a linear chain of stages, each transforming a stream a
   - error handling must branch richly rather than short-circuit a stream
 - **canonical seam** · isolate the first pure stage (a transformation with clear in/out types) behind a stage interface; grow the chain by extracting adjacent transforms.
 - **migration cost profile** · cheap when the code is already a sequence of transforms (rename to stages); expensive when logic is entangled with state or control flow that resists linearization.
-- Canonical "Pipes and Filters" pattern — *Pattern-Oriented Software Architecture, Vol. 1* (Buschmann, Meunier, Rohnert, Sommerlad, Stal).
+- Canonical "Pipes and Filters" pattern — _Pattern-Oriented Software Architecture, Vol. 1_ (Buschmann, Meunier, Rohnert, Sommerlad, Stal).
 
 ## Plugin kernel (microkernel)
 
 A minimal core provides the stable mechanism and extension points; all volatile/optional capability lives in plugins registered against those points.
+
 - **fits when**
   - the map separates cleanly into a small invariant core and many variant features that come and go
   - churn concentrates in the plugins while the core is stable
@@ -107,11 +114,12 @@ A minimal core provides the stable mechanism and extension points; all volatile/
   - everything changes together, so the stability gradient the pattern needs isn't there
 - **canonical seam** · define the plugin contract and extract one existing feature to load through it, proving the core needs no edit to add the next; migrate features into plugins one at a time.
 - **migration cost profile** · cheap to add a plugin once the contract exists; expensive to design that contract right — a wrong extension point forces churn back into the core, defeating the style.
-- Microkernel/plugin pattern — *Software Architecture Patterns* (Mark Richards, O'Reilly).
+- Microkernel/plugin pattern — _Software Architecture Patterns_ (Mark Richards, O'Reilly).
 
 ## Actor / process-supervision (OTP-style)
 
 Model the system as isolated processes that own their state and communicate only by message, arranged under supervision trees that restart failed processes.
+
 - **fits when**
   - state ownership in the map is naturally per-entity/per-session (each thing is its own little state machine)
   - concurrency and fault-isolation are first-order concerns — one failure must not corrupt the rest
@@ -122,11 +130,12 @@ Model the system as isolated processes that own their state and communicate only
   - single-threaded, low-concurrency workloads where processes are pure overhead
 - **canonical seam** · give one stateful entity its own process (GenServer) owning what was shared mutable state, put it under a supervisor, route access through messages; migrate entity types one at a time.
 - **migration cost profile** · cheap on the BEAM where supervision is idiomatic; expensive to reason about message ordering, backpressure, and once-shared invariants now split across mailboxes.
-- Actor model — Hewitt; supervision-tree practice — *Designing for Scalability with Erlang/OTP* (Cesarini & Vinoski), *Programming Elixir* (Thomas).
+- Actor model — Hewitt; supervision-tree practice — _Designing for Scalability with Erlang/OTP_ (Cesarini & Vinoski), _Programming Elixir_ (Thomas).
 
 ## CQRS (command-query responsibility segregation)
 
 Split the write model from the read model so each is shaped for its job; they may live in separate stores.
+
 - **fits when**
   - the map shows read and write logic genuinely diverging — different shapes, different invariants
   - read and write loads differ enough to scale independently

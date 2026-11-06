@@ -20,13 +20,13 @@
           "text": "link never overwrites — an entry in ~/.claude that is a real file or a foreign link is reported `drift` and left alone; only missing entries are linked",
           "verified": {
             "digest": null,
-            "sha": "5f00528f91b54ea18e2b777b2a8a37234b0f3f22"
+            "sha": "b3fc56f632ed82b6cce3b9064a960d44541ebb35"
           }
         }
       ],
       "commands": {
-        "lint": "cargo clippy --all-targets -- -D warnings",
-        "test": "cargo test"
+        "lint": "bun --bun oxlint",
+        "test": "bun run test"
       },
       "contains": [
         "docs"
@@ -41,7 +41,7 @@
       },
       "id": "/",
       "kind": "system",
-      "purpose": "Claude Code harness — global config, rules and skills, plus the Rust statusline; `mise run link` symlinks each entry into ~/.claude."
+      "purpose": "Claude Code harness — global config, rules, skills and the subether mod; `mise run link` symlinks each entry into ~/.claude."
     },
     "docs": {
       "budget": null,
@@ -58,7 +58,7 @@
       },
       "id": "docs",
       "kind": "container",
-      "purpose": "index.html — the design page: link, the perpetual mod, the statusline and window clock, the gate, and the plan (ol#next), in order."
+      "purpose": "index.html — the design page: link, the perpetual mod, the subether gauge and window clock, the gate, and the plan (ol#next), in order."
     }
   },
   "version": 2

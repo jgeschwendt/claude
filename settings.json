@@ -19,17 +19,11 @@
     "baseRef": "fresh",
     "bgIsolation": "none"
   },
-  "statusLine": {
-    "type": "command",
-    "command": "~/.local/bin/statusline",
-    "padding": 0
-  },
   "enabledPlugins": {
     "rust-analyzer-lsp@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
     "vercel@claude-plugins-official": true,
-    "typesafe@typesafe-ai": true,
-    "perpetual@jgeschwendt": true
+    "typesafe@typesafe-ai": true
   },
   "extraKnownMarketplaces": {
     "typesafe-ai": {

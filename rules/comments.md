@@ -1,9 +1,9 @@
 ---
 paths:
-  - "**/*.{bash,sh}"
-  - "**/*.{cjs,cts,js,jsx,mjs,mts,ts,tsx}"
-  - "**/*.{ex,exs}"
-  - "**/*.rs"
+  - '**/*.{bash,sh}'
+  - '**/*.{cjs,cts,js,jsx,mjs,mts,ts,tsx}'
+  - '**/*.{ex,exs}'
+  - '**/*.rs'
 ---
 
 # Comments

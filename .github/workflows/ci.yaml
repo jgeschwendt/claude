@@ -25,13 +25,18 @@ jobs:
       # and stele by sha256: either asset replaced under its tag fails the job. sha256
       # here is the extracted mise binary's, the bare `mise-v<version>-linux-x64` line
       # of that release's SHASUMS256.txt. The tools `mise install` then fetches for
-      # mise.toml carry no hash here (no mise.lock).
+      # mise.toml carry no hash here (no mise.lock), nor does the claude installer.
       - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
           sha256: fe6dd17e68e09682b31d2e7bb7bb755d22636ac1af5d94621e300f2ca9e9fe8a
           version: 2026.10.17
-      - run: mise x -- cargo clippy --all-targets -- -D warnings
-      - run: mise run test
+      # The gate's validate and test steps run the claude CLI; neither needs auth. The installer takes
+      # the version to install, pinned here; it lands in ~/.local/bin.
+      - run: |
+          curl -fsSL https://claude.ai/install.sh | bash -s 2.1.318
+          echo ~/.local/bin >> "$GITHUB_PATH"
+      - run: mise x -- bun install --frozen-lockfile
+      - run: mise x -- bun run test
       # stele graph gate (check → emit --check). NEVER `stele build` in CI: it is
       # the sole writer of .stele/graph.lock and would launder a stale lock green.
       - run: |

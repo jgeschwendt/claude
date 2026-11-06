@@ -12,7 +12,7 @@ when_to_use: >
   briefable as its prompts-density lens), /simplify (code diffs), and
   /gigaredesign (structure itself — section moves and duty changes are out of
   scope here, reported and routed).
-argument-hint: "[file | dir | glob | skill name] [report-only]"
+argument-hint: '[file | dir | glob | skill name] [report-only]'
 allowed-tools:
   - Agent
   - AskUserQuestion

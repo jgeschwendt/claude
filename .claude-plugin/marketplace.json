@@ -11,8 +11,8 @@
       "description": "Machine monitor that broadcasts a shared flag-file state to every interactive session as a notification."
     },
     {
-      "name": "perpetual",
-      "source": "./plugins/perpetual",
+      "name": "subether",
+      "source": "./plugins/subether",
       "description": "The harness's session hooks, house-rule guards, window clock and shift band."
     }
   ]

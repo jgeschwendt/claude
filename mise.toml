@@ -1,14 +1,15 @@
 [tools]
-bun = "1.4.2"
+bun = "1.4.4"
 hk = "2.5.0"
-"npm:oxfmt" = "0.67.0"
-"npm:oxlint" = "1.82.0"
-rust = { components = ["clippy"], version = "1.97.1" }
 
-[tasks.build]
-description = "Build the statusline binary and install it to ~/.local/bin (outside the mbx target cache)"
-run = "cargo build --release && install -m 755 target/release/statusline ~/.local/bin/statusline"
+[tasks.check]
+description = "Run the gate (scripts/test.ts): format check, lint, typecheck, unit tests, monitor-github's selftest, validate and the mod's tests, in parallel"
+run = "bun run test"
 
-[tasks.test]
-description = "Run the crate's unit and integration tests"
-run = "cargo test"
+[tasks.fmt]
+description = "Format the repo with oxfmt (bun fmt)"
+run = "bun fmt"
+
+[tasks.lint]
+description = "Lint with oxlint, type-aware"
+run = "bun --bun oxlint"

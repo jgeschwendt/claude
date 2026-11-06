@@ -1,6 +1,6 @@
 ---
 paths:
-  - "**/*.{jsx,tsx}"
+  - '**/*.{jsx,tsx}'
 ---
 
 # React

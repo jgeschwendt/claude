@@ -3,6 +3,7 @@ import type { Register } from 'claude-code';
 import { context } from './context';
 import { hint, measure, start, step } from './gauge';
 import { bash, bashFailed, yml, ymlFailed } from './guard';
+import { markers } from './markers';
 import { command, opening, pane } from './pane';
 import { log } from './toollog';
 
@@ -17,17 +18,22 @@ export const register: Register = (on) => {
   ).catch(async ($, e, next) => await next(e));
   // `/subether` opens the injected pane asked
   on('command.run', { command: 'subether' }, command);
-  // the first prompt attaches `sandman recall` as capped context; chunks 5/6/7 · correction capture, docket sweep
-  // and digest, the other first-prompt sources
+  // the first prompt attaches `sandman recall` as capped context; chunks 6/7 · docket sweep and digest, the other
+  // first-prompt sources
   on('prompt.submit', context).catch(async ($, e, next) => await next(e));
+  // each prompt the person typed is judged for markers once it entered, each one at 0.8 trailed: a matcher of its
+  // own, since a second unmatched `prompt.submit` fails the load
+  on('prompt.submit', { origin: { kind: 'composer' } }, markers).catch(
+    async ($, e, next) => await next(e),
+  );
   // chunk 6 · `sandman take` and the session's docket resolve under the end budget
   on('session.end', async ($, e, next) => await next(e));
   // the gauge reading; the five-hour window → window.json
   on('session.measure', measure);
   // the gauge's first reading, and its 15 s usage poll in interactive sessions
   on('session.start', start);
-  // the injected pane, opened unasked, and `/subether`: a matcher of its own, since a second unmatched
-  // `session.start` fails the load and `$` crosses an import only into a function declaration
+  // the injected pane, opened unasked, `/subether`, and the judges' probe: a matcher of its own, since a second
+  // unmatched `session.start` fails the load and `$` crosses an import only into a function declaration
   on('session.start', { isInteractive: true }, opening);
   // chunk 8 · /docket /shift /trail and the shift row's timer join `start`. The commands stay
   // perpetual's until cutover: a name registered twice throws in the second mod's session.start

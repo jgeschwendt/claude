@@ -10,8 +10,8 @@ const reply = (context: string): string =>
   });
 
 /**
-The engine beneath: `sandman` answering `stdout`/`exitCode`, each run's argv and stdin, the log, and every prompt
-that reached the bottom
+The engine beneath: `sandman` answering `stdout`/`exitCode`, each run's argv and stdin, the context's log lines (the
+judge's, run on every composer prompt, left out), and every prompt that reached the bottom
 */
 const engine = (
   on: On,
@@ -38,7 +38,7 @@ const engine = (
   on('session.cwd', () => ({ value: '/w' }));
   on('session.id', () => ({ value: 's1' }));
   on('ui.log', ($, e) => {
-    logs.push(e.text);
+    logs.push(...(e.text.startsWith('subether judge') ? [] : [e.text]));
     return { value: undefined };
   });
   return { logs, prompts, runs };
@@ -105,10 +105,12 @@ for (const [name, options, line] of [
   test(`${name} attaches nothing, logs one line, is recorded as failed, and is not retried`, async ($, on) => {
     const { logs, prompts, runs } = engine(on, options);
     const written: unknown[] = [];
-    on('state.get', () => ({ value: { value: written.at(-1), version: 0 } }));
-    on('state.set', ($$, e) => {
-      written.push(e.value);
-      return { value: { isSet: true, version: 0 } };
+    on('state.get', async ($$, e, next) =>
+      e.key === 'injected' ? { value: { value: written.at(-1), version: 0 } } : await next(e),
+    );
+    on('state.set', async ($$, e, next) => {
+      written.push(...(e.key === 'injected' ? [e.value] : []));
+      return e.key === 'injected' ? { value: { isSet: true, version: 0 } } : await next(e);
     });
     await submit($);
     await submit($);

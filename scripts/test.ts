@@ -1,7 +1,9 @@
 #!/usr/bin/env bun
-// The gate: fmt check, lint, monitor-github's selftest, tsc at the root and in the mod, the unit tests, validate and
-// the mod's tests, run at once; each step's output is printed only when it fails, and the exit code is 1 when any did.
+// The gate: the chart data against the source, fmt check, lint, monitor-github's selftest, tsc at the root and in the
+// mod, the unit tests, validate and the mod's tests, run at once; each step's output is printed only when it fails, and
+// the exit code is 1 when any did.
 const STEPS: Record<string, string[]> = {
+  'docs': ['bun', 'scripts/charts.ts'],
   'fmt': ['bun', 'fmt', '--check'],
   'lint': ['bun', '--bun', 'oxlint'],
   'monitor': ['bash', 'skills/monitor-github/scripts/selftest.sh'],

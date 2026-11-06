@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="en" class="ui">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>subether — design</title>
+<link rel="stylesheet" href="https://gigantic.dev/ui/ui.css" />
+<link rel="stylesheet" href="https://gigantic.dev/ui/docs.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script type="module" src="charts/hooks.js"></script>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23634776'/%3E%3Cg transform='translate(2.4 2.4) scale(0.0437)' fill='white'%3E%3Cpath d='M40,88H73a32,32,0,0,0,62,0h81a8,8,0,0,0,0-16H135a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16Zm64-24A16,16,0,1,1,88,80,16,16,0,0,1,104,64ZM216,168H199a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16h97a32,32,0,0,0,62,0h17a8,8,0,0,0,0-16Zm-48,24a16,16,0,1,1,16-16A16,16,0,0,1,168,192Z'/%3E%3C/g%3E%3C/svg%3E" />
+<style>
+/* the d3 charts (docs/charts/*.js): kind slots validated with the dataviz validator, light on #ffffff, dark on #08090a */
+.chart {
+  --kind-1: #8a4b01; --kind-2: #9085fb; --kind-3: #1f7101; --kind-4: #8f2e8a;
+  --kind-5: #999008; --kind-6: #950e4f; --kind-7: #098db2;
+  font-size: 12px; margin: var(--ui-space-5) 0 0; position: relative;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .chart {
+    --kind-1: #ae6105; --kind-2: #7063d6; --kind-3: #3e9727; --kind-4: #ac4aa6;
+    --kind-5: #a09600; --kind-6: #c24173; --kind-7: #0897be;
+  }
+}
+:root[data-theme="dark"] .chart {
+  --kind-1: #ae6105; --kind-2: #7063d6; --kind-3: #3e9727; --kind-4: #ac4aa6;
+  --kind-5: #a09600; --kind-6: #c24173; --kind-7: #0897be;
+}
+.chart-bar { align-items: center; display: flex; flex-wrap: wrap; gap: var(--ui-space-3); justify-content: space-between; margin-bottom: var(--ui-space-3); }
+.chart-legend { color: var(--ui-fg-muted); display: flex; flex-wrap: wrap; gap: 4px 14px; list-style: none; margin: 0; padding: 0; }
+.chart-legend li { align-items: center; display: flex; gap: 6px; }
+.chart-swatch { border-radius: 2px; display: inline-block; height: 8px; width: 8px; }
+.chart-swatch-stub { border: 1px dashed var(--ui-fg-faint); height: 10px; width: 14px; }
+.chart-toggle { background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-sm); color: var(--ui-fg-muted); cursor: pointer; font: inherit; padding: 2px 10px; }
+.chart-frame { background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); overflow-x: auto; padding: 16px; }
+.chart-frame svg { display: block; max-width: none; font-family: var(--ui-font-mono); font-size: 12px; }
+.chart-links path { fill: none; stroke: var(--ui-fg-faint); stroke-opacity: 0.55; stroke-width: 2; }
+.chart-links path.is-stub { stroke-dasharray: 4 4; }
+.chart-heads text { fill: var(--ui-fg-faint); font-family: var(--ui-font-sans); font-size: 11px; letter-spacing: var(--ui-tracking-caps); text-transform: uppercase; }
+.chart-node { cursor: default; outline: none; }
+.chart-node rect:first-child { fill: var(--ui-surface-raised); stroke: var(--ui-border-strong); }
+.chart-node text { fill: var(--ui-fg); }
+.chart-node.is-stub rect:first-child { stroke-dasharray: 4 3; }
+.chart-node.is-stub text { fill: var(--ui-fg-faint); }
+.chart-node:focus-visible rect:first-child { stroke: var(--ui-accent); stroke-width: 2; }
+svg.is-focus .chart-links path:not(.is-lit) { stroke-opacity: 0.12; }
+svg.is-focus .chart-links path.is-lit { stroke: var(--ui-fg); stroke-opacity: 0.9; }
+svg.is-focus .chart-node:not(.is-lit) { opacity: 0.3; }
+svg.is-focus .chart-node.is-lit rect:first-child { stroke: var(--ui-fg); }
+.chart-tip { background: var(--ui-surface-raised); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); box-shadow: var(--ui-shadow-md); color: var(--ui-fg-muted); max-width: 26rem; padding: 8px 12px; pointer-events: none; position: absolute; z-index: 2; }
+.chart-tip strong { color: var(--ui-fg); display: block; margin-bottom: 4px; }
+.chart-tip dl { display: grid; gap: 2px 10px; grid-template-columns: auto 1fr; margin: 0; }
+.chart-tip dt { color: var(--ui-fg-faint); }
+.chart-tip dd { color: var(--ui-fg); font-family: var(--ui-font-mono); margin: 0; overflow-wrap: anywhere; }
+.chart-table { overflow-x: auto; }
+.chart-table td { font-family: var(--ui-font-mono); font-size: 12px; vertical-align: top; }
+.chart-table td:last-child { font-family: var(--ui-font-sans); min-width: 16rem; }
+</style>
+</head>
+<body data-page="subether">
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+<!-- Phosphor Icons (regular), MIT (c) 2023 Phosphor Icons — via jgeschwendt/ui icons/ -->
+<symbol id="ph-circle-half" viewBox="0 0 256 256" fill="currentColor"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm8,16.37a86.4,86.4,0,0,1,16,3V212.67a86.4,86.4,0,0,1-16,3Zm32,9.26a87.81,87.81,0,0,1,16,10.54V195.83a87.81,87.81,0,0,1-16,10.54ZM40,128a88.11,88.11,0,0,1,80-87.63V215.63A88.11,88.11,0,0,1,40,128Zm160,50.54V77.46a87.82,87.82,0,0,1,0,101.08Z"/></symbol>
+<symbol id="ph-moon" viewBox="0 0 256 256" fill="currentColor"><path d="M233.54,142.23a8,8,0,0,0-8-2,88.08,88.08,0,0,1-109.8-109.8,8,8,0,0,0-10-10,104.84,104.84,0,0,0-52.91,37A104,104,0,0,0,136,224a103.09,103.09,0,0,0,62.52-20.88,104.84,104.84,0,0,0,37-52.91A8,8,0,0,0,233.54,142.23ZM188.9,190.34A88,88,0,0,1,65.66,67.11a89,89,0,0,1,31.4-26A106,106,0,0,0,96,56,104.11,104.11,0,0,0,200,160a106,106,0,0,0,14.92-1.06A89,89,0,0,1,188.9,190.34Z"/></symbol>
+<symbol id="ph-sliders-horizontal" viewBox="0 0 256 256" fill="currentColor"><path d="M40,88H73a32,32,0,0,0,62,0h81a8,8,0,0,0,0-16H135a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16Zm64-24A16,16,0,1,1,88,80,16,16,0,0,1,104,64ZM216,168H199a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16h97a32,32,0,0,0,62,0h17a8,8,0,0,0,0-16Zm-48,24a16,16,0,1,1,16-16A16,16,0,0,1,168,192Z"/></symbol>
+<symbol id="ph-sun" viewBox="0 0 256 256" fill="currentColor"><path d="M120,40V16a8,8,0,0,1,16,0V40a8,8,0,0,1-16,0Zm72,88a64,64,0,1,1-64-64A64.07,64.07,0,0,1,192,128Zm-16,0a48,48,0,1,0-48,48A48.05,48.05,0,0,0,176,128ZM58.34,69.66A8,8,0,0,0,69.66,58.34l-16-16A8,8,0,0,0,42.34,53.66Zm0,116.68-16,16a8,8,0,0,0,11.32,11.32l16-16a8,8,0,0,0-11.32-11.32ZM192,72a8,8,0,0,0,5.66-2.34l16-16a8,8,0,0,0-11.32-11.32l-16,16A8,8,0,0,0,192,72Zm5.66,114.34a8,8,0,0,0-11.32,11.32l16,16a8,8,0,0,0,11.32-11.32ZM48,128a8,8,0,0,0-8-8H16a8,8,0,0,0,0,16H40A8,8,0,0,0,48,128Zm80,80a8,8,0,0,0-8,8v24a8,8,0,0,0,16,0V216A8,8,0,0,0,128,208Zm112-88H216a8,8,0,0,0,0,16h24a8,8,0,0,0,0-16Z"/></symbol>
+</svg>
+
+<header class="appbar">
+  <h1 class="appbar-title">
+    <svg class="icon" aria-hidden="true"><use href="#ph-sliders-horizontal" /></svg>
+    subether <small>· design</small>
+  </h1>
+  <span class="spacer"></span>
+  <div class="segmented" role="group" aria-label="theme">
+    <button type="button" data-theme-set="light" aria-pressed="false" title="light">
+      <svg class="icon icon-sm" aria-hidden="true"><use href="#ph-sun" /></svg>light
+    </button>
+    <button type="button" data-theme-set="auto" aria-pressed="true" title="follow the system">
+      <svg class="icon icon-sm" aria-hidden="true"><use href="#ph-circle-half" /></svg>auto
+    </button>
+    <button type="button" data-theme-set="dark" aria-pressed="false" title="dark">
+      <svg class="icon icon-sm" aria-hidden="true"><use href="#ph-moon" /></svg>dark
+    </button>
+  </div>
+</header>
+
+<main class="docs-shell" data-container>
+
+<header class="stack">
+  <p class="eyebrow">the harness's Claude Code mod</p>
+  <p class="lead docs-lead"><code class="code">subether</code> is the from-scratch successor of
+    <code class="code">perpetual</code>, built on native mod events: the gauge row under the prompt,
+    the injected pane, the Bash and <code class="code">.yml</code> guards and the daily tool log are
+    live; the System One markers, docket, session end and the shift band are to come. Its contract is
+    <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/README.md">plugins/subether/README.md</a>;
+    this page is the design and what is open.</p>
+  <nav class="row docs-toc" aria-label="sections">
+    <a class="pill" href="#why">why</a>
+    <a class="pill" href="#install">install</a>
+    <a class="pill" href="#events">events</a>
+    <a class="pill" href="#gauge">gauge</a>
+    <a class="pill" href="#pane">pane</a>
+    <a class="pill" href="#markers">markers</a>
+    <a class="pill" href="#guards">guards</a>
+    <a class="pill" href="#log">log</a>
+    <a class="pill" href="#state">state</a>
+    <a class="pill" href="#gate">gate</a>
+    <a class="pill" href="#plan">plan</a>
+  </nav>
+</header>
+
+<section class="docs-section" id="why" data-component="why">
+  <header>
+    <h2 class="h2">Why a rewrite</h2>
+    <p class="docs-note">perpetual ran settings hooks from inside a mod; subether uses the events a
+      mod is built on.</p>
+  </header>
+  <p>A <a class="link" href="https://code.claude.com/docs/en/plugins/mods/overview">mod</a> is a
+    plugin whose TypeScript handlers run inside Claude Code on its own events — a tool call, a
+    submitted prompt, a part of the interface being drawn — and can watch, change or answer them.
+    perpetual hung its work on the <code class="code">classic.*</code> events, the settings-hook
+    events relayed to a mod, and returned <code class="code">additionalContext</code> the way a
+    command hook does. Where Claude Code's built-in guard loads (managed settings, or a Team or
+    Enterprise login), an installed mod's <code class="code">classic.*</code> hooks never run, so
+    that design goes dark exactly where it is most needed.</p>
+  <ul class="stack claims" role="list">
+    <li><strong>native first</strong> — every hook is on a native event; the one exception is
+      <code class="code">classic.Notification</code>, since no native notification event exists.</li>
+    <li><strong>the stand-in</strong> — no native event injects at session start, so the first
+      <code class="code">prompt.submit</code> attaches its <code class="code">context</code> block
+      instead (<a class="link" href="#pane">pane</a>).</li>
+    <li><strong>dropped</strong> — the <code class="code">classic.SessionStart</code>,
+      <code class="code">UserPromptSubmit</code>, <code class="code">Stop</code> and
+      <code class="code">SessionEnd</code> shims; <code class="code">additionalContext</code>
+      replies; module-level mutable state, now <code class="code">$.state</code> atoms
+      (<a class="link" href="#state">state</a>); and the Rust <code class="code">statusline</code>
+      crate, folded into the gauge and retired 2026-11-05.</li>
+  </ul>
+</section>
+
+<section class="docs-section" id="install" data-component="install">
+  <header>
+    <h2 class="h2">Install</h2>
+    <p class="docs-note">Loaded from the worktree until cutover; installed from the repo's
+      marketplace after.</p>
+  </header>
+  <ul class="stack claims" role="list">
+    <li><strong>today</strong> — the live <code class="code">settings.json</code> sets
+      <code class="code">env.CLAUDE_CODE_PLUGIN_DIRS</code> to the
+      <code class="code">perpetual/rewrite</code> worktree's <code class="code">plugins/subether</code>,
+      which loads in place as <code class="code">--plugin-dir</code> does, so an edit reaches the
+      next session or <code class="code">/reload-plugins</code> with no version bump.</li>
+    <li><strong>at cutover</strong> — <code class="code">claude plugin install
+      subether@jgeschwendt</code> from the marketplace
+      (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/.claude-plugin/marketplace.json">.claude-plugin/marketplace.json</a>),
+      then the <code class="code">CLAUDE_CODE_PLUGIN_DIRS</code> entry is dropped.</li>
+    <li><strong>perpetual is gone</strong> — uninstalled 2026-11-06 (owner: "make sure we are no
+      longer running perpetual too, remove the plugin definition to be safe"): its
+      <code class="code">enabledPlugins</code> row and cache removed. Until chunks 5–8 land there is no
+      docket hook, no <code class="code">sandman take</code> at session end and no shift band.</li>
+  </ul>
+  <pre class="snippet">claude plugin validate plugins/subether --strict
+claude plugin test plugins/subether</pre>
+</section>
+
+<section class="docs-section" id="events" data-component="events">
+  <header>
+    <h2 class="h2">Events</h2>
+    <p class="docs-note">What
+      <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/register.tsx">plugins/subether/hooks/register.tsx</a>
+      wires; a planned row is a pass-through stub until its chunk lands.</p>
+  </header>
+  <figure class="figure"><img class="figure-light" src="figures/session-events.png" alt="Seven stations on one rail, left to right: session.start, the first prompt.submit, each prompt.submit, tool.call (highlighted), session.measure, turn.complete and session.end; under each, what subether does there." /><img class="figure-dark" src="figures/session-events-dark.png" alt="" aria-hidden="true" loading="lazy" /><figcaption>One session, event by event: every native event a session raises and what subether does at each. Source: Claude Design canvas <a href="https://claude.ai/artifact/MTz8JkYYiUUbNG7svL9sPS">claude figures</a>, board session-events.</figcaption></figure>
+  <figure class="figure">
+    <div class="chart" id="hook-graph"><noscript><p class="docs-note">The hook graph needs JavaScript; its data is <a class="link" href="data/hooks.json">docs/data/hooks.json</a>.</p></noscript></div>
+    <figcaption>The hook graph: every registration in register.tsx, what it reads and writes, and where its effects land. Data: <a href="data/hooks.json">docs/data/hooks.json</a>, checked by the gate.</figcaption>
+  </figure>
+  <table>
+    <thead>
+      <tr><th>event</th><th>matcher</th><th>does</th><th>status</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code class="code">agent.spawn</code></td><td>—</td><td>pin a spawn with no <code class="code">model</code>, not a fork, to <code class="code">opus</code></td><td>chunk 5</td></tr>
+      <tr><td><code class="code">classic.Notification</code></td><td><code class="code">agent_needs_input</code>, <code class="code">idle_prompt</code>, <code class="code">permission_prompt</code></td><td><code class="code">docket --hook</code> with <code class="code">e</code></td><td>chunk 6</td></tr>
+      <tr><td><code class="code">command.run</code></td><td><code class="code">subether</code></td><td>open the injected pane</td><td>live</td></tr>
+      <tr><td rowspan="2"><code class="code">prompt.submit</code></td><td rowspan="2">—</td><td>first prompt: <code class="code">sandman recall</code> as one capped <code class="code">context</code> block</td><td>live</td></tr>
+      <tr><td>System One markers; per-prompt docket digest; the other first-prompt sources</td><td>chunks 5, 6, 7</td></tr>
+      <tr><td><code class="code">session.end</code></td><td>—</td><td><code class="code">sandman take</code> and the session's docket resolve under the 1.5 s budget</td><td>chunks 5, 6</td></tr>
+      <tr><td><code class="code">session.measure</code></td><td>—</td><td>the gauge reading; the five-hour window → <code class="code">window.json</code></td><td>live</td></tr>
+      <tr><td rowspan="2"><code class="code">session.start</code></td><td>—</td><td>the gauge's first reading and 15 s poll; later the band's commands and timer</td><td>live · chunk 8</td></tr>
+      <tr><td><code class="code">isInteractive</code></td><td>open the pane unasked, register <code class="code">/subether</code></td><td>live</td></tr>
+      <tr><td rowspan="3"><code class="code">tool.call</code></td><td>—</td><td>the daily tool log; registered first, so outermost</td><td>live</td></tr>
+      <tr><td><code class="code">Bash</code></td><td>the Bash guard</td><td>live</td></tr>
+      <tr><td><code class="code">Edit</code>, <code class="code">Write</code></td><td>deny a <code class="code">.yml</code> path</td><td>live</td></tr>
+      <tr><td><code class="code">turn.step</code></td><td>—</td><td>the gauge's effort flag</td><td>live</td></tr>
+      <tr><td><code class="code">turn.complete</code></td><td>main loop</td><td><code class="code">docket --hook</code> with a synthesized Stop payload</td><td>chunk 6</td></tr>
+      <tr><td rowspan="3"><code class="code">ui.render</code></td><td><code class="code">PromptHint</code></td><td>the gauge row</td><td>live</td></tr>
+      <tr><td><code class="code">Pane</code></td><td>the injected pane's body</td><td>live</td></tr>
+      <tr><td><code class="code">AbovePrompt</code></td><td>the shift row</td><td>chunk 8</td></tr>
+    </tbody>
+  </table>
+  <p class="docs-note">Every binary runs from <code class="code">~/.local/bin</code> and never
+    raises: a failure is one dim log line
+    (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/sandman.ts">plugins/subether/hooks/sandman.ts</a>).</p>
+</section>
+
+<section class="docs-section" id="gauge" data-component="gauge">
+  <header>
+    <h2 class="h2">Gauge</h2>
+    <p class="docs-note">The row under the prompt, in the hint line's place, the engine's hint kept
+      beneath:
+      <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/gauge.tsx">plugins/subether/hooks/gauge.tsx</a>.</p>
+  </header>
+  <pre class="snippet">Fable 5 (low) ██████████▎░░░░░░░░░░░ 52% ≈46m · $1.20 · 5h 31%† ↻ 10:50pm</pre>
+  <ul class="stack claims" role="list">
+    <li><strong>the row</strong> — model, the main loop's last <code class="code">turn.step</code>
+      effort, an ⅛-block bar against <code class="code">autoCompactThreshold</code> (else the window)
+      toned at 50/75/90, an ETA from 15 s token samples, session cost, the five-hour limit with its
+      local reset, <code class="code">†</code> past 200k tokens. Each segment only with its data; the
+      bar takes the columns the rest leaves, less a 4-column margin.</li>
+    <li><strong>the reading</strong> — <code class="code">session.measure</code> and, in interactive
+      sessions, a 15 s <code class="code">$.session.usage()</code> poll; until the first reading the
+      row yields to the engine's hint.</li>
+    <li><strong>the window clock</strong> — each reading with a five-hour window writes
+      <code class="code">window.json</code> (<code class="code">$CLAUDE_WINDOW_FILE</code>, else
+      <code class="code">$XDG_STATE_HOME/claude/window.json</code>) for
+      <code class="code">sandman shift clock</code>, through a temp file moved into place: only a
+      window resetting within 6 h, never behind the stored live one, a percentage outside 0–100 logged
+      and not written.</li>
+  </ul>
+</section>
+
+<section class="docs-section" id="pane" data-component="pane">
+  <header>
+    <h2 class="h2">Injected pane</h2>
+    <p class="docs-note">What subether added for Claude, shown in the right pane
+      <code class="code">subether · injected</code>:
+      <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/context.ts">plugins/subether/hooks/context.ts</a>
+      attaches,
+      <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/pane.tsx">plugins/subether/hooks/pane.tsx</a>
+      draws.</p>
+  </header>
+  <ul class="stack claims" role="list">
+    <li><strong>the stand-in</strong> — the first <code class="code">prompt.submit</code> that is not
+      <code class="code">isMeta</code> (and the first after <code class="code">/clear</code>) runs
+      <code class="code">sandman recall --hook</code> (10 s) and attaches the reply as one
+      <code class="code">context</code> block, capped at 10,000 characters, cut at a line break and
+      the cut named. Tried once; a failure attaches nothing, and the prompt always goes through.</li>
+    <li><strong>the rows</strong> — newest first, each collapsed to
+      <code class="code">▸ &lt;hh:mm&gt; · sandman recall · &lt;chars&gt; chars[, cut]</code> (or
+      <code class="code">· failed</code>); a press expands it over its text or error.</li>
+    <li><strong>opening</strong> — unasked at an interactive session's start, placed from 144
+      columns; <code class="code">/subether</code> opens it at any width, mid-turn too.</li>
+    <li><strong>the judge line</strong> — the System One gate's state will show here
+      (<a class="link" href="#markers">markers</a>); landing with chunk 5.</li>
+  </ul>
+</section>
+
+<section class="docs-section" id="markers" data-component="markers">
+  <header>
+    <h2 class="h2">Markers</h2>
+    <p class="docs-note">Designed, landing with chunk 5: no marker hook is in the tree yet. A System
+      One judge replaces perpetual's regex correction capture.</p>
+  </header>
+  <p>Owner, 2026-11-06: "lets only classify sessions when we have tokens available in the typesafe
+    api or local classification model … fan out and detect markers to add to the trail"; "drop the
+    regex, typesafe first, 0.8, build it".</p>
+  <ul class="stack claims" role="list">
+    <li><strong>one request per composer prompt</strong> — TypeSafe
+      <code class="code">POST /v1/systemone</code> first, the local Kev at
+      <code class="code">127.0.0.1:1703</code> as fallback, nothing when both are down.</li>
+    <li><strong>four questions</strong> — correction, repeat, preference, approval, each a
+      yes-probability over the previous answer's tail and the prompt (plus the last prompts, for
+      repeat).</li>
+    <li><strong>0.8</strong> — at or above it, a <code class="code">correction</code> trail event, its
+      rationale prefixed <code class="code">repeated instruction:</code>,
+      <code class="code">preference:</code> or <code class="code">approval:</code> for the other three;
+      sandman's kinds stay as they are.</li>
+    <li><strong>a learned gate</strong> — a free <code class="code">GET /v1/models</code> at start;
+      429/529 marks a backend down for its retry-after, 401/403 for the session, a Kev timeout busy for
+      60 s. Its state shows in the pane.</li>
+  </ul>
+</section>
+
+<section class="docs-section" id="guards" data-component="guards">
+  <header>
+    <h2 class="h2">Guards</h2>
+    <p class="docs-note">The house rules on <code class="code">tool.call</code>:
+      <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/guard.ts">plugins/subether/hooks/guard.ts</a>,
+      perpetual 0.2.12's tokenizer and judges ported to typed TypeScript, logic unchanged.</p>
+  </header>
+  <ul class="stack claims" role="list">
+    <li><strong>denied</strong> — <code class="code">pkill -f</code>, tree discards, <code class="code">git
+      reset --hard</code>, force pushes, <code class="code">git stash</code>, <code class="code">git
+      clean</code>, and an Edit/Write to a <code class="code">*.yml</code> path, with
+      <code class="code">subether: &lt;house rule&gt;.</code> as the reason; the full table is the
+      README's.</li>
+    <li><strong>read as Bash reads it</strong> — quotes removed; each <code class="code">$(…)</code>,
+      backtick, <code class="code">sh -c</code>, <code class="code">eval</code> string and
+      <code class="code">find -exec</code> a command of its own; argv read past assignments, keywords and
+      wrappers (<code class="code">sudo</code>, <code class="code">env</code>, <code class="code">mise
+      x</code>, …). Quoted text never trips it; quoting never hides a command. Against perpetual 0.2.12,
+      274 table rows and 300,000 fuzzed lines differ in no outcome.</li>
+    <li><strong>fail closed</strong> — a command nested past 16 levels or 64 groups, or one it cannot
+      read, is denied as unreadable; a hook that throws or times out before passing the call on denies
+      it through its <code class="code">.catch</code>.</li>
+    <li><strong>trailed</strong> — each denial first runs <code class="code">sandman trail append
+      --kind guard --rationale "&lt;rule&gt;: &lt;first 200 chars&gt;" --ref session:&lt;id&gt;</code>
+      (plus <code class="code">--shift</code> when set), 5 s; a failed trail is one dim log line and
+      the call is still denied.</li>
+    <li><strong>not seen</strong> — a saved alias, variable indirection, arguments fed from a pipe,
+      <code class="code">env -S</code>, package runners.</li>
+  </ul>
+</section>
+
+<section class="docs-section" id="log" data-component="log">
+  <header>
+    <h2 class="h2">Tool log</h2>
+    <p class="docs-note">One JSON line per tool call, one file per day:
+      <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/toollog.ts">plugins/subether/hooks/toollog.ts</a>.</p>
+  </header>
+  <ul class="stack claims" role="list">
+    <li><strong>where</strong> — <code class="code">~/.local/state/subether/tools/&lt;yyyy-mm-dd&gt;.jsonl</code>
+      (<code class="code">$CLAUDE_TOOL_LOG_DIR</code>, else
+      <code class="code">$XDG_STATE_HOME/subether/tools</code>), the day local to the call's start.</li>
+    <li><strong>what</strong> — every call, built-in and MCP, main loop and subagents, denials
+      included: when, session, agent, cwd, tool, id, duration, outcome
+      (<code class="code">denied</code>/<code class="code">error</code>/<code class="code">ok</code>),
+      the size of what the model read, Bash's flags, and the arguments; the key order is the
+      README's.</li>
+    <li><strong>the cut</strong> — every string argument cut at 2,000 characters with
+      <code class="code">…[cut &lt;n&gt; chars]</code>. Never result content.</li>
+    <li><strong>how</strong> — appended after the call settles through <code class="code">cat
+      &gt;&gt;</code> (O_APPEND, so sessions' lines land whole), not awaited; a failed append is one
+      dim log line.</li>
+  </ul>
+</section>
+
+<section class="docs-section" id="state" data-component="state">
+  <header>
+    <h2 class="h2">State</h2>
+    <p class="docs-note">No module-level mutable state: every value lives in a
+      <code class="code">$.state</code> atom under <code class="code">subether</code>, typed in
+      <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/types/index.d.ts">plugins/subether/types/index.d.ts</a>.</p>
+  </header>
+  <ul class="stack claims" role="list">
+    <li><strong>in use</strong> — <code class="code">effort</code> (the gauge's flag),
+      <code class="code">expanded</code> (the pane's open rows), <code class="code">gauge</code> (the
+      last usage reading), <code class="code">injected</code> (the attached blocks, failures too),
+      <code class="code">samples</code> (the token trend for the ETA).</li>
+    <li><strong>declared for later chunks</strong> — <code class="code">last</code> and
+      <code class="code">shift</code> (the band), <code class="code">opened</code>,
+      <code class="code">prompts</code>, <code class="code">seen</code>.</li>
+    <li><strong>reset</strong> — <code class="code">/clear</code>, <code class="code">/resume</code>
+      and <code class="code">/branch</code> reset every atom to its default: the next prompt recalls
+      again, the pane empties and the gauge waits for its next reading.</li>
+  </ul>
+</section>
+
+<section class="docs-section" id="gate" data-component="gate">
+  <header>
+    <h2 class="h2">Gate</h2>
+    <p class="docs-note">One gate, run locally by hk and remotely by CI.</p>
+  </header>
+  <p><code class="code">bun run test</code>
+    (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/scripts/test.ts">scripts/test.ts</a>)
+    runs every step at once — fmt check, oxlint, tsc at the root and in the mod, the unit tests,
+    monitor-github's selftest, <code class="code">claude plugin validate --strict</code> and
+    <code class="code">claude plugin test</code> — and prints a step's output only when it fails.</p>
+  <ul class="stack claims" role="list">
+    <li><strong>hk</strong>
+      (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/hk.pkl">hk.pkl</a>) —
+      pre-commit checks fmt and oxlint, check-only; pre-push runs <code class="code">bun run
+      test</code>, then <code class="code">stele check</code> and <code class="code">stele emit
+      --check</code>.</li>
+    <li><strong>CI</strong>
+      (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/.github/workflows/ci.yaml">.github/workflows/ci.yaml</a>)
+      — the <code class="code">check</code> job, the required check: the claude CLI pinned,
+      <code class="code">bun run test</code>, then the stele gate; never
+      <code class="code">stele build</code>, the lock's sole writer.</li>
+  </ul>
+</section>
+
+<section class="docs-section" id="plan" data-component="plan">
+  <header>
+    <h2 class="h2">Plan</h2>
+  </header>
+  <h3 class="h3">Chunks</h3>
+  <p class="docs-note">The only plan, in order; each chunk is one branch state the owner reads before
+    the next starts (owner, 2026-11-05: "i want smaller chunks of work"). A landing that changes it
+    edits it here.</p>
+  <ol class="stack" id="next">
+    <li>✔ 2026-11-05 <strong>Scaffold</strong>: 0.5.0, every event a pass-through stub, a test
+      each.</li>
+    <li>✔ 2026-11-05 <strong>Gauge</strong> (owner: "lets fold it in now"; "drop the cargo statusline
+      and switch over to the mod now"): the Rust statusline folded into the mod, the crate and
+      <code class="code">statusLine</code> retired; moved under the prompt 2026-11-06 (owner: "docs show
+      it can be rendered below like before").</li>
+    <li>✔ 2026-11-05 <strong>Tooling</strong> (owner: "do this but parallel where possible"): the
+      <a class="link" href="#gate">gate</a>.</li>
+    <li>✔ 2026-11-06 <strong>Context stand-in and pane</strong> (owner: "lets use this standin and
+      add the right panel, have it show a message that gets injected. we start here"); rows collapsed by
+      default.</li>
+    <li>✔ 2026-11-06 <strong>Guard and tool log</strong> (owner: "lets do the next bit the tool calls
+      … i also want every tool call logged to a file, one log per day").</li>
+    <li><strong>Sandman</strong>: the System One <a class="link" href="#markers">markers</a> (owner:
+      "we will abandon the dowse work for this path"), the <code class="code">agent.spawn</code> pin,
+      <code class="code">session.end</code> → <code class="code">sandman take</code>, and the context
+      cap's <code class="code">guard</code> trail.</li>
+    <li><strong>Docket</strong>: digest, dead-session sweep, synthesized Stop, Notification and
+      UserPromptSubmit payloads, the session's resolve at end.</li>
+    <li><strong>Context</strong>: the other first-prompt sources (report, docket digest, sweep) and
+      the per-prompt changed-threads digest, capped 2,500.</li>
+    <li><strong>Band</strong>: the shift row above the prompt — atoms, 15 s timer,
+      <code class="code">AbovePrompt</code> render, <code class="code">/docket</code>
+      <code class="code">/shift</code> <code class="code">/trail</code>.</li>
+    <li><strong>README and cutover</strong>: below.</li>
+  </ol>
+  <h3 class="h3">Cutover</h3>
+  <ol class="stack">
+    <li><code class="code">mise run link</code>
+      (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/.mise/tasks/link">.mise/tasks/link</a>)
+      still reads <code class="code">plugins/perpetual</code>; point it at subether.</li>
+    <li>AGENTS "Working here", and this repo's design page sections for the mod and marketplace.</li>
+    <li>The README behaviour table brought level with the tree; the version bumped.</li>
+    <li><code class="code">settings.json</code>: <code class="code">enabledPlugins</code> gains
+      <code class="code">subether@jgeschwendt</code>; <code class="code">env.CLAUDE_CODE_PLUGIN_DIRS</code>
+      dropped.</li>
+    <li>The PR, then <code class="code">claude plugin install subether@jgeschwendt</code> — owner's
+      step.</li>
+  </ol>
+</section>
+
+<nav class="row link-row" aria-label="links">
+  <a class="pill" href="index.html">claude · design</a>
+  <a class="pill" href="https://github.com/jgeschwendt/claude/tree/main/plugins/subether">source · plugins/subether</a>
+  <a class="pill" href="https://code.claude.com/docs/en/plugins/mods/overview">mods · overview</a>
+</nav>
+
+</main>
+<script>
+/* The theme contract, verbatim from jgeschwendt/ui docs.js — same localStorage
+   key, so a theme chosen on the ui pages is the theme this one opens in. */
+const THEME_KEY = "ui-theme";
+function applyTheme(mode) {
+  const root = document.documentElement;
+  if (mode === "auto") {
+    root.removeAttribute("data-theme");
+    localStorage.removeItem(THEME_KEY);
+  } else {
+    root.dataset.theme = mode;
+    localStorage.setItem(THEME_KEY, mode);
+  }
+  for (const b of document.querySelectorAll("[data-theme-set]")) {
+    b.setAttribute("aria-pressed", String(b.dataset.themeSet === mode));
+  }
+}
+for (const b of document.querySelectorAll("[data-theme-set]")) {
+  b.addEventListener("click", () => applyTheme(b.dataset.themeSet));
+}
+applyTheme(localStorage.getItem(THEME_KEY) || "auto");
+</script>
+</body>
+</html>

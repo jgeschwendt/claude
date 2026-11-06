@@ -6,6 +6,10 @@ hk = "2.5.0"
 description = "Run the gate (scripts/test.ts): format check, lint, typecheck, unit tests, monitor-github's selftest, validate and the mod's tests, in parallel"
 run = "bun run test"
 
+[tasks.figures]
+description = "Render docs/figures/*.png from the Claude Design canvas source"
+run = "docs/figures/export.sh"
+
 [tasks.fmt]
 description = "Format the repo with oxfmt (bun fmt)"
 run = "bun fmt"

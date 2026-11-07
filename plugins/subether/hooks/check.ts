@@ -5,7 +5,7 @@ tool log as a `check` line. Shadow only: the decision returns unchanged, before 
 */
 import type { EngineInterface, Hook, ToolCheckInput, ToolCheckResult } from 'claude-code';
 import { judge } from './judge';
-import { append } from './sandman';
+import { append, object } from './sandman';
 import { cut } from './toollog';
 
 /**
@@ -58,13 +58,6 @@ const QUESTIONS = {
     type: 'noul',
   },
 } as const;
-
-/**
-`pairs` as a JSON object, keys in their order, each value JSON and `null` when undefined (`JSON.stringify` of an absent
-field)
-*/
-const object = (pairs: [string, string | undefined][]): string =>
-  `{${pairs.map(([key, value]) => `"${key}":${value ?? 'null'}`).join(',')}}`;
 
 /**
 Judges one asked call and appends its `check` line, keys in the wire order: kind, at, session, agent, tool, id, core

@@ -8,9 +8,15 @@ import type {
 } from 'claude-code';
 import { type Engine, type MockClock, expect, mock, test } from 'claude-code/testing';
 
-const NOW = 1_757_000_000_000;
+const AT = '2026-11-07T03:30:00.250Z';
+const NOW = Temporal.Instant.from(AT).epochMilliseconds;
+const DAY = Temporal.Instant.fromEpochMilliseconds(NOW)
+  .toZonedDateTimeISO(Temporal.Now.timeZoneId())
+  .toPlainDate()
+  .toString();
 const HEAD = 200;
 const KEPT = 20;
+const LINE = 120;
 const LONG = 400;
 const SAID = "no, don't do that, I said use the rewrite";
 const TAIL = 600;
@@ -24,33 +30,40 @@ const LOW = '{"approval":0.1,"correction":0.2,"preference":0.3,"repeat":0.4}';
 
 /**
 The engine beneath: TypeSafe answering `markers` (refused when absent, Kev too), the bodies it was sent, each trail
-append's rationale, each atom's last write, and what the prompt's bottom answers
+append's rationale, each tool log line (its append exiting `exitCode`), the log, each atom's last write, and what the
+prompt's bottom answers
 */
 const engine = (
   on: On,
   {
     environment = '{}',
+    exitCode = 0,
     markers,
     messages = [],
     result,
   }: {
     environment?: string;
+    exitCode?: number;
     markers?: string;
     messages?: SessionMessage[];
     result?: PromptSubmitResult;
   } = {},
 ): {
+  lines: string[];
+  logs: string[];
   rationales: string[];
   sent: unknown[];
   state: Partial<PluginState['subether']>;
   time: MockClock;
 } => {
-  const rationales: string[] = [];
+  const [lines, logs, rationales]: [string[], string[], string[]] = [[], [], []];
   const sent: unknown[] = [];
   const state: Record<string, unknown> = {};
   const time = mock.clock(on, { now: NOW });
   mock.env(on, {
-    ...fixture<object>('{"HOME":"/home/test","TYPESAFE_API_KEY":"k"}'),
+    ...fixture<object>(
+      '{"CLAUDE_TOOL_LOG_DIR":"/logs","HOME":"/home/test","TYPESAFE_API_KEY":"k"}',
+    ),
     ...fixture<object>(environment),
   });
   on('http.fetch', ($, e) => {
@@ -64,13 +77,17 @@ const engine = (
       : { value: fixture<HttpResponse>(`{"headers":{},"ok":true,"status":200,"text":${text}}`) };
   });
   on('process.run', ($, e) => {
-    rationales.push(e.argv[e.argv.indexOf('--rationale') + 1] ?? '');
+    const isLog = e.argv[0] === '/bin/sh';
+    (isLog ? lines : rationales).push(
+      isLog ? (e.init?.stdin ?? '') : (e.argv[e.argv.indexOf('--rationale') + 1] ?? ''),
+    );
+    const code = isLog ? exitCode : 0;
     return {
       value: {
-        exitCode: 0,
+        exitCode: code,
         isStderrTruncated: false,
         isStdoutTruncated: false,
-        stderr: '',
+        stderr: 'read-only\n',
         stdout: '',
       },
     };
@@ -82,8 +99,11 @@ const engine = (
     state[e.key] = e.value;
     return await next(e);
   });
-  on('ui.log', () => ({ value: undefined }));
-  return { rationales, sent, state, time };
+  on('ui.log', ($, e) => {
+    logs.push(e.text);
+    return { value: undefined };
+  });
+  return { lines, logs, rationales, sent, state, time };
 };
 
 /**
@@ -182,20 +202,34 @@ for (const [name, prefix] of [
   });
 }
 
-test('at 0.79 nothing is trailed; two markers over are two events', async ($, on) => {
+test('at 0.79 nothing is trailed; two markers over are two events and one prompt line, keys in wire order', async ($, on) => {
   const markers = '{"approval":0.79,"correction":0.93,"preference":0.79,"repeat":0.851}';
-  const { rationales, time } = engine(on, { markers });
-  await say($, time, { text: SAID });
+  const { lines, rationales, time } = engine(on, { markers });
+  const text = `${SAID}\r\n\nthen ${'z'.repeat(HEAD)}`;
+  await say($, time, { text });
+  const head = text.slice(0, HEAD);
   expect(rationales.toSorted((one, other) => one.localeCompare(other))).toEqual([
-    `${SAID} (p=0.93, typesafe)`,
-    `repeated instruction: ${SAID} (p=0.85, typesafe)`,
+    `${head} (p=0.93, typesafe)`,
+    `repeated instruction: ${head} (p=0.85, typesafe)`,
+  ]);
+  const line = `${SAID} then ${'z'.repeat(HEAD)}`.slice(0, LINE);
+  expect(lines).toEqual([
+    `{"kind":"prompt","at":"${AT}","session":"s1","head":"${line}","judge":"typesafe","markers":${markers},"trailed":["correction","repeat"],"tokens":null,"ms":0}\n`,
   ]);
 });
 
-test('with both judges down nothing is trailed, nothing throws, and the prompt goes on unchanged', async ($, on) => {
-  const { rationales, state, time } = engine(on);
+test('a failed append is one log line, the trail still written', async ($, on) => {
+  const markers = '{"approval":0.1,"correction":0.9,"preference":0.3,"repeat":0.4}';
+  const { logs, rationales, time } = engine(on, { exitCode: 1, markers });
+  await say($, time, { text: SAID });
+  expect(logs).toContain(`prompt log: Error: /logs/${DAY}.jsonl: read-only`);
+  expect(rationales).toEqual([`${SAID} (p=0.90, typesafe)`]);
+});
+
+test('with both judges down nothing is trailed or logged, nothing throws, and the prompt goes on unchanged', async ($, on) => {
+  const { lines, rationales, state, time } = engine(on);
   expect(await say($, time, { text: SAID })).toEqual({ text: SAID });
-  expect(rationales).toEqual([]);
+  expect([lines, rationales]).toEqual([[], []]);
   expect(state.judged).toEqual([{ at: NOW, head: SAID, markers: {} }]);
 });
 

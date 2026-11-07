@@ -59,8 +59,9 @@
       "reads": ["injected"], "status": "live", "writes": ["injected"]
     },
     {
-      "catch": "pass", "chunk": 5, "does": "judge a typed prompt for four markers, unawaited; each at 0.8 trailed",
+      "catch": "pass", "chunk": 5, "does": "judge a typed prompt for four markers, unawaited; a prompt line logged, each at 0.8 trailed",
       "effects": [
+        { "kind": "file", "target": "tools/<day>.jsonl" },
         { "kind": "http", "target": "api.typesafe.ai" },
         { "kind": "http", "target": "127.0.0.1:1703" },
         { "kind": "trail", "target": "~/.sandman/trail" },

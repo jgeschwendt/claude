@@ -1,6 +1,7 @@
 /**
-The `~/.local/bin` runner, the trail append perpetual's `append($, kind, rationale)` made, and the daily tool log's
-append. Each is a function declaration: past an import the engine follows `$` only into one (`claude plugin validate`)
+The `~/.local/bin` runner, the trail append perpetual's `append($, kind, rationale)` made, the daily tool log's append
+and its line builder. Each is a function declaration: past an import the engine follows `$` only into one (`claude plugin
+validate`)
 */
 import type { EngineInterface, ProcessRunInit } from 'claude-code';
 
@@ -72,4 +73,12 @@ async function append($: EngineInterface, at: number, line: string): Promise<voi
   }
 }
 
-export { append, run, trail };
+/**
+`pairs` as a JSON object, keys in their order, each value JSON and `null` when undefined (`JSON.stringify` of an absent
+field)
+*/
+function object(pairs: [string, string | undefined][]): string {
+  return `{${pairs.map(([key, value]) => `"${key}":${value ?? 'null'}`).join(',')}}`;
+}
+
+export { append, object, run, trail };

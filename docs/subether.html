@@ -9,11 +9,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <script type="module" src="charts/atoms.js"></script>
 <script type="module" src="charts/call.js"></script>
-<script type="module" src="charts/calls.js"></script>
 <script type="module" src="charts/hooks.js"></script>
 <script type="module" src="charts/judge.js"></script>
-<script type="module" src="charts/markers.js"></script>
-<script type="module" src="charts/session.js"></script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23634776'/%3E%3Cg transform='translate(2.4 2.4) scale(0.0437)' fill='white'%3E%3Cpath d='M40,88H73a32,32,0,0,0,62,0h81a8,8,0,0,0,0-16H135a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16Zm64-24A16,16,0,1,1,88,80,16,16,0,0,1,104,64ZM216,168H199a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16h97a32,32,0,0,0,62,0h17a8,8,0,0,0,0-16Zm-48,24a16,16,0,1,1,16-16A16,16,0,0,1,168,192Z'/%3E%3C/g%3E%3C/svg%3E" />
 <style>
 /* the d3 charts (docs/charts/*.js): kind slots validated with the dataviz validator, light on #ffffff, dark on #08090a */
@@ -98,48 +95,7 @@ svg.is-focus .chart-row:not(.is-lit) { opacity: 0.35; }
 .chart-fallback.is-dashed { stroke-dasharray: 4 3; }
 .chart-sink rect { fill: var(--ui-surface-raised); stroke: var(--ui-border-strong); }
 .chart-sink text { fill: var(--ui-fg-muted); font-family: var(--ui-font-sans); }
-/* calls.js and markers.js: the sampled day and the trail */
-.chart-panels { display: flex; flex-wrap: wrap; gap: 24px; }
-.chart-panel-title { fill: var(--ui-fg); font-family: var(--ui-font-sans); font-size: 12px; font-weight: 600; }
-.chart-panel-note, .chart-axis-title { fill: var(--ui-fg-faint); }
-.chart-axis text { fill: var(--ui-fg-faint); font-size: 11px; font-variant-numeric: tabular-nums; }
-.chart-axis line { stroke: var(--ui-border); }
-.chart-seg:hover, .chart-seg:focus-visible { opacity: 0.75; }
-.chart-value, .chart-tick-label { fill: var(--ui-fg-muted); font-size: 11px; }
-.chart-tick-label.is-dim { fill: var(--ui-fg-faint); }
-.chart-strip:hover .chart-hit, .chart-strip:focus-visible .chart-hit { fill: var(--ui-accent-soft); }
-.chart-dot { fill: var(--kind-7); fill-opacity: 0.5; }
-.chart-dot.is-judge { fill: var(--ui-fg-faint); }
-.chart-dot.is-ringed { fill-opacity: 0.85; stroke: var(--ui-surface); stroke-width: 2; }
-.chart-dot.is-lit { fill-opacity: 1; stroke: var(--ui-fg); }
-.chart-median { stroke: var(--ui-fg); stroke-width: 2; }
-.chart-dayband { fill: var(--ui-surface-raised); stroke: var(--ui-border); }
-.chart-threshold { stroke: var(--ui-fg-muted); stroke-dasharray: 4 3; }
-.chart-ring.is-regex { stroke: var(--ui-fg-faint); }
-/* session.js: the life of a session */
-.chart-lane { fill: var(--ui-fg); opacity: 0.025; }
-.chart-lane.is-trail { opacity: 0.05; }
-.chart-axis path { stroke: var(--ui-border); }
-.chart-life-links path { fill: none; stroke: var(--ui-fg-faint); stroke-width: 1; }
-.chart-life-item { cursor: default; outline: none; }
-.chart-life-dot circle { fill: var(--ui-fg-muted); }
-.chart-life-dot.is-stub circle { fill: var(--ui-surface); stroke: var(--ui-fg-faint); stroke-dasharray: 2 2; }
-.chart-life-dot.is-stub text { fill: var(--ui-fg-faint); }
-.chart-life-chip { fill: var(--ui-fg); font-size: 11px; }
-.chart-life-event { font-size: 10px; }
-.chart-life-dot .chart-life-event { fill: var(--ui-fg); }
-.chart-life-label { fill: var(--ui-fg-faint); font-family: var(--ui-font-sans); font-size: 11px; }
-.chart-life-spine { stroke: var(--ui-fg-faint); stroke-opacity: 0.5; }
-.chart-life-judge .chart-threshold { stroke: var(--ui-fg-faint); stroke-dasharray: none; }
-.chart-life-bar { fill: var(--ui-fg-faint); }
-.chart-life-bar.is-over { fill: var(--ui-accent); }
-.chart-life-ok { fill: var(--ui-ok); font-family: var(--ui-font-sans); font-size: 11px; font-weight: 700; }
-.chart-life-diamond.is-correction { fill: var(--ui-accent); }
-.chart-life-diamond.is-guard { fill: var(--ui-danger); }
-.chart-life-item:focus-visible circle, .chart-life-item:focus-visible .chart-hit, .chart-life-item:focus-visible .chart-life-diamond { stroke: var(--ui-accent); stroke-width: 2; }
-svg.is-focus .chart-life-item:not(.is-lit) { opacity: 0.25; }
-svg.is-focus .chart-life-links path:not(.is-lit) { stroke-opacity: 0.2; }
-svg.is-focus .chart-life-links path.is-lit { stroke: var(--ui-fg); }
+/* lib.js: the data tables */
 .chart-table { overflow-x: auto; }
 .chart-table td { font-family: var(--ui-font-mono); font-size: 12px; vertical-align: top; }
 .chart-table td:last-child { font-family: var(--ui-font-sans); min-width: 16rem; }
@@ -306,12 +262,10 @@ claude plugin test plugins/subether</pre>
 <section class="docs-section" id="session" data-component="session">
   <header>
     <h2 class="h2">A session</h2>
-    <p class="docs-note">One session from <code class="code">session.start</code> to <code class="code">session.end</code>: each moment's event, the hook it reaches and what that writes, the judge's four probabilities, and the trail event a judged prompt or a guarded call leaves. The session is invented; each moment's hook, effects, markers and threshold are checked against the hook graph and the code's constants by the gate.</p>
+    <p class="docs-note">One session from <code class="code">session.start</code> to <code class="code">session.end</code> as a timeline, one row per moment, time running down, in four columns: the event, the hook it reaches and what that writes, the judge's four probabilities, and the trail event a judged prompt or a guarded call leaves. A bar at or over 0.8 becomes a trail event.</p>
   </header>
-  <figure class="figure">
-    <div class="chart" id="session-life"><noscript><p class="docs-note">This chart needs JavaScript; its data is <a class="link" href="data/session.json">docs/data/session.json</a>.</p></noscript></div>
-    <figcaption>The life of a session: one row per moment, time running down, in event, hook, judge and trail columns, a crowded stretch spread and the axis following it; a bar at or over 0.8 becomes a trail event. Data: <a href="data/session.json">docs/data/session.json</a>, held to hooks.json, markers.ts, check.ts and judge.json by the gate.</figcaption>
-  </figure>
+  <p>The live view is on bifrost · portals (<code class="code">/portals</code>), drawn over a real
+    session's tool log and trail.</p>
 </section>
 
 <section class="docs-section" id="gauge" data-component="gauge">
@@ -414,10 +368,9 @@ claude plugin test plugins/subether</pre>
     <div class="chart" id="judge-states"><noscript><p class="docs-note">This chart needs JavaScript; its data is <a class="link" href="data/judge.json">docs/data/judge.json</a>.</p></noscript></div>
     <figcaption>Each judge's availability, TypeSafe first and Kev behind it: what marks it down and what brings it back. Data: <a href="data/judge.json">docs/data/judge.json</a>, its numbers read back out of judge.ts and markers.ts, checked by the gate.</figcaption>
   </figure>
-  <figure class="figure">
-    <div class="chart" id="trail-markers"><noscript><p class="docs-note">This chart needs JavaScript; its data is <a class="link" href="data/sample-markers.json">docs/data/sample-markers.json</a>.</p></noscript></div>
-    <figcaption>The month's correction events by day and hour, each at the judge's probability; the regex era's, unscored, hollow beneath. Data: <a href="data/sample-markers.json">docs/data/sample-markers.json</a>, scrubbed by <a href="data/scrub.ts">docs/data/scrub.ts</a> to day, hour, marker, p and judge, checked by the gate.</figcaption>
-  </figure>
+  <p>The live view, the trail's correction events each at the judge's probability, is on
+    bifrost · portals (<code class="code">/portals</code>), over the real trail and the tool log's
+    <code class="code">prompt</code> lines.</p>
 </section>
 
 <section class="docs-section" id="guards" data-component="guards">
@@ -481,10 +434,8 @@ claude plugin test plugins/subether</pre>
       &gt;&gt;</code> (O_APPEND, so sessions' lines land whole), not awaited; a failed append is one
       dim log line.</li>
   </ul>
-  <figure class="figure">
-    <div class="chart" id="tool-calls"><noscript><p class="docs-note">This chart needs JavaScript; its data is <a class="link" href="data/sample-calls.json">docs/data/sample-calls.json</a>.</p></noscript></div>
-    <figcaption>2026-11-06's tool log: calls by hour and outcome, latency per tool, and the shadow judge's routine against destructive per asked call. Data: <a href="data/sample-calls.json">docs/data/sample-calls.json</a>, scrubbed by <a href="data/scrub.ts">docs/data/scrub.ts</a> to kind, hour, tool, outcome, ms, readOnly, chars and the check probabilities, checked by the gate.</figcaption>
-  </figure>
+  <p>The live view, a day's calls by hour and outcome, latency per tool and the shadow judge's
+    answers, is on bifrost · portals (<code class="code">/portals</code>), over the real day file.</p>
 </section>
 
 <section class="docs-section" id="state" data-component="state">
@@ -526,7 +477,7 @@ claude plugin test plugins/subether</pre>
     (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/scripts/test.ts">scripts/test.ts</a>)
     runs every step at once — the chart data against the source
     (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/scripts/charts.ts">scripts/charts.ts</a>:
-    the hooks, atoms, the call machine's writes and judge constants, the session's moments, and the public samples' keys), fmt check,
+    the hooks, atoms, the call machine's writes and judge constants), fmt check,
     oxlint, tsc at the root and in the mod, the unit tests,
     monitor-github's selftest, <code class="code">claude plugin validate --strict</code> and
     <code class="code">claude plugin test</code> — and prints a step's output only when it fails.</p>

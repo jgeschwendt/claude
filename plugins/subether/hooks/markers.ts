@@ -1,9 +1,9 @@
 /**
-Judged markers: each prompt the person typed is judged by a System One model (`judge.ts`) for four markers, and each one judged at 0.8 or more is a `correction` trail event. The judging runs after the prompt entered, never holding it
+Judged markers: each prompt the person typed is judged by a System One model (`judge.ts`) for four markers; each judgment is a `prompt` line in the daily tool log, each marker judged at 0.8 or more a `correction` trail event. The judging runs after the prompt entered, never holding it
 */
 import { type EngineInterface, type MatchedHook, atom, read, update } from 'claude-code';
 import { judge } from './judge';
-import { trail } from './sandman';
+import { append, object, trail } from './sandman';
 
 type Verdict = NonNullable<Awaited<ReturnType<typeof judge>>>;
 
@@ -19,6 +19,10 @@ const HEAD = 200;
 the judged prompts the pane keeps
 */
 const JUDGED_KEPT = 20;
+/**
+how much of the prompt, newlines as spaces, its tool log line carries
+*/
+const LINE = 120;
 /**
 a prompt past this is a pasted brief or document, not the person's live words
 */
@@ -97,10 +101,36 @@ const previousAnswer = async ($: EngineInterface): Promise<string | undefined> =
 };
 
 /**
-Trails each marker judged at the threshold as a `correction` event: the prompt's head behind the marker's prefix, the probability and the judge after it
+What a judgment leaves behind: one `prompt` line appended to the daily tool log, unawaited (a failure one dim log line),
+keys in the wire order: kind, at, session, head (the prompt's first 120 characters, newlines as spaces), judge, markers,
+trailed (those at the threshold, in `PREFIX`'s order), tokens (`null` from Kev), ms (the judging's latency); and each
+marker at the threshold trailed as a `correction` event, the prompt's head behind the marker's prefix, the probability
+and the judge after it
 */
-const trailed = async ($: EngineInterface, head: string, verdict: Verdict): Promise<void> => {
+const settled = async (
+  $: EngineInterface,
+  judging: { at: number; text: string },
+  verdict: Verdict,
+): Promise<void> => {
+  const { at, text } = judging;
   const over = Object.entries(PREFIX).filter(([name]) => (verdict.markers[name] ?? 0) >= THRESHOLD);
+  const [now, session] = await Promise.all([$.clock.now(), $.session.id()]);
+  const iso = Temporal.Instant.fromEpochMilliseconds(at).toString({ smallestUnit: 'millisecond' });
+  const line = object([
+    ['kind', '"prompt"'],
+    ['at', JSON.stringify(iso)],
+    ['session', JSON.stringify(session)],
+    ['head', JSON.stringify(text.replaceAll(/[\r\n]+/gu, ' ').slice(0, LINE))],
+    ['judge', JSON.stringify(verdict.judge)],
+    ['markers', JSON.stringify(verdict.markers)],
+    ['trailed', JSON.stringify(over.map(([name]) => name))],
+    ['tokens', JSON.stringify(verdict.tokens)],
+    ['ms', String(now - at)],
+  ]);
+  append($, at, `${line}\n`).catch((error: unknown) => {
+    $.ui.log(`prompt log: ${String(error)}`);
+  });
+  const head = text.slice(0, HEAD);
   await Promise.all(
     over.map(async ([name, prefix]) => {
       const odds = (verdict.markers[name] ?? 0).toFixed(2);
@@ -110,7 +140,7 @@ const trailed = async ($: EngineInterface, head: string, verdict: Verdict): Prom
 };
 
 /**
-Judges one composer prompt, records it for the pane and trails its markers. Skipped, and kept out of the earlier prompts: a prompt over 400 characters, one starting `# `, and a `claude --bg` session's opening prompt (dispatch's brief)
+Judges one composer prompt, records it for the pane, logs and trails it (`settled`). Skipped, and kept out of the earlier prompts: a prompt over 400 characters, one starting `# `, and a `claude --bg` session's opening prompt (dispatch's brief)
 */
 const judging = async ($: EngineInterface, text: string): Promise<void> => {
   const isOpening = !(await read($, opened));
@@ -136,7 +166,7 @@ const judging = async ($: EngineInterface, text: string): Promise<void> => {
     [...was, { at, head, markers: {}, ...verdict }].slice(-JUDGED_KEPT),
   );
   $.ui.invalidate('ui.render');
-  await (verdict === undefined ? undefined : trailed($, head, verdict));
+  await (verdict === undefined ? undefined : settled($, { at, text }, verdict));
 };
 
 /**

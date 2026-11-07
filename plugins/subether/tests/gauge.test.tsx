@@ -58,11 +58,13 @@ const engine = (
   } = {},
 ): {
   files: Map<string, string>;
+  hints: string[];
   logs: string[];
   time: ReturnType<typeof mock.clock>;
   usages: () => number;
 } => {
   const files = new Map<string, string>();
+  const hints: string[] = [];
   const logs: string[] = [];
   let usages = 0;
   const time = mock.clock(on, { now: NOW });
@@ -100,8 +102,11 @@ const engine = (
     logs.push(e.text);
     return { value: undefined };
   });
-  on('ui.render', () => ({ children: [BENEATH], props: {}, type: 'Text' }));
-  return { files, logs, time, usages: () => usages };
+  on('ui.render', ($, e) => {
+    hints.push(String((e.props as { hint?: string }).hint ?? ''));
+    return { children: [BENEATH], props: {}, type: 'Text' };
+  });
+  return { files, hints, logs, time, usages: () => usages };
 };
 
 const measure = async ($: Engine, extra = '', tokens = '50000'): Promise<void> => {
@@ -114,12 +119,17 @@ const measure = async ($: Engine, extra = '', tokens = '50000'): Promise<void> =
 
 const mount = async (
   $: Engine,
-  { columns = COLUMNS, isMeasured = true, surface = 'terminal' as RenderSurface } = {},
+  {
+    columns = COLUMNS,
+    hint = '? for shortcuts',
+    isMeasured = true,
+    surface = 'terminal' as RenderSurface,
+  } = {},
 ): Promise<Mounted<RenderSurface, 'PromptHint'>> =>
   await $.ui.mount({
     component: 'PromptHint',
     plugin: 'subether',
-    props: { hint: '? for shortcuts', isDraft: false, isWorking: false },
+    props: { hint, isDraft: false, isWorking: false },
     surface,
     viewport: isMeasured ? { columns, rows: 1 } : undefined,
   });
@@ -425,4 +435,31 @@ test('a failed move is one log line', async ($, on) => {
   const { logs } = engine(on, { exitCode: 1 });
   await measure($, FULL);
   expect(logs).toEqual([`gauge: window: ${FILE}: Error: denied`]);
+});
+
+const LABEL = '⏵⏵ auto mode on · ← 2 agents · 1 monitor';
+
+test('the auto-mode label leaves the hint line and the row says auto instead', async ($, on) => {
+  const { hints } = engine(on);
+  expect(await row($, { hint: LABEL })).toBe(BENEATH);
+  await measure($);
+  expect(await row($, { hint: LABEL })).toStartWith('Fable 5.1 (auto) ');
+  expect(await row($, { hint: '⏵⏵ auto mode on (shift+tab to cycle)' })).toStartWith(
+    'Fable 5.1 (auto) ',
+  );
+  expect(await row($)).toStartWith('Fable 5.1 ');
+  expect(hints).toEqual([
+    '← 2 agents · 1 monitor',
+    '← 2 agents · 1 monitor',
+    '',
+    '? for shortcuts',
+  ]);
+});
+
+test('the auto flag joins the effort flag', async ($, on) => {
+  engine(on);
+  await step($, on, 'low');
+  await measure($);
+  expect(await row($, { hint: LABEL })).toStartWith('Fable 5.1 (low · auto) ');
+  expect(await row($)).toStartWith('Fable 5.1 (low) ');
 });

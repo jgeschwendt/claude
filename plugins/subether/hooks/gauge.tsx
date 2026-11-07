@@ -36,6 +36,9 @@ const LONG_CONTEXT = 200_000;
 // src/statusline.rs MARGIN: the row's printable region is narrower than the terminal, or it clips with `…`
 const MARGIN = 4;
 const MINUTE = 60;
+// the engine's permission-mode label at the head of the hint line, hidden: the row's flags say `auto` instead
+// (owner 2026-11-06: "hide that label if you can")
+const MODE = /^⏵⏵ auto mode on(?: \([^)]*\))?(?: · )?/u;
 const MS = 1000;
 const PERCENT = 100;
 const POLL_EVERY = 15_000;
@@ -128,23 +131,31 @@ const printable = (text: string): string => text.replaceAll(/\p{Cc}/gu, '');
 /**
 The row's text, segment by segment (absent data leaves `""`), and the two tones
 */
+/**
+The row's flags: the effort level unless it is the default `high`, and `auto` while the engine's
+permission-mode label is hidden from the hint line
+*/
+const flagsOf = (level: string, isAuto: boolean): string[] => {
+  const flag = printable(level);
+  return [...(flag === '' || flag === 'high' ? [] : [flag]), ...(isAuto ? ['auto'] : [])];
+};
+
 const segments = (
   reading: Gauge,
-  level: string,
+  flags: string[],
   trend: Samples,
 ): { pct: number; text: Record<string, string>; used: number } => {
   const { five, threshold, usd } = reading;
   const tokens = reading.tokens ?? 0;
   const pct = clamp(Math.round((tokens / threshold) * PERCENT));
   const used = clamp(Math.floor(five?.used ?? 0));
-  const flag = printable(level);
   const tier = tokens > LONG_CONTEXT ? '†' : '';
   const reset = five?.resetsAt === undefined ? '' : ` ↻ ${clock(five.resetsAt)}`;
   return {
     pct,
     text: {
       eta: pct >= ETA_AT && tokens > 0 ? etaOf(trend, tokens, threshold) : '',
-      flags: flag === '' || flag === 'high' ? ' ' : ` (${flag}) `,
+      flags: flags.length === 0 ? ' ' : ` (${flags.join(' · ')}) `,
       lead: five === undefined ? '' : ' · 5h ',
       model: printable(pretty(reading.model)),
       percent: ` ${pct}%`,
@@ -214,6 +225,23 @@ clock`): only a window resetting within (0, 6h], never behind the file's live on
 or more used of the same). Unlike the Rust there is no lock, so two sessions writing at once can
 race their read-to-rename.
 */
+/**
+Whether the file's live window is ahead of `five`: a later reset, or more used of the same
+*/
+const isHeld = async (
+  $: EngineInterface,
+  path: string,
+  { now, ...five }: { now: number; resetsAt: number; used: number },
+): Promise<boolean> => {
+  const [at, was] = await priorWindow($, path);
+  const isAhead =
+    typeof at === 'number' &&
+    typeof was === 'number' &&
+    Number.isSafeInteger(at) &&
+    isLive(at, now);
+  return isAhead && (at > five.resetsAt || (at === five.resetsAt && was > five.used));
+};
+
 const persist = async (
   $: EngineInterface,
   now: number,
@@ -227,16 +255,7 @@ const persist = async (
     return;
   }
   const path = await windowPath($);
-  const [at, was] = path === undefined ? [] : await priorWindow($, path);
-  const isAhead =
-    typeof at === 'number' &&
-    typeof was === 'number' &&
-    Number.isSafeInteger(at) &&
-    isLive(at, now);
-  if (
-    path === undefined ||
-    (isAhead && (at > five.resetsAt || (at === five.resetsAt && was > five.used)))
-  ) {
+  if (path === undefined || (await isHeld($, path, { now, ...five }))) {
     return;
   }
   await writeWindow($, path, { at: now, ...five }).catch((error: unknown) => {
@@ -308,20 +327,40 @@ The gauge row, `<model> (<flags>) <bar> <pct>% ≈<eta> · $<cost> · 5h <used>%
 taking what the rest leaves of the window (a 20-cell bar until it is measured), the engine's hint
 beneath. `fast` is never a flag: no session-level fast mode reaches a mod.
 */
+type Hint = Parameters<MatchedHook<'ui.render', { component: 'PromptHint' }>>[1];
+
+/**
+The event with the engine's permission-mode label taken off the head of its hint, and whether it was
+*/
+const unlabelled = (e: Hint): { event: Hint; isAuto: boolean } => {
+  const line = e.props.hint.replace(MODE, '');
+  const isAuto = line !== e.props.hint;
+  return { event: isAuto ? { ...e, props: { ...e.props, hint: line } } : e, isAuto };
+};
+
+/**
+`pct` of `width` cells in ⅛-cell steps
+*/
+const barOf = (pct: number, width: number): string => {
+  const eighths = Math.round((pct / PERCENT) * Math.max(0, width) * CELL);
+  return '█'.repeat(Math.floor(eighths / CELL)) + (EIGHTHS[eighths % CELL] ?? '');
+};
+
 const hint: MatchedHook<'ui.render', { component: 'PromptHint' }> = async ($, e, next) => {
   const reading = await read($, gauge);
+  const { event, isAuto } = unlabelled(e);
   if (reading.window === 0) {
-    return next(e);
+    return next(event);
   }
-  const { pct, text, used } = segments(reading, await read($, effort), await read($, samples));
+  const flags = flagsOf(await read($, effort), isAuto);
+  const { pct, text, used } = segments(reading, flags, await read($, samples));
   const width =
     e.viewport === undefined
       ? BAR
       : e.viewport.columns - MARGIN - Object.values(text).join('').length;
-  const eighths = Math.round((pct / PERCENT) * Math.max(0, width) * CELL);
-  const filled = '█'.repeat(Math.floor(eighths / CELL)) + (EIGHTHS[eighths % CELL] ?? '');
+  const filled = barOf(pct, width);
   const { Box, Text } = $.ui.resolve(e);
-  const beneath = await next(e);
+  const beneath = await next(event);
   return (
     <Box flexDirection="column">
       <Box>

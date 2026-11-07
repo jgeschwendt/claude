@@ -93,7 +93,7 @@ At an interactive session's start: probe the judges unawaited (only an interacti
 */
 const opening: MatchedHook<'session.start', { isInteractive: true }> = async ($, e, next) => {
   probe($).catch((error: unknown) => {
-    $.ui.log(`subether judge: probe: ${String(error)}`);
+    $.ui.log(`judge: probe: ${String(error)}`);
   });
   await $.ui.open(PANE);
   await $.command.register({

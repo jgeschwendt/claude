@@ -108,7 +108,7 @@ const check: Hook<'tool.check'> = async ($, e, next) => {
   const decided = await next(e);
   if (decided.decision === 'ask' && e.isReadOnly !== true && e.tool_use_id !== undefined) {
     judging($, e, decided).catch((error: unknown) => {
-      $.ui.log(`subether check: ${String(error)}`);
+      $.ui.log(`check: ${String(error)}`);
     });
   }
   return decided;

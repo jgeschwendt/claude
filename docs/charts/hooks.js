@@ -1,8 +1,9 @@
 // The hook graph: events → hooks (grouped by file) → effects (one node per target, grouped by kind), laid out from
 // docs/data/hooks.json, which scripts/charts.ts checks against register.tsx. d3 is the page's pinned global.
-const d3 = globalThis.d3;
+import { d3, hover, load, mount, redraw, widthOf } from "./lib.js";
+
 const root = document.getElementById("hook-graph");
-const data = await (await fetch(new URL("../data/hooks.json", import.meta.url))).json();
+const data = await load("hooks.json");
 
 const ROW = 24;
 const GAP = 8;
@@ -67,74 +68,18 @@ const labelOf = (h) => {
   return h.status === "stub" ? `${h.event} · chunk ${h.chunk}` : `${h.fn}${match}`;
 };
 
-// ─── chrome: legend, toggle, tooltip, table ─────────────────────────────────────────────────────────
-root.replaceChildren();
-const bar = d3.select(root).append("div").attr("class", "chart-bar");
-const legend = bar.append("ul").attr("class", "chart-legend").attr("aria-label", "effect kinds");
-for (const k of kinds) {
-  const li = legend.append("li").attr("title", k.doc);
-  li.append("span").attr("class", "chart-swatch").style("background", `var(--kind-${k.slot})`);
-  li.append("span").text(k.name);
-}
-legend.append("li").attr("class", "chart-stub").call((li) => {
-  li.append("span").attr("class", "chart-swatch chart-swatch-stub");
-  li.append("span").text("stub (planned)");
+const { frame, hide, show } = mount(root, {
+  head: ["hook", "event", "matcher", "file:fn", "chunk", "catch", "reads", "writes", "effects", "does"],
+  legend: [...kinds.map((k) => ({ color: `var(--kind-${k.slot})`, doc: k.doc, label: k.name })), { label: "stub (planned)", mark: "stub" }],
+  rows: hooks.map((h) => [h.id, h.event, ...describe(h).slice(0, 3).map(([, v]) => v), h.catch, describe(h)[4][1], describe(h)[5][1], h.effects.map((e) => `${e.kind}: ${e.target}`).join("; ") || "—", h.does]),
+  view: "graph",
 });
-const toggle = bar.append("button").attr("type", "button").attr("class", "chart-toggle").attr("aria-pressed", "false").text("table");
-const frame = d3.select(root).append("div").attr("class", "chart-frame");
-const tip = d3.select(root).append("div").attr("class", "chart-tip").attr("role", "tooltip").attr("hidden", "");
-const table = d3.select(root).append("div").attr("class", "chart-table").attr("hidden", "").append("table");
-table.append("thead").append("tr").selectAll("th").data(["hook", "event", "matcher", "file:fn", "chunk", "catch", "reads", "writes", "effects", "does"]).join("th").text((d) => d);
-table
-  .append("tbody")
-  .selectAll("tr")
-  .data(hooks)
-  .join("tr")
-  .selectAll("td")
-  .data((h) => [
-    h.id,
-    h.event,
-    describe(h)[0][1],
-    describe(h)[1][1],
-    describe(h)[2][1],
-    h.catch,
-    describe(h)[4][1],
-    describe(h)[5][1],
-    h.effects.map((e) => `${e.kind}: ${e.target}`).join("; ") || "—",
-    h.does,
-  ])
-  .join("td")
-  .text((d) => d);
-toggle.on("click", () => {
-  const isTable = toggle.attr("aria-pressed") !== "true";
-  toggle.attr("aria-pressed", String(isTable)).text(isTable ? "graph" : "table");
-  frame.attr("hidden", isTable ? "" : null);
-  tip.attr("hidden", "");
-  d3.select(root).select(".chart-table").attr("hidden", isTable ? null : "");
-});
-
-const showTip = (event, title, rows) => {
-  tip.selectAll("*").remove();
-  tip.append("strong").text(title);
-  const dl = tip.append("dl");
-  for (const [k, v] of rows) {
-    dl.append("dt").text(k);
-    dl.append("dd").text(v);
-  }
-  tip.attr("hidden", null);
-  const box = root.getBoundingClientRect();
-  const node = event.currentTarget.getBoundingClientRect();
-  const tw = tip.node().offsetWidth;
-  const left = Math.min(Math.max(0, node.left - box.left), box.width - tw);
-  tip.style("left", `${left}px`).style("top", `${node.bottom - box.top + 6}px`);
-};
 
 // ─── the graph ─────────────────────────────────────────────────────────────────────────────────────
 const draw = () => {
   frame.selectAll("*").remove();
-  tip.attr("hidden", "");
-  // the frame's content box: its 16px padding on both sides
-  const width = Math.max(COLS[0] + COLS[1] + COLS[2] + 160, frame.node().clientWidth - 32);
+  hide();
+  const width = widthOf(frame, COLS[0] + COLS[1] + COLS[2] + 160);
   const free = (width - COLS[0] - COLS[1] - COLS[2]) / 2;
   const xs = [0, COLS[0] + free, COLS[0] + COLS[1] + 2 * free];
   const svg = frame.append("svg").attr("width", width).attr("height", height).attr("viewBox", `0 0 ${width} ${height}`).attr("role", "img").attr("aria-label", `hook graph: ${events.length} events, ${hooks.length} hooks, ${effects.size} effect targets`);
@@ -172,24 +117,19 @@ const draw = () => {
     effectSel.classed("is-lit", reaches);
   };
   const on = (sel, set, tipOf, only) =>
-    sel
-      .on("pointerenter focus", (event, d) => {
+    hover(
+      sel,
+      (event, d) => {
         light(new Set(set(d)), only?.(d));
-        showTip(event, ...tipOf(d));
-      })
-      .on("pointerleave blur", () => {
+        show(event.currentTarget, ...tipOf(d));
+      },
+      () => {
         light(null);
-        tip.attr("hidden", "");
-      });
+        hide();
+      },
+    );
   on(hookSel, (h) => [h], (h) => [`${h.id} — ${h.does}`, [["event", h.event], ...describe(h)]]);
   on(effectSel, (e) => e.hooks, (e) => [`${e.kind}: ${e.target}`, [["caused by", e.hooks.map((h) => h.id).join(", ")], ["kind", kinds.find((k) => k.name === e.kind).doc]]], (e) => e);
   on(eventSel, (e) => e.hooks, (e) => [`${e.name} — ${e.kind}`, [["doc", e.doc], ["hooks", e.hooks.map((h) => h.id).join(", ")]]]);
 };
-draw();
-let last = root.clientWidth;
-new ResizeObserver(() => {
-  if (root.clientWidth !== last) {
-    last = root.clientWidth;
-    draw();
-  }
-}).observe(root);
+redraw(root, draw);

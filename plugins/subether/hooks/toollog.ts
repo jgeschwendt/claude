@@ -117,7 +117,7 @@ const log: Hook<'tool.call'> = async ($, e, next) => {
       await append($, at, line);
     })
     .catch((error: unknown) => {
-      $.ui.log(`subether tool log: ${String(error)}`);
+      $.ui.log(`tool log: ${String(error)}`);
     });
   return result;
 };

@@ -29,10 +29,10 @@
   ],
   "hooks": [
     {
-      "catch": "pass", "chunk": 5, "does": "pin a spawn with no model, not a fork, to opus",
-      "effects": [{ "kind": "reply", "target": "spawn model" }],
-      "event": "agent.spawn", "file": "register.tsx", "fn": null, "id": "stub:agent.spawn", "matcher": null,
-      "reads": [], "status": "stub", "writes": []
+      "catch": "pass", "chunk": 5, "does": "pin a spawn with no model, not a fork, under a premium parent to opus",
+      "effects": [{ "kind": "reply", "target": "spawn model" }, { "kind": "ui", "target": "log line" }],
+      "event": "agent.spawn", "file": "pin.ts", "fn": "pin", "id": "pin.pin", "matcher": null,
+      "reads": [], "status": "live", "writes": []
     },
     {
       "catch": "pass", "chunk": 6, "does": "hand the notification to docket --hook",
@@ -71,10 +71,10 @@
       "reads": ["gate", "opened", "prompts"], "status": "live", "writes": ["gate", "judged", "opened", "prompts"]
     },
     {
-      "catch": "none", "chunk": 5, "does": "sandman take and the session's docket resolve under the end budget",
-      "effects": [{ "kind": "process", "target": "docket" }, { "kind": "process", "target": "sandman take" }],
-      "event": "session.end", "file": "register.tsx", "fn": null, "id": "stub:session.end", "matcher": null,
-      "reads": [], "status": "stub", "writes": []
+      "catch": "pass", "chunk": 5, "does": "sandman take --hook on every reason under the end bound; chunk 6 · the docket resolve",
+      "effects": [{ "kind": "process", "target": "sandman take" }, { "kind": "ui", "target": "log line" }],
+      "event": "session.end", "file": "take.ts", "fn": "take", "id": "take.take", "matcher": null,
+      "reads": [], "status": "live", "writes": []
     },
     {
       "catch": "none", "chunk": 2, "does": "take the gauge reading; persist the five-hour window",

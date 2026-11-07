@@ -150,7 +150,7 @@ const markers: MatchedHook<'prompt.submit', { origin: { kind: 'composer' } }> = 
   const result = await next(e);
   if (e.isMeta !== true && e.command === undefined && result.drop === undefined) {
     judging($, e.text).catch((error: unknown) => {
-      $.ui.log(`subether judge: ${String(error)}`);
+      $.ui.log(`judge: ${String(error)}`);
     });
   }
   return result;

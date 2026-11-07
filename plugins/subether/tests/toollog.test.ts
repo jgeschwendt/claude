@@ -214,8 +214,8 @@ for (const [name, environment, path] of [
 }
 
 for (const [name, options, line] of [
-  ['exits non-zero', { exitCode: 1 }, `subether tool log: Error: /logs/${DAY}.jsonl: read-only`],
-  ['cannot start', { isRefused: true }, expect.stringMatching(/^subether tool log: /u)],
+  ['exits non-zero', { exitCode: 1 }, `tool log: Error: /logs/${DAY}.jsonl: read-only`],
+  ['cannot start', { isRefused: true }, expect.stringMatching(/^tool log: /u)],
 ] as const) {
   test(`an append that ${name} logs once, and the result still returns`, async ($, on) => {
     const { logs, time } = engine(on, options);

@@ -28,14 +28,12 @@ async function run(
   const ran = await $.process
     .run([`${home}/.local/bin/${bin}`, ...rest], init)
     .catch((error: unknown) => {
-      $.ui.log(`subether: ${name} failed: ${String(error)}`);
+      $.ui.log(`${name} failed: ${String(error)}`);
     });
   if (ran === undefined || ran.exitCode === 0) {
     return ran?.stdout;
   }
-  $.ui.log(
-    `subether: ${name} exited ${ran.exitCode}: ${ran.stderr.trim().split('\n', 1)[0] ?? ''}`,
-  );
+  $.ui.log(`${name} exited ${ran.exitCode}: ${ran.stderr.trim().split('\n', 1)[0] ?? ''}`);
   return undefined;
 }
 

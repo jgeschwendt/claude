@@ -1093,7 +1093,7 @@ The deny of a call the guard failed on before it passed the call on, trailed wit
 const unread = async ($: EngineInterface, why: string): Promise<ToolCallResult> => {
   const text = `subether: the guard could not read this call (${why.split('\n', 1)[0] ?? ''}) — it is denied, not run; rephrase the command`;
   await trail($, 'guard', text).catch((error: unknown) => {
-    $.ui.log(`subether: sandman trail append failed: ${String(error)}`);
+    $.ui.log(`sandman trail append failed: ${String(error)}`);
   });
   return { deny: text };
 };

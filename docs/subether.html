@@ -7,7 +7,12 @@
 <link rel="stylesheet" href="https://gigantic.dev/ui/ui.css" />
 <link rel="stylesheet" href="https://gigantic.dev/ui/docs.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script type="module" src="charts/atoms.js"></script>
+<script type="module" src="charts/calls.js"></script>
 <script type="module" src="charts/hooks.js"></script>
+<script type="module" src="charts/judge.js"></script>
+<script type="module" src="charts/markers.js"></script>
+<script type="module" src="charts/sequence.js"></script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23634776'/%3E%3Cg transform='translate(2.4 2.4) scale(0.0437)' fill='white'%3E%3Cpath d='M40,88H73a32,32,0,0,0,62,0h81a8,8,0,0,0,0-16H135a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16Zm64-24A16,16,0,1,1,88,80,16,16,0,0,1,104,64ZM216,168H199a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16h97a32,32,0,0,0,62,0h17a8,8,0,0,0,0-16Zm-48,24a16,16,0,1,1,16-16A16,16,0,0,1,168,192Z'/%3E%3C/g%3E%3C/svg%3E" />
 <style>
 /* the d3 charts (docs/charts/*.js): kind slots validated with the dataviz validator, light on #ffffff, dark on #08090a */
@@ -29,8 +34,11 @@
 .chart-bar { align-items: center; display: flex; flex-wrap: wrap; gap: var(--ui-space-3); justify-content: space-between; margin-bottom: var(--ui-space-3); }
 .chart-legend { color: var(--ui-fg-muted); display: flex; flex-wrap: wrap; gap: 4px 14px; list-style: none; margin: 0; padding: 0; }
 .chart-legend li { align-items: center; display: flex; gap: 6px; }
-.chart-swatch { border-radius: 2px; display: inline-block; height: 8px; width: 8px; }
-.chart-swatch-stub { border: 1px dashed var(--ui-fg-faint); height: 10px; width: 14px; }
+.chart-key { display: block; flex: none; }
+.chart-keystub { fill: none; stroke: var(--ui-fg-faint); stroke-dasharray: 3 2; }
+.chart-keyline { stroke-width: 2; }
+.chart-keyline.is-dash { stroke-dasharray: 3 2; }
+.chart-icon { color: var(--ui-fg-muted); }
 .chart-toggle { background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-sm); color: var(--ui-fg-muted); cursor: pointer; font: inherit; padding: 2px 10px; }
 .chart-frame { background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); overflow-x: auto; padding: 16px; }
 .chart-frame svg { display: block; max-width: none; font-family: var(--ui-font-mono); font-size: 12px; }
@@ -52,6 +60,64 @@ svg.is-focus .chart-node.is-lit rect:first-child { stroke: var(--ui-fg); }
 .chart-tip dl { display: grid; gap: 2px 10px; grid-template-columns: auto 1fr; margin: 0; }
 .chart-tip dt { color: var(--ui-fg-faint); }
 .chart-tip dd { color: var(--ui-fg); font-family: var(--ui-font-mono); margin: 0; overflow-wrap: anywhere; }
+.chart-hit { fill: transparent; }
+.chart-halo { fill: var(--ui-fg); paint-order: stroke; stroke: var(--ui-surface); stroke-linejoin: round; stroke-width: 4px; }
+.chart-halo.is-small, .chart-heads text.is-group, .chart-panel-note, .chart-axis-title { font-family: var(--ui-font-sans); font-size: 11px; letter-spacing: 0; text-transform: none; }
+.chart-halo.is-small { fill: var(--ui-fg-muted); }
+.chart-heads text.is-title { fill: var(--ui-fg); font-size: 13px; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.chart-rule { stroke: var(--ui-border-strong); }
+.chart-ring { fill: var(--ui-surface); stroke-width: 2; }
+.chart-arrow { fill: none; stroke: var(--ui-fg-muted); stroke-width: 1.5; }
+.chart-head { fill: none; stroke: var(--ui-fg-muted); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; }
+.chart-hitline { fill: none; stroke: transparent; stroke-width: 14; }
+svg.is-focus .chart-msg:not(.is-lit), svg.is-focus .chart-lane:not(.is-lit), svg.is-focus .chart-edge:not(.is-lit) { opacity: 0.25; }
+/* atoms.js: the state matrix */
+.chart-colhead { fill: var(--ui-fg-muted); }
+.chart-colband { fill: var(--ui-accent-soft); opacity: 0; }
+.chart-col.is-lit .chart-colband { opacity: 1; }
+.chart-col.is-lit .chart-colhead { fill: var(--ui-fg); font-weight: 600; }
+.chart-band { fill: transparent; }
+.chart-row.is-lit .chart-band { fill: var(--ui-accent-soft); }
+.chart-row.is-stub .chart-band { stroke: var(--ui-fg-faint); stroke-dasharray: 4 3; }
+.chart-name { fill: var(--ui-fg); }
+.chart-dim { fill: var(--ui-fg-muted); font-family: var(--ui-font-sans); }
+.chart-row.is-stub text { fill: var(--ui-fg-faint); }
+svg.is-focus .chart-row:not(.is-lit) { opacity: 0.35; }
+.chart-cell, .chart-col, .chart-msg, .chart-lane, .chart-edge, .chart-mark, .chart-seg, .chart-strip, .chart-sink, .chart-fall { outline: none; }
+.chart-cell:focus-visible .chart-hit, .chart-mark:focus-visible .chart-hit { stroke: var(--ui-accent); stroke-width: 2; }
+/* sequence.js: one tool call */
+.chart-lane line { stroke: var(--ui-border-strong); }
+.chart-lane rect { fill: var(--ui-surface-raised); stroke: var(--ui-border-strong); }
+.chart-lane text { fill: var(--ui-fg); }
+.chart-seqframe rect { fill: none; stroke: var(--ui-fg-faint); stroke-dasharray: 5 4; }
+.chart-seqframe text { fill: var(--ui-fg-faint); font-family: var(--ui-font-sans); font-size: 11px; }
+.chart-msg.is-return .chart-arrow { stroke-dasharray: 4 3; }
+.chart-msg.is-write .chart-arrow, .chart-msg.is-deny .chart-arrow, .chart-msg.is-write .chart-head, .chart-msg.is-deny .chart-head { stroke-width: 2; }
+.chart-msg:focus-visible .chart-hit, .chart-lane:focus-visible rect, .chart-edge:focus-visible .chart-hitline { stroke: var(--ui-accent); stroke-width: 2; }
+/* judge.js: the judge state machines */
+.chart-status-icon { fill: var(--ui-bg); font-family: var(--ui-font-sans); font-size: 11px; font-weight: 700; }
+.chart-fallback { fill: none; stroke: var(--ui-fg-muted); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; }
+.chart-fallback.is-dashed { stroke-dasharray: 4 3; }
+.chart-sink rect { fill: var(--ui-surface-raised); stroke: var(--ui-border-strong); }
+.chart-sink text { fill: var(--ui-fg-muted); font-family: var(--ui-font-sans); }
+/* calls.js and markers.js: the sampled day and the trail */
+.chart-panels { display: flex; flex-wrap: wrap; gap: 24px; }
+.chart-panel-title { fill: var(--ui-fg); font-family: var(--ui-font-sans); font-size: 12px; font-weight: 600; }
+.chart-panel-note, .chart-axis-title { fill: var(--ui-fg-faint); }
+.chart-axis text { fill: var(--ui-fg-faint); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart-axis line { stroke: var(--ui-border); }
+.chart-seg:hover, .chart-seg:focus-visible { opacity: 0.75; }
+.chart-value, .chart-tick-label { fill: var(--ui-fg-muted); font-size: 11px; }
+.chart-tick-label.is-dim { fill: var(--ui-fg-faint); }
+.chart-strip:hover .chart-hit, .chart-strip:focus-visible .chart-hit { fill: var(--ui-accent-soft); }
+.chart-dot { fill: var(--kind-7); fill-opacity: 0.5; }
+.chart-dot.is-judge { fill: var(--ui-fg-faint); }
+.chart-dot.is-ringed { fill-opacity: 0.85; stroke: var(--ui-surface); stroke-width: 2; }
+.chart-dot.is-lit { fill-opacity: 1; stroke: var(--ui-fg); }
+.chart-median { stroke: var(--ui-fg); stroke-width: 2; }
+.chart-dayband { fill: var(--ui-surface-raised); stroke: var(--ui-border); }
+.chart-threshold { stroke: var(--ui-fg-muted); stroke-dasharray: 4 3; }
+.chart-ring.is-regex { stroke: var(--ui-fg-faint); }
 .chart-table { overflow-x: auto; }
 .chart-table td { font-family: var(--ui-font-mono); font-size: 12px; vertical-align: top; }
 .chart-table td:last-child { font-family: var(--ui-font-sans); min-width: 16rem; }
@@ -187,13 +253,13 @@ claude plugin test plugins/subether</pre>
       <tr><th>event</th><th>matcher</th><th>does</th><th>status</th></tr>
     </thead>
     <tbody>
-      <tr><td><code class="code">agent.spawn</code></td><td>—</td><td>pin a spawn with no <code class="code">model</code>, not a fork, to <code class="code">opus</code></td><td>chunk 5</td></tr>
+      <tr><td><code class="code">agent.spawn</code></td><td>—</td><td>pin a spawn with no <code class="code">model</code>, not a fork, under a premium parent (<code class="code">fable</code>/<code class="code">mythos</code>) to <code class="code">opus</code>, one log line</td><td>live</td></tr>
       <tr><td><code class="code">classic.Notification</code></td><td><code class="code">agent_needs_input</code>, <code class="code">idle_prompt</code>, <code class="code">permission_prompt</code></td><td><code class="code">docket --hook</code> with <code class="code">e</code></td><td>chunk 6</td></tr>
       <tr><td><code class="code">command.run</code></td><td><code class="code">subether</code></td><td>open the injected pane</td><td>live</td></tr>
       <tr><td rowspan="3"><code class="code">prompt.submit</code></td><td rowspan="2">—</td><td>first prompt: <code class="code">sandman recall</code> as one capped <code class="code">context</code> block</td><td>live</td></tr>
       <tr><td>per-prompt docket digest; the other first-prompt sources</td><td>chunks 6, 7</td></tr>
       <tr><td><code class="code">composer</code></td><td>the System One <a class="link" href="#markers">markers</a>, unawaited; each at 0.8 trailed</td><td>live</td></tr>
-      <tr><td><code class="code">session.end</code></td><td>—</td><td><code class="code">sandman take --hook</code>, then the session's docket resolve beside it, under the 1.5 s budget</td><td>chunks 5, 6</td></tr>
+      <tr><td><code class="code">session.end</code></td><td>—</td><td><code class="code">sandman take --hook</code> on every reason under the 1.5 s bound (sandman declines <code class="code">resume</code> and a live <code class="code">--bg</code> job's session itself); chunk 6 · the session's docket resolve beside it</td><td>live; chunk 6</td></tr>
       <tr><td><code class="code">session.measure</code></td><td>—</td><td>the gauge reading; the five-hour window → <code class="code">window.json</code></td><td>live</td></tr>
       <tr><td rowspan="2"><code class="code">session.start</code></td><td>—</td><td>the gauge's first reading and 15 s poll; later the band's commands and timer</td><td>live · chunk 8</td></tr>
       <tr><td><code class="code">isInteractive</code></td><td>open the pane unasked, register <code class="code">/subether</code></td><td>live</td></tr>
@@ -250,6 +316,7 @@ claude plugin test plugins/subether</pre>
       <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/pane.tsx">plugins/subether/hooks/pane.tsx</a>
       draws.</p>
   </header>
+  <figure class="figure"><img class="figure-light" src="figures/where-it-draws.png" alt="A session's screen with the transcript on the left, the subether · injected pane docked right, an empty band above the prompt and the gauge row under it (highlighted), each region led out to the registration that draws or fills it." /><img class="figure-dark" src="figures/where-it-draws-dark.png" alt="" aria-hidden="true" loading="lazy" /><figcaption>Where it draws: the pane, its rows, the band and the gauge row, each with the registration behind it. Source: Claude Design canvas <a href="https://claude.ai/artifact/MTz8JkYYiUUbNG7svL9sPS">claude figures</a>, board where-it-draws.</figcaption></figure>
   <ul class="stack claims" role="list">
     <li><strong>the stand-in</strong> — the first <code class="code">prompt.submit</code> that is not
       <code class="code">isMeta</code> (and the first after <code class="code">/clear</code>) runs
@@ -278,6 +345,7 @@ claude plugin test plugins/subether</pre>
       <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/judge.ts">plugins/subether/hooks/judge.ts</a>.
       A System One judge replaces perpetual's regex correction capture.</p>
   </header>
+  <figure class="figure"><img class="figure-light" src="figures/judge.png" alt="The prompt, the previous answer and the last three prompts feed one state, judged by TypeSafe with Kev as fallback, each showing its gate states; four yes-probability bars are cut by a highlighted 0.8 line, and correction at 0.94 becomes a trail event." /><img class="figure-dark" src="figures/judge-dark.png" alt="" aria-hidden="true" loading="lazy" /><figcaption>The judge: one request, four markers, TypeSafe else Kev, and a trail event at 0.8 or more. Source: Claude Design canvas <a href="https://claude.ai/artifact/MTz8JkYYiUUbNG7svL9sPS">claude figures</a>, board judge.</figcaption></figure>
   <p>Owner, 2026-11-06: "lets only classify sessions when we have tokens available in the typesafe
     api or local classification model … fan out and detect markers to add to the trail"; "drop the
     regex, typesafe first, 0.8, build it".</p>
@@ -305,6 +373,14 @@ claude plugin test plugins/subether</pre>
       call's. Shadow only, until a week of lines sets the thresholds at which it answers
       <code class="code">allow</code> or <code class="code">deny</code> itself.</li>
   </ul>
+  <figure class="figure">
+    <div class="chart" id="judge-states"><noscript><p class="docs-note">This chart needs JavaScript; its data is <a class="link" href="data/judge.json">docs/data/judge.json</a>.</p></noscript></div>
+    <figcaption>Each judge's availability, TypeSafe first and Kev behind it: what marks it down and what brings it back. Data: <a href="data/judge.json">docs/data/judge.json</a>, its numbers read back out of judge.ts and markers.ts, checked by the gate.</figcaption>
+  </figure>
+  <figure class="figure">
+    <div class="chart" id="trail-markers"><noscript><p class="docs-note">This chart needs JavaScript; its data is <a class="link" href="data/sample-markers.json">docs/data/sample-markers.json</a>.</p></noscript></div>
+    <figcaption>The month's correction events by day and hour, each at the judge's probability; the regex era's, unscored, hollow beneath. Data: <a href="data/sample-markers.json">docs/data/sample-markers.json</a>, scrubbed by <a href="data/scrub.ts">docs/data/scrub.ts</a> to day, hour, marker, p and judge, checked by the gate.</figcaption>
+  </figure>
 </section>
 
 <section class="docs-section" id="guards" data-component="guards">
@@ -314,6 +390,7 @@ claude plugin test plugins/subether</pre>
       <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/guard.ts">plugins/subether/hooks/guard.ts</a>,
       perpetual 0.2.12's tokenizer and judges ported to typed TypeScript, logic unchanged.</p>
   </header>
+  <figure class="figure"><img class="figure-light" src="figures/tool-call.png" alt="A tool call left to right through tool.call, log and guard (highlighted) to the tool and back; a denied call loops from the guard straight back to the log, the log writes tools/&lt;day&gt;.jsonl, the guard writes a guard event to the trail, and tool.check shadows the step before the tool." /><img class="figure-dark" src="figures/tool-call-dark.png" alt="" aria-hidden="true" loading="lazy" /><figcaption>A tool call: logged first, then guarded; a denied call never reaches the tool. Source: Claude Design canvas <a href="https://claude.ai/artifact/MTz8JkYYiUUbNG7svL9sPS">claude figures</a>, board tool-call.</figcaption></figure>
   <ul class="stack claims" role="list">
     <li><strong>denied</strong> — <code class="code">pkill -f</code>, tree discards, <code class="code">git
       reset --hard</code>, force pushes, <code class="code">git stash</code>, <code class="code">git
@@ -336,6 +413,10 @@ claude plugin test plugins/subether</pre>
     <li><strong>not seen</strong> — a saved alias, variable indirection, arguments fed from a pipe,
       <code class="code">env -S</code>, package runners.</li>
   </ul>
+  <figure class="figure">
+    <div class="chart" id="call-sequence"><noscript><p class="docs-note">This chart needs JavaScript; its data is <a class="link" href="data/sequence.json">docs/data/sequence.json</a>.</p></noscript></div>
+    <figcaption>One tool call through the log, the guards, the check and its shadow judge; the denied, refused and failed paths and the unawaited shadow framed dashed. Data: <a href="data/sequence.json">docs/data/sequence.json</a>, its writes held to the hook graph's effects, checked by the gate.</figcaption>
+  </figure>
 </section>
 
 <section class="docs-section" id="log" data-component="log">
@@ -359,6 +440,10 @@ claude plugin test plugins/subether</pre>
       &gt;&gt;</code> (O_APPEND, so sessions' lines land whole), not awaited; a failed append is one
       dim log line.</li>
   </ul>
+  <figure class="figure">
+    <div class="chart" id="tool-calls"><noscript><p class="docs-note">This chart needs JavaScript; its data is <a class="link" href="data/sample-calls.json">docs/data/sample-calls.json</a>.</p></noscript></div>
+    <figcaption>2026-11-06's tool log: calls by hour and outcome, latency per tool, and the shadow judge's routine against destructive per asked call. Data: <a href="data/sample-calls.json">docs/data/sample-calls.json</a>, scrubbed by <a href="data/scrub.ts">docs/data/scrub.ts</a> to kind, hour, tool, outcome, ms, readOnly, chars and the check probabilities, checked by the gate.</figcaption>
+  </figure>
 </section>
 
 <section class="docs-section" id="state" data-component="state">
@@ -368,6 +453,7 @@ claude plugin test plugins/subether</pre>
       <code class="code">$.state</code> atom under <code class="code">subether</code>, typed in
       <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/types/index.d.ts">plugins/subether/types/index.d.ts</a>.</p>
   </header>
+  <figure class="figure"><img class="figure-light" src="figures/what-it-writes.png" alt="The mod in the centre with arrows out to $.state (highlighted, its atoms listed), window.json, the daily tool log, the sandman trail, the model and the person, and arrows in from sandman recall and the judges." /><img class="figure-dark" src="figures/what-it-writes-dark.png" alt="" aria-hidden="true" loading="lazy" /><figcaption>What it writes: every sink and source; the files outlive the session, $.state does not. Source: Claude Design canvas <a href="https://claude.ai/artifact/MTz8JkYYiUUbNG7svL9sPS">claude figures</a>, board what-it-writes.</figcaption></figure>
   <ul class="stack claims" role="list">
     <li><strong>in use</strong> — <code class="code">effort</code> (the gauge's flag),
       <code class="code">expanded</code> (the pane's open rows), <code class="code">gate</code> (each
@@ -384,6 +470,10 @@ claude plugin test plugins/subether</pre>
       and <code class="code">/branch</code> reset every atom to its default: the next prompt recalls
       again, the pane empties and the gauge waits for its next reading.</li>
   </ul>
+  <figure class="figure">
+    <div class="chart" id="atom-matrix"><noscript><p class="docs-note">This chart needs JavaScript; its data is <a class="link" href="data/hooks.json">docs/data/hooks.json</a>.</p></noscript></div>
+    <figcaption>Every <code class="code">$.state</code> atom against the hooks that read or write it, what resets it and whether it is live. Data: <a href="data/hooks.json">docs/data/hooks.json</a>, checked by the gate.</figcaption>
+  </figure>
 </section>
 
 <section class="docs-section" id="gate" data-component="gate">
@@ -393,7 +483,10 @@ claude plugin test plugins/subether</pre>
   </header>
   <p><code class="code">bun run test</code>
     (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/scripts/test.ts">scripts/test.ts</a>)
-    runs every step at once — fmt check, oxlint, tsc at the root and in the mod, the unit tests,
+    runs every step at once — the chart data against the source
+    (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/scripts/charts.ts">scripts/charts.ts</a>:
+    the hooks, atoms, sequence writes and judge constants, and the public samples' keys), fmt check,
+    oxlint, tsc at the root and in the mod, the unit tests,
     monitor-github's selftest, <code class="code">claude plugin validate --strict</code> and
     <code class="code">claude plugin test</code> — and prints a step's output only when it fails.</p>
   <ul class="stack claims" role="list">
@@ -433,10 +526,10 @@ claude plugin test plugins/subether</pre>
     <li>✔ 2026-11-06 <strong>Guard and tool log</strong> (owner: "lets do the next bit the tool calls
       … i also want every tool call logged to a file, one log per day").</li>
     <li><strong>Sandman</strong>: ✔ 2026-11-06 the System One <a class="link" href="#markers">markers</a>
-      (owner: "we will abandon the dowse work for this path"); still to come: the
-      <code class="code">agent.spawn</code> pin, <code class="code">session.end</code> →
-      <code class="code">sandman take --hook</code>, and the context cap's <code class="code">guard</code>
-      trail.</li>
+      (owner: "we will abandon the dowse work for this path"); ✔ 2026-11-06 the
+      <code class="code">agent.spawn</code> pin under a premium parent and <code class="code">session.end</code> →
+      <code class="code">sandman take --hook</code>; still to come: the context cap's
+      <code class="code">guard</code> trail.</li>
     <li>✔ 2026-11-06 <strong>Shadow check</strong> (owner: "i'd rather use my typesafe tokens for
       automode than my anthropic ones, lets shadow so we can shift spend to my typesafe subscription"):
       the <a class="link" href="#markers">check</a>.</li>

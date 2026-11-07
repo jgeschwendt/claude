@@ -488,12 +488,8 @@ test('an Edit or Write to a .yml path is denied and trailed; .yaml goes on', asy
 });
 
 for (const [name, options, line] of [
-  ['exits non-zero', { exitCode: 1 }, 'subether: sandman trail append exited 1: boom'],
-  [
-    'cannot start',
-    { isRefused: true },
-    expect.stringMatching(/^subether: sandman trail append failed: /u),
-  ],
+  ['exits non-zero', { exitCode: 1 }, 'sandman trail append exited 1: boom'],
+  ['cannot start', { isRefused: true }, expect.stringMatching(/^sandman trail append failed: /u)],
 ] as const) {
   test(`a trail that ${name} logs once and still denies`, async ($, on) => {
     const { logs } = engine(on, options);
@@ -530,5 +526,5 @@ test('a failed guard whose trail fails too still denies, logging once', async ($
   expect(await bash($, 'git stash')).toEqual({ deny: UNREAD });
   expect(runs).toEqual([]);
   expect(calls).toEqual([]);
-  expect(logs).toEqual([expect.stringMatching(/^subether: sandman trail append failed: /u)]);
+  expect(logs).toEqual([expect.stringMatching(/^sandman trail append failed: /u)]);
 });

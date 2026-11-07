@@ -47,7 +47,7 @@ const context: Hook<'prompt.submit'> = async ($, e, next) => {
   }
   const at = await $.clock.now();
   const text = await recall($).catch(async (error: unknown) => {
-    $.ui.log(`subether context: ${SOURCE}: ${String(error)}`);
+    $.ui.log(`context: ${SOURCE}: ${String(error)}`);
     const failed = { at, chars: 0, cut: false, error: String(error), source: SOURCE, text: '' };
     await update($, injected, (was) => [...was, failed]);
     return '';
@@ -63,7 +63,7 @@ const context: Hook<'prompt.submit'> = async ($, e, next) => {
     : text;
   if (isCut) {
     // chunk 4 · trail guard: `sandman trail append --kind guard --rationale <reason>`
-    $.ui.log(`subether: ${reason}`);
+    $.ui.log(reason);
   }
   await update($, injected, (was) => [
     ...was,

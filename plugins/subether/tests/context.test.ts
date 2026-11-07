@@ -38,7 +38,7 @@ const engine = (
   on('session.cwd', () => ({ value: '/w' }));
   on('session.id', () => ({ value: 's1' }));
   on('ui.log', ($, e) => {
-    logs.push(...(e.text.startsWith('subether judge') ? [] : [e.text]));
+    logs.push(...(e.text.startsWith('judge') ? [] : [e.text]));
     return { value: undefined };
   });
   return { logs, prompts, runs };
@@ -88,7 +88,7 @@ test('a recall past the cap is cut at its last line break, named, and logged', a
   await submit($);
   const reason = `context cap: sandman recall printed ${long.length} chars, cap ${CAP}`;
   expect(prompts[0]?.context).toEqual([`${'a'.repeat(CAP - 1)}\n… [${reason}]`]);
-  expect(logs).toEqual([`subether: ${reason}`]);
+  expect(logs).toEqual([reason]);
 });
 
 test('a recall past the cap with no line break is cut at the cap', async ($, on) => {
@@ -116,7 +116,7 @@ for (const [name, options, line] of [
     await submit($);
     const unchanged = { origin: { kind: 'composer' }, text: 'hi', wait: false };
     expect(prompts).toEqual([unchanged, unchanged]);
-    expect(logs).toEqual([`subether context: sandman recall: ${line}`]);
+    expect(logs).toEqual([`context: sandman recall: ${line}`]);
     const failed = {
       at: NOW,
       chars: 0,

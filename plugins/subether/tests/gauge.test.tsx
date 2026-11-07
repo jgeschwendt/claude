@@ -394,7 +394,7 @@ test('window.json is persisted and never rolled back', async ($, on) => {
   expect(await write(five(RESET, over))).toBeUndefined();
   expect(await write(five(RESET, under))).toBeUndefined();
   expect(logs).toEqual(
-    [over, under].map((used) => `subether gauge: window: used_percentage ${used} is outside 0–100`),
+    [over, under].map((used) => `gauge: window: used_percentage ${used} is outside 0–100`),
   );
   await write(five(RESET, String(USED)));
   expect(Object.fromEntries(files)).toEqual({
@@ -424,5 +424,5 @@ for (const [environment, written] of [
 test('a failed move is one log line', async ($, on) => {
   const { logs } = engine(on, { exitCode: 1 });
   await measure($, FULL);
-  expect(logs).toEqual([`subether gauge: window: ${FILE}: Error: denied`]);
+  expect(logs).toEqual([`gauge: window: ${FILE}: Error: denied`]);
 });

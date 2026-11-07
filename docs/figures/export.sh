@@ -26,4 +26,8 @@ shoot() { # <board .dc.html> <name>
   render "$D" "$1" "$2-dark.png" "$h"
 }
 shoot SessionEvents.dc.html session-events
+shoot WhereItDraws.dc.html where-it-draws
+shoot ToolCall.dc.html tool-call
+shoot Judge.dc.html judge
+shoot WhatItWrites.dc.html what-it-writes
 agent-browser close >/dev/null

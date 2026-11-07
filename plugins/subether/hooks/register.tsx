@@ -1,5 +1,6 @@
 // subether: first-prompt recall and the injected pane, guards and the tool log, judged markers and the shadow check, the
-// gauge and window clock; the docket hooks, the session-end take, the subagent pin and the shift band are stubs or to come.
+// gauge and window clock, the subagent pin and the session-end take; the docket hooks and the shift band are stubs or to
+// come.
 import type { Register } from 'claude-code';
 import { check } from './check';
 import { context } from './context';
@@ -7,11 +8,13 @@ import { hint, measure, start, step } from './gauge';
 import { bash, bashFailed, yml, ymlFailed } from './guard';
 import { markers } from './markers';
 import { command, opening, pane } from './pane';
+import { pin } from './pin';
+import { take } from './take';
 import { log } from './toollog';
 
 export const register: Register = (on) => {
-  // chunk 5 · pin an unpinned, unforked subagent to opus
-  on('agent.spawn', async ($, e, next) => await next(e)).catch(async ($, e, next) => await next(e));
+  // a spawn with no model, not a fork, under a premium parent runs on opus; a failed pin passes the spawn on
+  on('agent.spawn', pin).catch(async ($, e, next) => await next(e));
   // chunk 6 · hand the notification to `docket --hook`
   on(
     'classic.Notification',
@@ -28,8 +31,8 @@ export const register: Register = (on) => {
   on('prompt.submit', { origin: { kind: 'composer' } }, markers).catch(
     async ($, e, next) => await next(e),
   );
-  // chunk 5 · `sandman take --hook` under the end budget; chunk 6 · the session's docket resolve beside it
-  on('session.end', async ($, e, next) => await next(e));
+  // `sandman take --hook` on every reason, under the end bound; chunk 6 · the session's docket resolve beside it
+  on('session.end', take).catch(async ($, e, next) => await next(e));
   // the gauge reading; the five-hour window → window.json
   on('session.measure', measure);
   // the gauge's first reading, and its 15 s usage poll in interactive sessions

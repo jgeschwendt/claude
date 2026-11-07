@@ -1,0 +1,29 @@
+{
+  "constants": {
+    "judge.ts": {"DOWN_MS": 60000, "FORBIDDEN": 403, "KEV_MS": 5000, "OVERLOADED": 529, "PROBE_MS": 1000, "TOO_MANY": 429, "TYPESAFE_MS": 3000, "UNAUTHORIZED": 401},
+    "markers.ts": {"THRESHOLD": 0.8}
+  },
+  "judges": [
+    {"label": "TypeSafe", "model": "jev-latest", "name": "typesafe", "timeout": "TYPESAFE_MS", "url": "https://api.typesafe.ai/v1"},
+    {"label": "Kev", "model": "kev-latest", "name": "kev", "timeout": "KEV_MS", "url": "http://127.0.0.1:1703/v1"}
+  ],
+  "states": [
+    {"doc": "no until: every call is tried", "name": "up", "status": "ok"},
+    {"doc": "until now + Retry-After (seconds or an HTTP-date), else {DOWN_MS}", "name": "rate limited", "status": "danger"},
+    {"doc": "until past any clock: down for the session", "name": "refused", "status": "danger"},
+    {"doc": "until now + {DOWN_MS}", "name": "down", "status": "danger"},
+    {"doc": "a Kev timeout: until now + {DOWN_MS}", "judges": ["kev"], "name": "busy", "status": "warn"}
+  ],
+  "transitions": [
+    {"from": "up", "on": "{TOO_MANY} / {OVERLOADED}", "to": "rate limited"},
+    {"from": "rate limited", "on": "Retry-After passes", "to": "up"},
+    {"from": "up", "on": "{UNAUTHORIZED} / {FORBIDDEN}", "to": "refused"},
+    {"from": "up", "judges": ["typesafe"], "on": "no key", "to": "refused"},
+    {"from": "refused", "on": "/clear · /resume · /branch", "to": "up"},
+    {"from": "up", "judges": ["typesafe"], "on": "network · timeout · odd reply", "to": "down"},
+    {"from": "up", "judges": ["kev"], "on": "network · odd reply", "to": "down"},
+    {"from": "down", "on": "{DOWN_MS} passes", "to": "up"},
+    {"from": "up", "judges": ["kev"], "on": "timeout", "to": "busy"},
+    {"from": "busy", "judges": ["kev"], "on": "{DOWN_MS} passes", "to": "up"}
+  ]
+}

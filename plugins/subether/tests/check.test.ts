@@ -146,8 +146,8 @@ test('both judges down: no line, their log lines, the ask unchanged', async ($, 
   await time.settle();
   expect(lines).toEqual([]);
   expect(logs).toEqual([
-    'subether judge: typesafe down (subether: $.http.fetch: connect ECONNREFUSED)',
-    'subether judge: kev down (subether: $.http.fetch: connect ECONNREFUSED)',
+    'judge: typesafe down (subether: $.http.fetch: connect ECONNREFUSED)',
+    'judge: kev down (subether: $.http.fetch: connect ECONNREFUSED)',
   ]);
 });
 
@@ -155,5 +155,5 @@ test('a failed append is one log line', async ($, on) => {
   const { logs, time } = engine(on, { exitCode: 1, typesafe: {} });
   expect(await $.tool.check(CALL)).toEqual(ASK);
   await time.settle();
-  expect(logs).toEqual([`subether check: Error: /logs/${DAY}.jsonl: read-only`]);
+  expect(logs).toEqual([`check: Error: /logs/${DAY}.jsonl: read-only`]);
 });

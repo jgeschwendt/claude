@@ -1,30 +1,12 @@
-import type { AgentSpawnInput, On, SessionEndInput } from 'claude-code';
+import type { On } from 'claude-code';
 import { type Engine, expect, test } from 'claude-code/testing';
 
 const SENTINEL = 'beneath';
 
 /**
-A typed input from JSON, the event's engine-set fields left out
-*/
-const fixture: <T>(json: string) => T = JSON.parse;
-
-/**
 Each pass-through: the engine's hook, answering with the event it saw, the fire, and the answer's field
 */
 const PASS: [string, (on: On) => void, ($: Engine) => Promise<unknown>, string][] = [
-  [
-    'agent.spawn',
-    (on): void => {
-      on('agent.spawn', ($, e) => ({ model: JSON.stringify(e) }));
-    },
-    async ($): Promise<unknown> =>
-      await $.agent.spawn(
-        fixture<AgentSpawnInput>(
-          `{"description":"d","prompt":"${SENTINEL}","subagentType":"general-purpose"}`,
-        ),
-      ),
-    'model',
-  ],
   [
     'classic.Notification',
     (on): void => {
@@ -42,15 +24,6 @@ const PASS: [string, (on: On) => void, ($: Engine) => Promise<unknown>, string][
     async ($): Promise<unknown> =>
       await $.prompt.submit({ origin: { kind: 'composer' }, text: SENTINEL, wait: false }),
     'text',
-  ],
-  [
-    'session.end',
-    (on): void => {
-      on('session.end', ($, e) => ({ sessionId: JSON.stringify(e) }));
-    },
-    async ($): Promise<unknown> =>
-      await $.session.end(fixture<SessionEndInput>(`{"reason":"other","sessionId":"${SENTINEL}"}`)),
-    'sessionId',
   ],
   [
     'session.start',

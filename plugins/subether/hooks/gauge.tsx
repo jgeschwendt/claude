@@ -223,7 +223,7 @@ const persist = async (
     return;
   }
   if (five.used < 0 || five.used > PERCENT) {
-    $.ui.log(`subether gauge: window: used_percentage ${five.used} is outside 0–100`);
+    $.ui.log(`gauge: window: used_percentage ${five.used} is outside 0–100`);
     return;
   }
   const path = await windowPath($);
@@ -240,7 +240,7 @@ const persist = async (
     return;
   }
   await writeWindow($, path, { at: now, ...five }).catch((error: unknown) => {
-    $.ui.log(`subether gauge: window: ${path}: ${String(error)}`);
+    $.ui.log(`gauge: window: ${path}: ${String(error)}`);
   });
 };
 
@@ -346,7 +346,7 @@ const measure: Hook<'session.measure'> = async ($, e, next) => {
 
 const logged = ($: EngineInterface, work: Promise<void>): void => {
   work.catch((error: unknown) => {
-    $.ui.log(`subether gauge: ${String(error)}`);
+    $.ui.log(`gauge: ${String(error)}`);
   });
 };
 

@@ -99,7 +99,7 @@ const engine = (
     return await next(e);
   });
   on('ui.log', ($, e) => {
-    logs.push(...(e.text.startsWith('subether judge') ? [e.text] : []));
+    logs.push(...(e.text.startsWith('judge') ? [e.text] : []));
     return { value: undefined };
   });
   on('ui.open', () => ({ value: { isPlaced: true } }));
@@ -173,7 +173,7 @@ for (const [name, reply, down, why] of [
     expect(JSON.parse(fetches[1]?.init?.body ?? '')).toMatchObject({ model: 'kev-latest' });
     expect(state.gate).toEqual({ kev: { why: '' }, typesafe: { until: NOW + down * MINUTE, why } });
     expect(state.judged).toEqual([{ at: NOW, head: 'no', judge: 'kev', markers: LOW }]);
-    expect(logs).toEqual([`subether judge: typesafe down (${why})`]);
+    expect(logs).toEqual([`judge: typesafe down (${why})`]);
   });
 }
 
@@ -201,7 +201,7 @@ test('with no TYPESAFE_API_KEY only Kev is asked, TypeSafe down for the session'
     kev: { why: '' },
     typesafe: { until: SESSION, why: 'no TYPESAFE_API_KEY' },
   });
-  expect(logs).toEqual(['subether judge: typesafe down (no TYPESAFE_API_KEY)']);
+  expect(logs).toEqual(['judge: typesafe down (no TYPESAFE_API_KEY)']);
 });
 
 test('both down: nothing is asked, no judge recorded, one log line', async ($, on) => {
@@ -211,9 +211,7 @@ test('both down: nothing is asked, no judge recorded, one log line', async ($, o
   [fetches.length, logs.length] = [0, 0];
   await say($, time);
   expect(fetches).toEqual([]);
-  expect(logs).toEqual([
-    `subether judge: no judge up (typesafe no TYPESAFE_API_KEY, kev ${REFUSED})`,
-  ]);
+  expect(logs).toEqual([`judge: no judge up (typesafe no TYPESAFE_API_KEY, kev ${REFUSED})`]);
   expect(state.judged).toEqual([1, 2].map(() => ({ at: NOW, head: 'no', markers: {} })));
 });
 

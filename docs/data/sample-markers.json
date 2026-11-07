@@ -1,0 +1,17 @@
+[
+{"day":"2026-11-02","hour":14,"judge":null,"marker":"regex","p":null},
+{"day":"2026-11-02","hour":15,"judge":null,"marker":"regex","p":null},
+{"day":"2026-11-02","hour":21,"judge":null,"marker":"regex","p":null},
+{"day":"2026-11-02","hour":21,"judge":null,"marker":"regex","p":null},
+{"day":"2026-11-02","hour":23,"judge":null,"marker":"regex","p":null},
+{"day":"2026-11-02","hour":23,"judge":null,"marker":"regex","p":null},
+{"day":"2026-11-03","hour":13,"judge":null,"marker":"regex","p":null},
+{"day":"2026-11-04","hour":9,"judge":null,"marker":"regex","p":null},
+{"day":"2026-11-04","hour":10,"judge":null,"marker":"regex","p":null},
+{"day":"2026-11-05","hour":21,"judge":null,"marker":"regex","p":null},
+{"day":"2026-11-06","hour":15,"judge":"typesafe","marker":"correction","p":0.94},
+{"day":"2026-11-06","hour":16,"judge":"typesafe","marker":"approval","p":0.95},
+{"day":"2026-11-06","hour":16,"judge":null,"marker":"regex","p":null},
+{"day":"2026-11-06","hour":16,"judge":"typesafe","marker":"approval","p":0.87},
+{"day":"2026-11-06","hour":20,"judge":"typesafe","marker":"approval","p":0.95}
+]

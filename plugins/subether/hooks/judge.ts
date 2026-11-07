@@ -145,7 +145,7 @@ async function mark($: EngineInterface, name: Name, availability: Availability):
   await update($, gate, (was) => ({ ...was, [name]: availability }));
   $.ui.invalidate('ui.render');
   if (availability.until !== undefined) {
-    $.ui.log(`subether judge: ${name} down (${availability.why})`);
+    $.ui.log(`judge: ${name} down (${availability.why})`);
   }
 }
 
@@ -253,7 +253,7 @@ async function judge(
   const [held, now] = await Promise.all([read($, gate), $.clock.now()]);
   const { kev, typesafe } = held;
   if ((kev.until ?? 0) > now && (typesafe.until ?? 0) > now) {
-    $.ui.log(`subether judge: no judge up (typesafe ${typesafe.why}, kev ${kev.why})`);
+    $.ui.log(`judge: no judge up (typesafe ${typesafe.why}, kev ${kev.why})`);
     return undefined;
   }
   const body = { questions, state };

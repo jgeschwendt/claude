@@ -20,7 +20,7 @@
           "text": "link never overwrites — an entry in ~/.claude that is a real file or a foreign link is reported `drift` and left alone; only missing entries are linked",
           "verified": {
             "digest": null,
-            "sha": "ad17e140ec0aee94cb77de785ff25484ee593e16"
+            "sha": "2ab0a6086186726d39730638a31ca2cb3d59e03b"
           }
         }
       ],
@@ -58,7 +58,7 @@
       },
       "id": "docs",
       "kind": "container",
-      "purpose": "index.html, the harness design page; subether.html, the mod's: five figures, four d3 charts (the hook graph, the atoms, the call machine, the judge states); the live data views are bifrost's /portals."
+      "purpose": "index.html, the harness design page; subether.html, the mod's: five figures, four d3 charts (hook graph, atoms, call machine, judge states); the live data views are bifrost's /system/portals."
     }
   },
   "version": 2

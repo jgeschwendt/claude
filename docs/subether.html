@@ -144,7 +144,6 @@ svg.is-focus .chart-row:not(.is-lit) { opacity: 0.35; }
     <a class="pill" href="#why">why</a>
     <a class="pill" href="#install">install</a>
     <a class="pill" href="#events">events</a>
-    <a class="pill" href="#session">session</a>
     <a class="pill" href="#gauge">gauge</a>
     <a class="pill" href="#pane">pane</a>
     <a class="pill" href="#markers">markers</a>
@@ -259,15 +258,6 @@ claude plugin test plugins/subether</pre>
     (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/sandman.ts">plugins/subether/hooks/sandman.ts</a>).</p>
 </section>
 
-<section class="docs-section" id="session" data-component="session">
-  <header>
-    <h2 class="h2">A session</h2>
-    <p class="docs-note">One session from <code class="code">session.start</code> to <code class="code">session.end</code> as a timeline, one row per moment, time running down, in four columns: the event, the hook it reaches and what that writes, the judge's four probabilities, and the trail event a judged prompt or a guarded call leaves. A bar at or over 0.8 becomes a trail event.</p>
-  </header>
-  <p>The live view is on bifrost · portals (<code class="code">/portals</code>), drawn over a real
-    session's tool log and trail.</p>
-</section>
-
 <section class="docs-section" id="gauge" data-component="gauge">
   <header>
     <h2 class="h2">Gauge</h2>
@@ -369,7 +359,7 @@ claude plugin test plugins/subether</pre>
     <figcaption>Each judge's availability, TypeSafe first and Kev behind it: what marks it down and what brings it back. Data: <a href="data/judge.json">docs/data/judge.json</a>, its numbers read back out of judge.ts and markers.ts, checked by the gate.</figcaption>
   </figure>
   <p>The live view, the trail's correction events each at the judge's probability, is on
-    bifrost · portals (<code class="code">/portals</code>), over the real trail and the tool log's
+    bifrost · portals (<code class="code">/system/portals</code>), over the real trail and the tool log's
     <code class="code">prompt</code> lines.</p>
 </section>
 
@@ -435,7 +425,7 @@ claude plugin test plugins/subether</pre>
       dim log line.</li>
   </ul>
   <p>The live view, a day's calls by hour and outcome, latency per tool and the shadow judge's
-    answers, is on bifrost · portals (<code class="code">/portals</code>), over the real day file.</p>
+    answers, is on bifrost · portals (<code class="code">/system/portals</code>), over the real day file.</p>
 </section>
 
 <section class="docs-section" id="state" data-component="state">

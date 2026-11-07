@@ -35,9 +35,9 @@ invariants:
 
 ## Map
 
-| node | kind      | purpose                                                                                                                                                                                | unfold                                         |
-| ---- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| docs | container | index.html — the harness design page: link, a subether paragraph, the gate, the plan (ol#next); subether.html — the mod's design page: five figures, six d3 charts fed by data/*.json. | `stele unfold docs` · or read `docs/AGENTS.md` |
+| node | kind      | purpose                                                                                                                                                                                  | unfold                                         |
+| ---- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| docs | container | index.html — the harness design page: link, a subether paragraph, the gate, the plan (ol#next); subether.html — the mod's design page: five figures, seven d3 charts fed by data/*.json. | `stele unfold docs` · or read `docs/AGENTS.md` |
 
 ## Indexes
 

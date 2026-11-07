@@ -2,8 +2,11 @@
 // The chart data gate: docs/data/hooks.json, the hook graph's data, against the source it describes — every `on(` call
 // in register.tsx (event, matcher, function, file, catch shape), every atom in types/index.d.ts, every read and write a
 // listed atom, every function exported by its file; call.json a well-formed state machine, its owners a fixed set and
-// each write one of its hook's effects; judge.json's constants, models and endpoints the ones judge.ts and markers.ts declare; the scrubbed samples
-// only their allowed keys, since Pages is public. Regexes over the source text; each mismatch is one line, exit 1.
+// each write one of its hook's effects; judge.json's constants, models and endpoints the ones judge.ts and markers.ts
+// declare; session.json's moments in order, each on a listed event and its hook's, writing that hook's effects, its
+// markers the QUESTIONS of the hook's file, judged by a listed judge, and one trail event per marker at THRESHOLD or
+// over, worded as markers.ts words it; the scrubbed samples only their allowed keys, since Pages is public. Regexes over
+// the source text; each mismatch is one line, exit 1.
 const HOOKS = 'plugins/subether/hooks';
 type Write = { hook: string; target: string };
 
@@ -19,11 +22,12 @@ const data: {
     id: string;
     matcher: unknown;
     reads: string[];
+    status: string;
     writes: string[];
   }[];
   kinds: { name: string }[];
 } = await Bun.file('docs/data/hooks.json').json();
-const [register, types, machine, judged, calls, trailed] = await Promise.all([
+const [register, types, machine, judged, calls, trailed, session] = await Promise.all([
   Bun.file(`${HOOKS}/register.tsx`).text(),
   Bun.file('plugins/subether/types/index.d.ts').text(),
   Bun.file('docs/data/call.json').json() as Promise<{
@@ -47,6 +51,19 @@ const [register, types, machine, judged, calls, trailed] = await Promise.all([
   }>,
   Bun.file('docs/data/sample-calls.json').json() as Promise<Record<string, unknown>[]>,
   Bun.file('docs/data/sample-markers.json').json() as Promise<Record<string, unknown>[]>,
+  Bun.file('docs/data/session.json').json() as Promise<{
+    lanes: { name: string }[];
+    moments: {
+      at: number;
+      effects: { target: string }[];
+      event: string;
+      hook: string;
+      judge?: { by: string; markers: Record<string, number> };
+      label: string;
+      status?: string;
+      trails?: { kind: string; rationale: string }[];
+    }[];
+  }>,
 ]);
 const glob = new Bun.Glob('*.{ts,tsx}');
 const sources = new Map(
@@ -184,6 +201,86 @@ const declaredValue = (file: string, name: string): number | undefined => {
   const pattern = new RegExp(`^const ${name} = (?<value>[\\d_.]+);$`, 'mu');
   const { value } = pattern.exec(sources.get(file) ?? '')?.groups ?? {};
   return value === undefined ? undefined : Number(value.replaceAll('_', ''));
+};
+
+/**
+session.json's fixed lanes and trail kinds, the threshold, each hook by id, the trail prefixes markers.ts writes
+*/
+const LANES = new Set(['event', 'hook', 'judge', 'trail']);
+const TRAIL_KINDS = new Set(['correction', 'guard']);
+const threshold = constants.get('THRESHOLD')?.value ?? 1;
+const hookById = new Map(data.hooks.map((hook) => [hook.id, hook]));
+const judgeNames = new Set(judged.judges.map(({ name }) => name));
+const { prefixes = '' } =
+  /const PREFIX[^=]*= \{(?<prefixes>[^}]*)\}/u.exec(sources.get('markers.ts') ?? '')?.groups ?? {};
+const PREFIX = new Map(
+  prefixes
+    .matchAll(/(?<name>\w+): '(?<prefix>[^']*)'/gu)
+    .map(({ groups: { name = '', prefix = '' } = {} }): [string, string] => [name, prefix]),
+);
+/**
+The top-level keys of a file's `const QUESTIONS = {` block, sorted and joined
+*/
+const questionsOf = (file: string): string => {
+  const { block = '' } =
+    /^const QUESTIONS = \{(?<block>[^]*?)^\};$/mu.exec(sources.get(file) ?? '')?.groups ?? {};
+  return block
+    .matchAll(/^ {2}(?<name>\w+): \{/gmu)
+    .map(({ groups: { name = '' } = {} }) => name)
+    .toArray()
+    .toSorted((one, other) => one.localeCompare(other))
+    .join(',');
+};
+/**
+One moment's mismatches: its event, hook, effects, stub status, judge and trails against the hook graph and the source
+*/
+const momentErrors = (moment: (typeof session.moments)[number], index: number): string[] => {
+  const at = `session #${index} (${moment.label})`;
+  const hook = hookById.get(moment.hook);
+  if (hook === undefined) {
+    return [`${at}: hook ${moment.hook} is not listed`];
+  }
+  const { by = '', markers = {} } = moment.judge ?? {};
+  const trails = moment.trails ?? [];
+  const keys = Object.keys(markers)
+    .toSorted((one, other) => one.localeCompare(other))
+    .join(',');
+  const over = Object.entries(markers).filter(([, odds]) => odds >= threshold);
+  const isWorded = (name: string, odds: number): boolean =>
+    trails.some(
+      ({ rationale }) =>
+        rationale.startsWith(PREFIX.get(name) ?? '\0') &&
+        rationale.endsWith(` (p=${odds.toFixed(2)}, ${by})`),
+    );
+  return [
+    ...(events.has(moment.event) ? [] : [`${at}: event ${moment.event} is not listed`]),
+    ...(hook.event === moment.event
+      ? []
+      : [`${at}: ${hook.id} is on ${hook.event}, not ${moment.event}`]),
+    ...moment.effects
+      .filter(({ target }) => effectsOf.get(hook.id)?.has(target) !== true)
+      .map(({ target }) => `${at}: write ${target} is no effect of hook ${hook.id}`),
+    ...((moment.status === 'stub') === (hook.status === 'stub')
+      ? []
+      : [`${at}: stub status differs from ${hook.id}'s`]),
+    ...(moment.judge === undefined || keys === questionsOf(hook.file)
+      ? []
+      : [`${at}: markers ${keys}, ${hook.file} asks ${questionsOf(hook.file)}`]),
+    ...(moment.judge === undefined || judgeNames.has(by)
+      ? []
+      : [`${at}: judge ${by} is not listed`]),
+    ...(hook.id !== 'markers.markers' || trails.length === over.length
+      ? []
+      : [`${at}: ${trails.length} trails, ${over.length} markers at ${threshold} or over`]),
+    ...(hook.id === 'markers.markers' ? over : [])
+      .filter(([name, odds]) => !isWorded(name, odds))
+      .map(([name]) => `${at}: no trail worded as markers.ts words ${name}`),
+    ...trails
+      .filter(
+        ({ kind }) => !TRAIL_KINDS.has(kind) || (hook.id.startsWith('guard.') && kind !== 'guard'),
+      )
+      .map(({ kind }) => `${at}: trail kind ${kind} is not allowed here`),
+  ];
 };
 
 /**
@@ -352,6 +449,13 @@ const errors = [
     .flatMap(({ from, to }) => [from, to])
     .filter((name) => !states.has(name))
     .map((name) => `judge.json: state ${name} is not listed`),
+  ...session.lanes
+    .filter(({ name }) => !LANES.has(name))
+    .map(({ name }) => `session: lane ${name} is not one of ${[...LANES].join(', ')}`),
+  ...session.moments
+    .filter(({ at }, index) => index > 0 && at < (session.moments[index - 1]?.at ?? 0))
+    .map(({ label }) => `session: ${label} is out of order`),
+  ...session.moments.flatMap(momentErrors),
   ...sampleErrors('sample-calls.json', calls, CALL_ROW),
   ...sampleErrors('sample-markers.json', trailed, MARKER_ROW),
 ];

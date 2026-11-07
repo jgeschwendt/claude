@@ -1,0 +1,296 @@
+{
+  "doc": "one representative interactive session, invented: the moments between session.start and session.end, the hook each one reaches, what the hook writes, and how a judged prompt or call becomes a trail event or a log line",
+  "lanes": [
+    {
+      "doc": "the engine's events, in order",
+      "name": "event"
+    },
+    {
+      "doc": "the subether hook the event reaches",
+      "name": "hook"
+    },
+    {
+      "doc": "a System One judgment: four yes-probabilities, TypeSafe first",
+      "name": "judge"
+    },
+    {
+      "doc": "~/.sandman/trail: what the session leaves behind",
+      "name": "trail"
+    }
+  ],
+  "moments": [
+    {
+      "at": 0,
+      "doc": "the gauge reads window.json and starts its 15 s poll",
+      "effects": [
+        {
+          "target": "window.json"
+        }
+      ],
+      "event": "session.start",
+      "hook": "gauge.start",
+      "label": "start"
+    },
+    {
+      "at": 0,
+      "doc": "the pane opens unasked; the judges are probed and the gate learns TypeSafe is up",
+      "effects": [
+        {
+          "target": "pane"
+        },
+        {
+          "target": "api.typesafe.ai"
+        }
+      ],
+      "event": "session.start",
+      "hook": "pane.opening",
+      "label": "opening",
+      "probe": {
+        "kev": "not asked",
+        "typesafe": "up"
+      }
+    },
+    {
+      "at": 5,
+      "doc": "the first prompt: sandman recall attached as one context block, capped at 10,000, a row in the pane",
+      "effects": [
+        {
+          "target": "sandman recall"
+        },
+        {
+          "target": "prompt context"
+        },
+        {
+          "target": "re-render"
+        }
+      ],
+      "event": "prompt.submit",
+      "hook": "context.context",
+      "label": "first prompt"
+    },
+    {
+      "at": 5,
+      "doc": "\"resume the rewrite where we left off\" — judged, nothing over 0.8, no event",
+      "effects": [
+        {
+          "target": "api.typesafe.ai"
+        },
+        {
+          "target": "re-render"
+        }
+      ],
+      "event": "prompt.submit",
+      "hook": "markers.markers",
+      "judge": {
+        "by": "typesafe",
+        "markers": {
+          "approval": 0.04,
+          "correction": 0.06,
+          "preference": 0.11,
+          "repeat": 0.02
+        }
+      },
+      "label": "prompt 1"
+    },
+    {
+      "at": 9,
+      "doc": "the main loop's first model request; the gauge keeps its effort for the flag",
+      "effects": [],
+      "event": "turn.step",
+      "hook": "gauge.step",
+      "label": "step"
+    },
+    {
+      "at": 14,
+      "doc": "a Read: core allows it, the log writes its call line",
+      "effects": [
+        {
+          "target": "tools/<day>.jsonl"
+        }
+      ],
+      "event": "tool.call",
+      "hook": "toollog.log",
+      "label": "Read",
+      "tool": "Read"
+    },
+    {
+      "at": 22,
+      "doc": "`git push --force`: a house rule matches, the guard trails and denies",
+      "effects": [
+        {
+          "target": "~/.sandman/trail"
+        },
+        {
+          "target": "tool deny"
+        }
+      ],
+      "event": "tool.call",
+      "hook": "guard.bash",
+      "label": "Bash",
+      "tool": "Bash",
+      "trails": [
+        {
+          "kind": "guard",
+          "rationale": "force push: git push --force origin main"
+        }
+      ]
+    },
+    {
+      "at": 22,
+      "doc": "the denied call still gets its call line, outcome denied",
+      "effects": [
+        {
+          "target": "tools/<day>.jsonl"
+        }
+      ],
+      "event": "tool.call",
+      "hook": "toollog.log",
+      "label": "Bash",
+      "tool": "Bash"
+    },
+    {
+      "at": 41,
+      "doc": "`gh pr create`: core says ask; the shadow judges it beside the person's answer and writes a check line",
+      "effects": [
+        {
+          "target": "api.typesafe.ai"
+        },
+        {
+          "target": "tools/<day>.jsonl"
+        }
+      ],
+      "event": "tool.check",
+      "hook": "check.check",
+      "judge": {
+        "by": "typesafe",
+        "markers": {
+          "destructive": 0.02,
+          "outbound": 0.97,
+          "routine": 0.28,
+          "secrets": 0.01
+        }
+      },
+      "label": "ask",
+      "tool": "Bash"
+    },
+    {
+      "at": 60,
+      "doc": "a usage reading: the gauge moves and the five-hour window file is rewritten",
+      "effects": [
+        {
+          "target": "window.json"
+        }
+      ],
+      "event": "session.measure",
+      "hook": "gauge.measure",
+      "label": "measure"
+    },
+    {
+      "at": 130,
+      "doc": "\"no — .yaml, never .yml\" — correction and preference both over 0.8: two correction events",
+      "effects": [
+        {
+          "target": "api.typesafe.ai"
+        },
+        {
+          "target": "~/.sandman/trail"
+        },
+        {
+          "target": "re-render"
+        }
+      ],
+      "event": "prompt.submit",
+      "hook": "markers.markers",
+      "judge": {
+        "by": "typesafe",
+        "markers": {
+          "approval": 0.03,
+          "correction": 0.92,
+          "preference": 0.88,
+          "repeat": 0.07
+        }
+      },
+      "label": "prompt 2",
+      "trails": [
+        {
+          "kind": "correction",
+          "rationale": "no — .yaml, never .yml (p=0.92, typesafe)"
+        },
+        {
+          "kind": "correction",
+          "rationale": "preference: no — .yaml, never .yml (p=0.88, typesafe)"
+        }
+      ]
+    },
+    {
+      "at": 136,
+      "doc": "a subagent spawn with no model under a Fable parent is pinned to opus",
+      "effects": [
+        {
+          "target": "spawn model"
+        }
+      ],
+      "event": "agent.spawn",
+      "hook": "pin.pin",
+      "label": "spawn"
+    },
+    {
+      "at": 190,
+      "doc": "\"yes, go ahead\" — approval over 0.8, TypeSafe rate limited: Kev answers",
+      "effects": [
+        {
+          "target": "127.0.0.1:1703"
+        },
+        {
+          "target": "~/.sandman/trail"
+        },
+        {
+          "target": "re-render"
+        }
+      ],
+      "event": "prompt.submit",
+      "hook": "markers.markers",
+      "judge": {
+        "by": "kev",
+        "markers": {
+          "approval": 0.95,
+          "correction": 0.05,
+          "preference": 0.09,
+          "repeat": 0.03
+        }
+      },
+      "label": "prompt 3",
+      "trails": [
+        {
+          "kind": "correction",
+          "rationale": "approval: yes, go ahead (p=0.95, kev)"
+        }
+      ]
+    },
+    {
+      "at": 250,
+      "doc": "planned · chunk 6: the answer is done; a needs input: or failed: line opens a docket thread",
+      "effects": [
+        {
+          "target": "docket"
+        }
+      ],
+      "event": "turn.complete",
+      "hook": "stub:turn.complete",
+      "label": "complete",
+      "status": "stub"
+    },
+    {
+      "at": 300,
+      "doc": "sandman take archives the transcript for the dream pass; chunk 6 resolves the session's docket thread beside it",
+      "effects": [
+        {
+          "target": "sandman take"
+        }
+      ],
+      "event": "session.end",
+      "hook": "take.take",
+      "label": "end"
+    }
+  ]
+}

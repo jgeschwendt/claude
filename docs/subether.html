@@ -117,8 +117,8 @@ svg.is-focus .chart-row:not(.is-lit) { opacity: 0.35; }
 .chart-threshold { stroke: var(--ui-fg-muted); stroke-dasharray: 4 3; }
 .chart-ring.is-regex { stroke: var(--ui-fg-faint); }
 /* session.js: the life of a session */
-.chart-lane { fill: var(--ui-fg); opacity: 0.03; }
-.chart-lane.is-trail { opacity: 0.07; }
+.chart-lane { fill: var(--ui-fg); opacity: 0.025; }
+.chart-lane.is-trail { opacity: 0.05; }
 .chart-axis path { stroke: var(--ui-border); }
 .chart-life-links path { fill: none; stroke: var(--ui-fg-faint); stroke-width: 1; }
 .chart-life-item { cursor: default; outline: none; }
@@ -127,7 +127,9 @@ svg.is-focus .chart-row:not(.is-lit) { opacity: 0.35; }
 .chart-life-dot.is-stub text { fill: var(--ui-fg-faint); }
 .chart-life-chip { fill: var(--ui-fg); font-size: 11px; }
 .chart-life-event { font-size: 10px; }
-.chart-life-dot .chart-life-event { fill: var(--ui-fg-muted); }
+.chart-life-dot .chart-life-event { fill: var(--ui-fg); }
+.chart-life-label { fill: var(--ui-fg-faint); font-family: var(--ui-font-sans); font-size: 11px; }
+.chart-life-spine { stroke: var(--ui-fg-faint); stroke-opacity: 0.5; }
 .chart-life-judge .chart-threshold { stroke: var(--ui-fg-faint); stroke-dasharray: none; }
 .chart-life-bar { fill: var(--ui-fg-faint); }
 .chart-life-bar.is-over { fill: var(--ui-accent); }
@@ -308,7 +310,7 @@ claude plugin test plugins/subether</pre>
   </header>
   <figure class="figure">
     <div class="chart" id="session-life"><noscript><p class="docs-note">This chart needs JavaScript; its data is <a class="link" href="data/session.json">docs/data/session.json</a>.</p></noscript></div>
-    <figcaption>The life of a session: event, hook, judge and trail lanes, time left to right, a crowded stretch spread and the axis following it; a bar at or over 0.8 becomes a trail event. Data: <a href="data/session.json">docs/data/session.json</a>, held to hooks.json, markers.ts, check.ts and judge.json by the gate.</figcaption>
+    <figcaption>The life of a session: one row per moment, time running down, in event, hook, judge and trail columns, a crowded stretch spread and the axis following it; a bar at or over 0.8 becomes a trail event. Data: <a href="data/session.json">docs/data/session.json</a>, held to hooks.json, markers.ts, check.ts and judge.json by the gate.</figcaption>
   </figure>
 </section>
 

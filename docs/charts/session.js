@@ -1,34 +1,34 @@
-// The life of a session: every moment of one invented session in four lanes — the engine's event, the subether hook it
-// reaches with its writes, the System One judgment, and the trail event it leaves. Moments keep their order; a crowded
-// stretch is spread so no two marks touch, and the time axis follows the spread. scripts/charts.ts holds each moment's
+// The life of a session: every moment of one invented session as a row, time running down, in four columns — the
+// engine's event, the subether hook it reaches with its writes, the System One judgment, and the trail event it leaves.
+// Rows keep their order; a crowded stretch is spread so no two rows touch, and the time axis follows the spread. scripts/charts.ts holds each moment's
 // hook, effects, markers and trails to hooks.json, markers.ts, check.ts and judge.json's THRESHOLD.
 import { d3, hover, load, mount, redraw, widthOf } from "./lib.js";
 
 const root = document.getElementById("session-life");
 const [data, hooks, judge] = await Promise.all([load("session.json"), load("hooks.json"), load("judge.json")]);
 
-const LEFT = 56;
-const ROW = 56;
-const LANE = 44;
-const TOP = 58;
+const AXIS = 46;
+const TOP = 44;
+const PITCH = 34;
+const SPAN = 620;
 const CHIP = 18;
-const BAR = { gap: 3, h: 28, w: 6 };
-const GAP = { group: 12, lane: 8, moment: 6 };
-const CUT = 30;
-const MIN = 900;
+const BAR = { gap: 3, h: 24, w: 6 };
+const GAP = 12;
+const CUT = 48;
+const MIN = 640;
+const COLS = { event: 0.22, hook: 0.26, judge: 0.2, trail: 0.32 };
 
 const THRESHOLD = judge.constants["markers.ts"].THRESHOLD;
 const slot = new Map(hooks.kinds.map((k, i) => [k.name, i + 1]));
 const hookOf = new Map(hooks.hooks.map((h) => [h.id, h]));
 const kindOf = (m, target) => hookOf.get(m.hook).effects.find((e) => e.target === target).kind;
-const laneY = new Map(data.lanes.map((l, i) => [l.name, TOP + i * ROW]));
 const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-// a rationale shown as its head, cut, and its p; the judge's name is the judge lane's, the whole in the tooltip
-const cut = (text) => {
+// a rationale shown as its head, cut to `room` characters, and its p; the judge's name is the judge column's
+const cut = (text, room = CUT) => {
   const { head = text, p } = /^(?<head>.*) \(p=(?<p>[\d.]+), \w+\)$/u.exec(text)?.groups ?? {};
   const tail = p === undefined ? "" : ` (p=${p})`;
-  const room = CUT - tail.length;
-  return `${head.length > room ? `${head.slice(0, room - 1)}…` : head}${tail}`;
+  const left = room - tail.length;
+  return `${head.length > left ? `${head.slice(0, left - 1)}…` : head}${tail}`;
 };
 const fnOf = (m) => (m.status === "stub" ? "docket (planned)" : m.hook.slice(m.hook.indexOf(".") + 1));
 const over = (m) => Object.entries(m.judge?.markers ?? {}).filter(([, p]) => p >= THRESHOLD);
@@ -63,96 +63,100 @@ const draw = () => {
     node.remove();
     return w;
   };
+  const width = widthOf(frame, MIN);
+  const names = Object.keys(COLS);
+  const colX = Object.fromEntries(names.map((n, i) => [n, AXIS + 8 + (width - AXIS - 8) * d3.sum(names.slice(0, i), (k) => COLS[k])]));
+  const span = 4 * BAR.w + 3 * BAR.gap;
+  const dotX = colX.event + 6;
 
-  // each moment's footprint per lane, from its spine: the chip and its badges, the judge group or probe chip and the
-  // notes under it, each trail's diamond and rationale; a group's event label centred over its spines
-  const foot = new Map(moments.map((m) => {
-    const chip = measure("chart-life-chip", fnOf(m)) + 10;
-    const badges = m.effects.length * 10;
-    const judged = m.judge ? Math.max(4 * (BAR.w + BAR.gap), 8 + measure("chart-halo is-small", m.trails.length > 0 ? m.judge.by : noteOf(m))) : 0;
-    const probe = m.probe ? measure("chart-halo is-small", "probe · typesafe up") + 26 : 0;
-    const trail = Math.max(0, ...m.trails.map((t) => 14 + measure("chart-halo is-small", cut(t.rationale))));
-    return [m, { chip, hook: chip + (badges && badges + 4), judge: Math.max(judged, probe), trail }];
-  }));
-  const eventW = new Map(groups.map((g) => [g, Math.max(measure("chart-life-event", g.event), measure("chart-halo is-small", g.labels)) + 4]));
-  const place = (base) => {
-    const right = { event: -Infinity, hook: -Infinity, judge: -Infinity, trail: -Infinity };
-    const ps = groups.map((g) => {
-      const offs = g.ms.reduce((xs, m, i) => [...xs, i === 0 ? 0 : xs[i - 1] + foot.get(g.ms[i - 1]).hook + GAP.moment], []);
-      const mid = (offs[0] + offs.at(-1)) / 2;
-      const lefts = { event: 6 + mid - eventW.get(g) / 2, hook: 0, judge: Math.min(...offs.filter((o, i) => foot.get(g.ms[i]).judge > 0)), trail: Math.min(...offs.filter((o, i) => foot.get(g.ms[i]).trail > 0)) };
-      const x = Math.max(base(g.at), ...Object.keys(right).map((k) => right[k] + GAP.lane - lefts[k]));
-      right.event = x + 6 + mid + eventW.get(g) / 2;
-      g.ms.forEach((m, i) => {
-        right.hook = x + offs[i] + foot.get(m).hook + GAP.group - GAP.lane;
-        right.judge = foot.get(m).judge > 0 ? x + offs[i] + foot.get(m).judge : right.judge;
-        right.trail = foot.get(m).trail > 0 ? x + offs[i] + foot.get(m).trail : right.trail;
-      });
-      return { cx: x + 6 + mid, g, spines: offs.map((o) => x + o) };
-    });
-    return { edge: Math.max(...Object.values(right)), ps };
-  };
+  // each row left to right: the event's text after its dot, the hook chips in a row, the judge group beside them, the
+  // trail after; a column's marks start at its edge, or past the row's marks before them when those run long
+  const rows = groups.map((g) => {
+    const textEnd = dotX + 10 + measure("chart-life-event", g.event) + 8 + measure("chart-halo is-small", g.labels);
+    const chips = g.ms.reduce((xs, m, i) => {
+      const x = i === 0 ? Math.max(colX.hook, textEnd + GAP) : xs[i - 1].end + 8;
+      const w = measure("chart-life-chip", fnOf(m)) + 10;
+      return [...xs, { end: x + w + (m.effects.length > 0 ? 4 + m.effects.length * 10 : 0), m, w, x }];
+    }, []);
+    const jm = g.ms.find((m) => m.judge || m.probe);
+    const jx = Math.max(colX.judge, chips.at(-1).end + GAP);
+    const jEnd = jm === undefined ? jx : jm.judge ? jx + span + 6 + measure("chart-halo is-small", jm.judge.by) : jx + measure("chart-halo is-small", "probe · typesafe up") + 26;
+    const tm = g.ms.find((m) => m.trails.length > 0);
+    const tx = Math.max(colX.trail, jEnd + GAP) + 6;
+    const fit = (t) => {
+      const room = width - tx - 14;
+      const lengths = d3.range(CUT, 11, -1);
+      return cut(t.rationale, lengths.find((n) => measure("chart-halo is-small", cut(t.rationale, n)) <= room) ?? 12);
+    };
+    const below = Math.max(12, jm?.judge && tm === undefined ? 28 : 0, tm ? (tm.trails.length - 1) * 18 + 8 : 0);
+    return { below, chips, g, jEnd, jm, jx, textEnd, tm, tx, fit };
+  });
+  const place = (base) => rows.reduce((ys, r, i) => [...ys, Math.max(base(r.g.at), i === 0 ? TOP : ys[i - 1] + Math.max(PITCH, rows[i - 1].below + 20))], []);
   const end = moments.at(-1).at;
-  // packed tight first: its edge sets the least width, and how far the last group reaches past its own start
-  const packed = place(() => LEFT);
-  const width = Math.max(widthOf(frame, MIN), packed.edge + 16);
-  const { edge, ps: placed } = place(d3.scaleLinear([0, end], [LEFT, width - 16 - (packed.edge - packed.ps.at(-1).spines[0])]));
-  const spine = new Map(placed.flatMap((p) => p.g.ms.map((m, i) => [m, p.spines[i] + 6])));
-  const ats = d3.groups(placed, (p) => p.g.at).map(([at, ps]) => [at, ps[0].cx]);
-  const time = d3.scaleLinear(ats.map(([at]) => at), ats.map(([, x]) => x));
-  const axisY = laneY.get("trail") + 46;
-  const height = axisY + 28;
-  const full = Math.max(width, edge + 16);
-  svg.attr("width", full).attr("height", height);
+  const packed = place(() => TOP);
+  const ys = place(d3.scaleLinear([0, end], [TOP, TOP + Math.max(SPAN, packed.at(-1) - TOP)]));
+  const height = ys.at(-1) + rows.at(-1).below + 20;
+  const right = Math.max(width, ...rows.map((r) => r.jEnd + 16));
+  svg.attr("width", right).attr("height", height);
+  const ats = d3.groups(rows.map((r, i) => [r.g.at, ys[i]]), ([at]) => at).map(([at, rs]) => [at, rs[0][1]]);
+  const time = d3.scaleLinear(ats.map(([at]) => at), ats.map(([, y]) => y));
+  const placed = rows.map((r, i) => ({ ...r, y: ys[i] }));
+  const rowOf = new Map(placed.flatMap((r) => r.g.ms.map((m) => [m, r])));
+  const chipOf = new Map(placed.flatMap((r) => r.chips.map((c) => [c.m, c])));
 
-  // lanes: a faint band and its name; the trail's stronger
-  const lanes = svg.append("g");
-  for (const lane of data.lanes) {
-    lanes.append("rect").attr("class", "chart-lane").classed("is-trail", lane.name === "trail").attr("x", LEFT - 12).attr("y", laneY.get(lane.name) - LANE / 2).attr("width", full - LEFT + 12).attr("height", LANE).attr("rx", 6);
-  }
-  lanes.append("g").attr("class", "chart-heads").selectAll("text").data(data.lanes).join("text").attr("x", 0).attr("y", (l) => laneY.get(l.name) + 4).text((l) => l.name).append("title").text((l) => l.doc);
-  svg.append("g").attr("class", "chart-axis").attr("transform", `translate(0,${axisY})`).call(d3.axisBottom(time).tickValues(d3.range(0, end + 1, 60)).tickFormat((s) => (s === 0 ? "0 s" : `${s / 60} min`)).tickSizeOuter(0));
+  // columns: a faint band and its name across the top, the trail's stronger; the time axis down the left edge
+  const cols = svg.append("g");
+  cols.selectAll("rect").data(data.lanes).join("rect").attr("class", "chart-lane").classed("is-trail", (l) => l.name === "trail").attr("x", (l) => colX[l.name] - 6).attr("y", TOP - 22).attr("width", (l, i) => (i + 1 < names.length ? colX[names[i + 1]] : right) - colX[l.name] - 2).attr("height", height - TOP + 14).attr("rx", 6);
+  cols.append("g").attr("class", "chart-heads").selectAll("text").data(data.lanes).join("text").attr("x", (l) => colX[l.name]).attr("y", 12).text((l) => l.name).append("title").text((l) => l.doc);
+  svg.append("g").attr("class", "chart-axis").attr("transform", `translate(${AXIS},0)`).call(d3.axisLeft(time).tickValues(d3.range(0, end + 1, 60)).tickFormat((s) => (s === 0 ? "0 s" : `${s / 60} min`)).tickSizeOuter(0));
+  svg.append("line").attr("class", "chart-life-spine").attr("x1", dotX).attr("x2", dotX).attr("y1", ys[0]).attr("y2", ys.at(-1));
 
-  const [yE, yH, yJ, yT] = ["event", "hook", "judge", "trail"].map((n) => laneY.get(n));
-  const base = yJ + 12;
-  const trailY = (t) => yT + t.k * 18;
-  // connectors: event → hook (a bracket for a shared dot), hook → judge, judge or hook → trail
+  // connectors: event text → first chip, chip → judge, judge or chip → trail; one from a chip with chips after it
+  // runs under them
+  const from = (m, r) => {
+    const c = chipOf.get(m);
+    return c === r.chips.at(-1) ? `M${c.end + 2},${r.y}` : `M${c.x + c.w / 2},${r.y + CHIP / 2}V${r.y + CHIP / 2 + 5}H${r.chips.at(-1).end + 6}V${r.y}`;
+  };
   const links = [
-    ...placed.flatMap(({ cx, g }) => g.ms.map((m) => ({ d: g.ms.length > 1 ? `M${cx},${yE + 5}V${yH - 22}H${spine.get(m)}V${yH - CHIP / 2}` : `M${cx},${yE + 5}V${yH - CHIP / 2}`, m }))),
-    ...moments.filter((m) => m.judge || m.probe).map((m) => ({ d: `M${spine.get(m)},${yH + CHIP / 2}V${m.judge ? base - BAR.h - 2 : yJ - 9}`, m })),
-    ...trails.map((t) => ({ d: `M${spine.get(t.m)},${t.m.judge ? base : yH + CHIP / 2}V${trailY(t) - 7}`, m: t.m })),
+    ...placed.map((r) => ({ d: `M${r.textEnd + 4},${r.y}H${r.chips[0].x - 2}`, ms: r.g.ms })),
+    ...placed.filter((r) => r.jm).map((r) => ({ d: `${from(r.jm, r)}H${r.jx - 4}`, ms: [r.jm] })),
+    ...trails.map((t) => {
+      const r = rowOf.get(t.m);
+      const start = t.m.judge ? `M${r.jEnd + 4},${r.y}` : from(t.m, r);
+      return { d: t.k === 0 ? `${start}H${r.tx - 8}` : `M${r.tx - 14},${r.y}V${r.y + t.k * 18}H${r.tx - 8}`, ms: [t.m] };
+    }),
   ];
   const linkSel = svg.append("g").attr("class", "chart-life-links").selectAll("path").data(links).join("path").attr("d", (l) => l.d);
 
-  // event: one dot per (at, event), the event name and the moments' labels above it
-  const eventSel = svg.append("g").selectAll("g").data(placed).join("g").attr("class", "chart-life-item chart-life-dot").classed("is-stub", (p) => p.g.ms.every((m) => m.status === "stub")).attr("tabindex", 0).attr("transform", (p) => `translate(${p.cx},${yE})`);
+  // event: one dot per (at, event) on the spine, the event name and the moments' labels after it
+  const eventSel = svg.append("g").selectAll("g").data(placed).join("g").attr("class", "chart-life-item chart-life-dot").classed("is-stub", (r) => r.g.ms.every((m) => m.status === "stub")).attr("tabindex", 0).attr("transform", (r) => `translate(${dotX},${r.y})`);
   eventSel.append("circle").attr("r", 5);
-  eventSel.append("text").attr("class", "chart-life-event").attr("y", -12).attr("text-anchor", "middle").text((p) => p.g.event);
-  eventSel.append("text").attr("class", "chart-halo is-small").attr("y", -26).attr("text-anchor", "middle").text((p) => p.g.labels);
+  const label = eventSel.append("text").attr("x", 10).attr("y", 4);
+  label.append("tspan").attr("class", "chart-life-event").text((r) => r.g.event);
+  label.append("tspan").attr("class", "chart-life-label").attr("dx", 8).text((r) => r.g.labels);
 
   // hook: a chip with the function's name, a write badge per effect in its kind's hue
-  const chipSel = svg.append("g").selectAll("g").data(moments).join("g").attr("class", "chart-node chart-life-item").classed("is-stub", (m) => m.status === "stub").attr("tabindex", 0).attr("transform", (m) => `translate(${spine.get(m) - 6},${yH - CHIP / 2})`);
-  chipSel.append("rect").attr("width", (m) => foot.get(m).chip).attr("height", CHIP).attr("rx", 5);
+  const chipSel = svg.append("g").selectAll("g").data(moments).join("g").attr("class", "chart-node chart-life-item").classed("is-stub", (m) => m.status === "stub").attr("tabindex", 0).attr("transform", (m) => `translate(${chipOf.get(m).x},${rowOf.get(m).y - CHIP / 2})`);
+  chipSel.append("rect").attr("width", (m) => chipOf.get(m).w).attr("height", CHIP).attr("rx", 5);
   chipSel.append("text").attr("class", "chart-life-chip").attr("x", 5).attr("y", 13).text(fnOf);
-  chipSel.selectAll(".chart-badge").data((m) => m.effects.map((e, i) => ({ e, i, m }))).join("rect").attr("class", "chart-badge").attr("x", (b) => foot.get(b.m).chip + 4 + b.i * 10).attr("y", 5).attr("width", 8).attr("height", 8).attr("rx", 2).style("fill", (b) => `var(--kind-${slot.get(kindOf(b.m, b.e.target))})`);
+  chipSel.selectAll(".chart-badge").data((m) => m.effects.map((e, i) => ({ e, i, m }))).join("rect").attr("class", "chart-badge").attr("x", (b) => chipOf.get(b.m).w + 4 + b.i * 10).attr("y", 5).attr("width", 8).attr("height", 8).attr("rx", 2).style("fill", (b) => `var(--kind-${slot.get(kindOf(b.m, b.e.target))})`);
 
-  // judge: four bars to scale, the threshold across them; the judge's name, or why nothing trailed, beneath
-  const judgeSel = svg.append("g").selectAll("g").data(moments.filter((m) => m.judge)).join("g").attr("class", "chart-life-item chart-life-judge").attr("tabindex", 0).attr("transform", (m) => `translate(${spine.get(m) - BAR.w / 2},0)`);
-  const span = 4 * BAR.w + 3 * BAR.gap;
-  judgeSel.append("rect").attr("class", "chart-hit").attr("x", -4).attr("y", base - BAR.h - 4).attr("width", span + 8).attr("height", BAR.h + 8);
-  judgeSel.selectAll(".chart-life-bar").data((m) => Object.entries(m.judge.markers).map(([name, p], i) => ({ i, name, p }))).join("rect").attr("class", "chart-life-bar").classed("is-over", (b) => b.p >= THRESHOLD).attr("x", (b) => b.i * (BAR.w + BAR.gap)).attr("y", (b) => base - Math.max(1, b.p * BAR.h)).attr("width", BAR.w).attr("height", (b) => Math.max(1, b.p * BAR.h));
-  judgeSel.append("line").attr("class", "chart-threshold").attr("x1", -3).attr("x2", span + 3).attr("y1", base - THRESHOLD * BAR.h).attr("y2", base - THRESHOLD * BAR.h);
-  judgeSel.append("text").attr("class", "chart-halo is-small").attr("x", BAR.w + 6).attr("y", base + 13).text((m) => m.judge.by);
-  judgeSel.filter((m) => m.trails.length === 0).append("text").attr("class", "chart-panel-note").attr("x", BAR.w + 6).attr("y", base + 26).text(noteOf);
-  const probeSel = svg.append("g").selectAll("g").data(moments.filter((m) => m.probe)).join("g").attr("class", "chart-node chart-life-item").attr("tabindex", 0).attr("transform", (m) => `translate(${spine.get(m) - 6},${yJ - 9})`);
-  probeSel.append("rect").attr("width", (m) => foot.get(m).judge - 4).attr("height", CHIP).attr("rx", CHIP / 2);
+  // judge: four bars to scale, the threshold across them, the judge's name after; why nothing trailed beneath
+  const judgeSel = svg.append("g").selectAll("g").data(moments.filter((m) => m.judge)).join("g").attr("class", "chart-life-item chart-life-judge").attr("tabindex", 0).attr("transform", (m) => `translate(${rowOf.get(m).jx},${rowOf.get(m).y + 10})`);
+  judgeSel.append("rect").attr("class", "chart-hit").attr("x", -4).attr("y", -BAR.h - 4).attr("width", span + 8).attr("height", BAR.h + 8);
+  judgeSel.selectAll(".chart-life-bar").data((m) => Object.entries(m.judge.markers).map(([name, p], i) => ({ i, name, p }))).join("rect").attr("class", "chart-life-bar").classed("is-over", (b) => b.p >= THRESHOLD).attr("x", (b) => b.i * (BAR.w + BAR.gap)).attr("y", (b) => -Math.max(1, b.p * BAR.h)).attr("width", BAR.w).attr("height", (b) => Math.max(1, b.p * BAR.h));
+  judgeSel.append("line").attr("class", "chart-threshold").attr("x1", -3).attr("x2", span + 3).attr("y1", -THRESHOLD * BAR.h).attr("y2", -THRESHOLD * BAR.h);
+  judgeSel.append("text").attr("class", "chart-halo is-small").attr("x", span + 6).attr("y", -6).text((m) => m.judge.by);
+  judgeSel.filter((m) => m.trails.length === 0).append("text").attr("class", "chart-panel-note").attr("x", 0).attr("y", 14).text(noteOf);
+  const probeSel = svg.append("g").selectAll("g").data(moments.filter((m) => m.probe)).join("g").attr("class", "chart-node chart-life-item").attr("tabindex", 0).attr("transform", (m) => `translate(${rowOf.get(m).jx},${rowOf.get(m).y - CHIP / 2})`);
+  probeSel.append("rect").attr("width", (m) => rowOf.get(m).jEnd - rowOf.get(m).jx - 4).attr("height", CHIP).attr("rx", CHIP / 2);
   probeSel.append("text").attr("class", "chart-life-ok").attr("x", 7).attr("y", 13).text("✓");
   probeSel.append("text").attr("class", "chart-halo is-small").attr("x", 20).attr("y", 13).text((m) => `probe · typesafe ${m.probe.typesafe}`);
 
-  // trail: a diamond in its kind's colour, the rationale cut beside it
-  const trailSel = svg.append("g").selectAll("g").data(trails).join("g").attr("class", "chart-life-item chart-life-trail").attr("tabindex", 0).attr("transform", (t) => `translate(${spine.get(t.m)},${trailY(t)})`);
+  // trail: a diamond in its kind's colour, the rationale cut to the column after it, consecutive rows for two
+  const trailSel = svg.append("g").selectAll("g").data(trails).join("g").attr("class", "chart-life-item chart-life-trail").attr("tabindex", 0).attr("transform", (t) => `translate(${rowOf.get(t.m).tx},${rowOf.get(t.m).y + t.k * 18})`);
   trailSel.append("rect").attr("class", (t) => `chart-life-diamond is-${t.kind}`).attr("x", -5).attr("y", -5).attr("width", 10).attr("height", 10).attr("transform", "rotate(45)");
-  trailSel.append("text").attr("class", "chart-halo is-small").attr("x", 11).attr("y", 4).text((t) => cut(t.rationale));
+  trailSel.append("text").attr("class", "chart-halo is-small").attr("x", 11).attr("y", 4).text((t) => rowOf.get(t.m).fit(t));
 
   const off = () => {
     svg.classed("is-focus", false);
@@ -160,14 +164,14 @@ const draw = () => {
   };
   const lit = (ms) => {
     svg.classed("is-focus", true);
-    eventSel.classed("is-lit", (p) => p.g.ms.some((m) => ms.includes(m)));
+    eventSel.classed("is-lit", (r) => r.g.ms.some((m) => ms.includes(m)));
     for (const sel of [chipSel, judgeSel, probeSel]) sel.classed("is-lit", (m) => ms.includes(m));
     trailSel.classed("is-lit", (t) => ms.includes(t.m));
-    linkSel.classed("is-lit", (l) => ms.includes(l.m));
+    linkSel.classed("is-lit", (l) => l.ms.some((m) => ms.includes(m)));
   };
-  hover(eventSel, (event, p) => {
-    lit(p.g.ms);
-    show(event.currentTarget, `${p.g.event} · ${mmss(p.g.at)}`, p.g.ms.map((m) => [m.label, m.hook]));
+  hover(eventSel, (event, r) => {
+    lit(r.g.ms);
+    show(event.currentTarget, `${r.g.event} · ${mmss(r.g.at)}`, r.g.ms.map((m) => [m.label, m.hook]));
   }, off);
   hover(chipSel, (event, m) => {
     lit([m]);

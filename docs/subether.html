@@ -8,11 +8,11 @@
 <link rel="stylesheet" href="https://gigantic.dev/ui/docs.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <script type="module" src="charts/atoms.js"></script>
+<script type="module" src="charts/call.js"></script>
 <script type="module" src="charts/calls.js"></script>
 <script type="module" src="charts/hooks.js"></script>
 <script type="module" src="charts/judge.js"></script>
 <script type="module" src="charts/markers.js"></script>
-<script type="module" src="charts/sequence.js"></script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23634776'/%3E%3Cg transform='translate(2.4 2.4) scale(0.0437)' fill='white'%3E%3Cpath d='M40,88H73a32,32,0,0,0,62,0h81a8,8,0,0,0,0-16H135a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16Zm64-24A16,16,0,1,1,88,80,16,16,0,0,1,104,64ZM216,168H199a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16h97a32,32,0,0,0,62,0h17a8,8,0,0,0,0-16Zm-48,24a16,16,0,1,1,16-16A16,16,0,0,1,168,192Z'/%3E%3C/g%3E%3C/svg%3E" />
 <style>
 /* the d3 charts (docs/charts/*.js): kind slots validated with the dataviz validator, light on #ffffff, dark on #08090a */
@@ -70,7 +70,7 @@ svg.is-focus .chart-node.is-lit rect:first-child { stroke: var(--ui-fg); }
 .chart-arrow { fill: none; stroke: var(--ui-fg-muted); stroke-width: 1.5; }
 .chart-head { fill: none; stroke: var(--ui-fg-muted); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; }
 .chart-hitline { fill: none; stroke: transparent; stroke-width: 14; }
-svg.is-focus .chart-msg:not(.is-lit), svg.is-focus .chart-lane:not(.is-lit), svg.is-focus .chart-edge:not(.is-lit) { opacity: 0.25; }
+svg.is-focus .chart-edge:not(.is-lit) { opacity: 0.25; }
 /* atoms.js: the state matrix */
 .chart-colhead { fill: var(--ui-fg-muted); }
 .chart-colband { fill: var(--ui-accent-soft); opacity: 0; }
@@ -83,17 +83,14 @@ svg.is-focus .chart-msg:not(.is-lit), svg.is-focus .chart-lane:not(.is-lit), svg
 .chart-dim { fill: var(--ui-fg-muted); font-family: var(--ui-font-sans); }
 .chart-row.is-stub text { fill: var(--ui-fg-faint); }
 svg.is-focus .chart-row:not(.is-lit) { opacity: 0.35; }
-.chart-cell, .chart-col, .chart-msg, .chart-lane, .chart-edge, .chart-mark, .chart-seg, .chart-strip, .chart-sink, .chart-fall { outline: none; }
+.chart-cell, .chart-col, .chart-edge, .chart-mark, .chart-seg, .chart-strip, .chart-sink, .chart-fall { outline: none; }
 .chart-cell:focus-visible .chart-hit, .chart-mark:focus-visible .chart-hit { stroke: var(--ui-accent); stroke-width: 2; }
-/* sequence.js: one tool call */
-.chart-lane line { stroke: var(--ui-border-strong); }
-.chart-lane rect { fill: var(--ui-surface-raised); stroke: var(--ui-border-strong); }
-.chart-lane text { fill: var(--ui-fg); }
-.chart-seqframe rect { fill: none; stroke: var(--ui-fg-faint); stroke-dasharray: 5 4; }
-.chart-seqframe text { fill: var(--ui-fg-faint); font-family: var(--ui-font-sans); font-size: 11px; }
-.chart-msg.is-return .chart-arrow { stroke-dasharray: 4 3; }
-.chart-msg.is-write .chart-arrow, .chart-msg.is-deny .chart-arrow, .chart-msg.is-write .chart-head, .chart-msg.is-deny .chart-head { stroke-width: 2; }
-.chart-msg:focus-visible .chart-hit, .chart-lane:focus-visible rect, .chart-edge:focus-visible .chart-hitline { stroke: var(--ui-accent); stroke-width: 2; }
+/* call.js: one tool call */
+.chart-node text.chart-owner { fill: var(--ui-fg-muted); font-family: var(--ui-font-sans); font-size: 11px; }
+.chart-final { fill: none; stroke: var(--ui-border-strong); }
+.chart-initial { fill: var(--ui-fg-muted); }
+.chart-edge.is-shadow .chart-arrow { stroke-dasharray: 4 3; }
+.chart-edge:focus-visible .chart-hitline { stroke: var(--ui-accent); stroke-width: 2; }
 /* judge.js: the judge state machines */
 .chart-status-icon { fill: var(--ui-bg); font-family: var(--ui-font-sans); font-size: 11px; font-weight: 700; }
 .chart-fallback { fill: none; stroke: var(--ui-fg-muted); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; }
@@ -414,8 +411,8 @@ claude plugin test plugins/subether</pre>
       <code class="code">env -S</code>, package runners.</li>
   </ul>
   <figure class="figure">
-    <div class="chart" id="call-sequence"><noscript><p class="docs-note">This chart needs JavaScript; its data is <a class="link" href="data/sequence.json">docs/data/sequence.json</a>.</p></noscript></div>
-    <figcaption>One tool call through the log, the guards, the check and its shadow judge; the denied, refused and failed paths and the unawaited shadow framed dashed. Data: <a href="data/sequence.json">docs/data/sequence.json</a>, its writes held to the hook graph's effects, checked by the gate.</figcaption>
+    <div class="chart" id="call-machine"><noscript><p class="docs-note">This chart needs JavaScript; its data is <a class="link" href="data/call.json">docs/data/call.json</a>.</p></noscript></div>
+    <figcaption>One tool call as a state machine: requested, guarded (Bash, Edit, Write), checked, asked, running, and where it ends — done, failed or denied, each writing its call line; the shadow judge forks from an ask unawaited and writes a check line. Data: <a href="data/call.json">docs/data/call.json</a>, its writes held to the hook graph's effects, checked by the gate.</figcaption>
   </figure>
 </section>
 
@@ -485,7 +482,7 @@ claude plugin test plugins/subether</pre>
     (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/scripts/test.ts">scripts/test.ts</a>)
     runs every step at once — the chart data against the source
     (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/scripts/charts.ts">scripts/charts.ts</a>:
-    the hooks, atoms, sequence writes and judge constants, and the public samples' keys), fmt check,
+    the hooks, atoms, the call machine's writes and judge constants, and the public samples' keys), fmt check,
     oxlint, tsc at the root and in the mod, the unit tests,
     monitor-github's selftest, <code class="code">claude plugin validate --strict</code> and
     <code class="code">claude plugin test</code> — and prints a step's output only when it fails.</p>

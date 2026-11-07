@@ -3,10 +3,7 @@
 // in register.tsx (event, matcher, function, file, catch shape), every atom in types/index.d.ts, every read and write a
 // listed atom, every function exported by its file; call.json a well-formed state machine, its owners a fixed set and
 // each write one of its hook's effects; judge.json's constants, models and endpoints the ones judge.ts and markers.ts
-// declare; session.json's moments in order, each on a listed event and its hook's, writing that hook's effects, its
-// markers the QUESTIONS of the hook's file, judged by a listed judge, and one trail event per marker at THRESHOLD or
-// over, worded as markers.ts words it; the scrubbed samples only their allowed keys, since Pages is public. Regexes over
-// the source text; each mismatch is one line, exit 1.
+// declare. Regexes over the source text; each mismatch is one line, exit 1.
 const HOOKS = 'plugins/subether/hooks';
 type Write = { hook: string; target: string };
 
@@ -27,7 +24,7 @@ const data: {
   }[];
   kinds: { name: string }[];
 } = await Bun.file('docs/data/hooks.json').json();
-const [register, types, machine, judged, calls, trailed, session] = await Promise.all([
+const [register, types, machine, judged] = await Promise.all([
   Bun.file(`${HOOKS}/register.tsx`).text(),
   Bun.file('plugins/subether/types/index.d.ts').text(),
   Bun.file('docs/data/call.json').json() as Promise<{
@@ -48,21 +45,6 @@ const [register, types, machine, judged, calls, trailed, session] = await Promis
     judges: { model: string; name: string; timeout: string; url: string }[];
     states: { doc: string; name: string }[];
     transitions: { from: string; on: string; to: string }[];
-  }>,
-  Bun.file('docs/data/sample-calls.json').json() as Promise<Record<string, unknown>[]>,
-  Bun.file('docs/data/sample-markers.json').json() as Promise<Record<string, unknown>[]>,
-  Bun.file('docs/data/session.json').json() as Promise<{
-    lanes: { name: string }[];
-    moments: {
-      at: number;
-      effects: { target: string }[];
-      event: string;
-      hook: string;
-      judge?: { by: string; markers: Record<string, number> };
-      label: string;
-      status?: string;
-      trails?: { kind: string; rationale: string }[];
-    }[];
   }>,
 ]);
 const glob = new Bun.Glob('*.{ts,tsx}');
@@ -203,161 +185,6 @@ const declaredValue = (file: string, name: string): number | undefined => {
   return value === undefined ? undefined : Number(value.replaceAll('_', ''));
 };
 
-/**
-session.json's fixed lanes and trail kinds, the threshold, each hook by id, the trail prefixes markers.ts writes
-*/
-const LANES = new Set(['event', 'hook', 'judge', 'trail']);
-const TRAIL_KINDS = new Set(['correction', 'guard']);
-const threshold = constants.get('THRESHOLD')?.value ?? 1;
-const hookById = new Map(data.hooks.map((hook) => [hook.id, hook]));
-const judgeNames = new Set(judged.judges.map(({ name }) => name));
-const { prefixes = '' } =
-  /const PREFIX[^=]*= \{(?<prefixes>[^}]*)\}/u.exec(sources.get('markers.ts') ?? '')?.groups ?? {};
-const PREFIX = new Map(
-  prefixes
-    .matchAll(/(?<name>\w+): '(?<prefix>[^']*)'/gu)
-    .map(({ groups: { name = '', prefix = '' } = {} }): [string, string] => [name, prefix]),
-);
-/**
-The top-level keys of a file's `const QUESTIONS = {` block, sorted and joined
-*/
-const questionsOf = (file: string): string => {
-  const { block = '' } =
-    /^const QUESTIONS = \{(?<block>[^]*?)^\};$/mu.exec(sources.get(file) ?? '')?.groups ?? {};
-  return block
-    .matchAll(/^ {2}(?<name>\w+): \{/gmu)
-    .map(({ groups: { name = '' } = {} }) => name)
-    .toArray()
-    .toSorted((one, other) => one.localeCompare(other))
-    .join(',');
-};
-/**
-One moment's mismatches: its event, hook, effects, stub status, judge and trails against the hook graph and the source
-*/
-const momentErrors = (moment: (typeof session.moments)[number], index: number): string[] => {
-  const at = `session #${index} (${moment.label})`;
-  const hook = hookById.get(moment.hook);
-  if (hook === undefined) {
-    return [`${at}: hook ${moment.hook} is not listed`];
-  }
-  const { by = '', markers = {} } = moment.judge ?? {};
-  const trails = moment.trails ?? [];
-  const keys = Object.keys(markers)
-    .toSorted((one, other) => one.localeCompare(other))
-    .join(',');
-  const over = Object.entries(markers).filter(([, odds]) => odds >= threshold);
-  const isWorded = (name: string, odds: number): boolean =>
-    trails.some(
-      ({ rationale }) =>
-        rationale.startsWith(PREFIX.get(name) ?? '\0') &&
-        rationale.endsWith(` (p=${odds.toFixed(2)}, ${by})`),
-    );
-  return [
-    ...(events.has(moment.event) ? [] : [`${at}: event ${moment.event} is not listed`]),
-    ...(hook.event === moment.event
-      ? []
-      : [`${at}: ${hook.id} is on ${hook.event}, not ${moment.event}`]),
-    ...moment.effects
-      .filter(({ target }) => effectsOf.get(hook.id)?.has(target) !== true)
-      .map(({ target }) => `${at}: write ${target} is no effect of hook ${hook.id}`),
-    ...((moment.status === 'stub') === (hook.status === 'stub')
-      ? []
-      : [`${at}: stub status differs from ${hook.id}'s`]),
-    ...(moment.judge === undefined || keys === questionsOf(hook.file)
-      ? []
-      : [`${at}: markers ${keys}, ${hook.file} asks ${questionsOf(hook.file)}`]),
-    ...(moment.judge === undefined || judgeNames.has(by)
-      ? []
-      : [`${at}: judge ${by} is not listed`]),
-    ...(hook.id !== 'markers.markers' || trails.length === over.length
-      ? []
-      : [`${at}: ${trails.length} trails, ${over.length} markers at ${threshold} or over`]),
-    ...(hook.id === 'markers.markers' ? over : [])
-      .filter(([name, odds]) => !isWorded(name, odds))
-      .map(([name]) => `${at}: no trail worded as markers.ts words ${name}`),
-    ...trails
-      .filter(
-        ({ kind }) => !TRAIL_KINDS.has(kind) || (hook.id.startsWith('guard.') && kind !== 'guard'),
-      )
-      .map(({ kind }) => `${at}: trail kind ${kind} is not allowed here`),
-  ];
-};
-
-/**
-the scrubbed samples' rows, each value checked: Pages is public, so a key or a string outside these never ships
-*/
-type Shape = Record<string, (value: unknown) => boolean>;
-const HOURS = 24;
-const TOOL = /^(?:mcp|[A-Z][A-Za-z]+)$/u;
-const isCount = (value: unknown): boolean => Number.isSafeInteger(value) && Number(value) >= 0;
-const isHour = (value: unknown): boolean => isCount(value) && Number(value) < HOURS;
-const isP = (value: unknown): boolean => typeof value === 'number' && value >= 0 && value <= 1;
-const isTool = (value: unknown): boolean => TOOL.test(String(value));
-const oneOf =
-  (...allowed: unknown[]) =>
-  (value: unknown): boolean =>
-    allowed.includes(value);
-const CALL_ROW: Record<string, Shape> = {
-  call: {
-    chars: isCount,
-    hour: isHour,
-    kind: oneOf('call'),
-    ms: isCount,
-    outcome: oneOf('denied', 'error', 'ok'),
-    readOnly: oneOf(false, true),
-    tool: isTool,
-  },
-  check: {
-    decision: oneOf('allow', 'ask', 'deny'),
-    destructive: isP,
-    hour: isHour,
-    kind: oneOf('check'),
-    ms: isCount,
-    outbound: isP,
-    routine: isP,
-    secrets: isP,
-    tool: isTool,
-  },
-};
-/**
-JSON's null: the samples' empty judge and p
-*/
-const isNull = (value: unknown): boolean => typeof value === 'object' && !value;
-const MARKER_ROW: Record<string, Shape> = {
-  marker: Object.fromEntries([
-    ['day', (value: unknown): boolean => /^\d{4}-\d{2}-\d{2}$/u.test(String(value))],
-    ['hour', isHour],
-    ['judge', (value: unknown): boolean => isNull(value) || oneOf('kev', 'typesafe')(value)],
-    ['marker', oneOf('approval', 'correction', 'preference', 'regex', 'repeated instruction')],
-    ['p', (value: unknown): boolean => isNull(value) || isP(value)],
-  ]),
-};
-/**
-Each row's keys exactly its kind's (a row with no `kind` is a marker row), each value passing its check
-*/
-const sampleErrors = (
-  file: string,
-  rows: Record<string, unknown>[],
-  shapes: Record<string, Shape>,
-): string[] =>
-  rows.flatMap((row, index) => {
-    const { kind = 'marker' } = row;
-    const shape = shapes[String(kind)];
-    if (shape === undefined) {
-      return `${file} #${index}: kind ${String(kind)} is unknown`;
-    }
-    const keys = Object.keys(row)
-      .toSorted((one, other) => one.localeCompare(other))
-      .join(',');
-    const allowed = Object.keys(shape).join(',');
-    if (keys !== allowed) {
-      return `${file} #${index}: keys ${keys}, allowed ${allowed}`;
-    }
-    return Object.entries(shape)
-      .filter(([key, isValid]) => !isValid(row[key]))
-      .map(([key]) => `${file} #${index}: ${key} ${JSON.stringify(row[key])} is not allowed`);
-  });
-
 const errors = [
   ...wired
     .filter((key) => !listed.includes(key))
@@ -449,15 +276,6 @@ const errors = [
     .flatMap(({ from, to }) => [from, to])
     .filter((name) => !states.has(name))
     .map((name) => `judge.json: state ${name} is not listed`),
-  ...session.lanes
-    .filter(({ name }) => !LANES.has(name))
-    .map(({ name }) => `session: lane ${name} is not one of ${[...LANES].join(', ')}`),
-  ...session.moments
-    .filter(({ at }, index) => index > 0 && at < (session.moments[index - 1]?.at ?? 0))
-    .map(({ label }) => `session: ${label} is out of order`),
-  ...session.moments.flatMap(momentErrors),
-  ...sampleErrors('sample-calls.json', calls, CALL_ROW),
-  ...sampleErrors('sample-markers.json', trailed, MARKER_ROW),
 ];
 
 if (errors.length > 0) {

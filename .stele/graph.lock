@@ -20,7 +20,7 @@
           "text": "link never overwrites — an entry in ~/.claude that is a real file or a foreign link is reported `drift` and left alone; only missing entries are linked",
           "verified": {
             "digest": null,
-            "sha": "2a2e8de7db8032ddd32181e904d9ae9a5840d839"
+            "sha": "b167553bc448d89f386456b5c2d1ed34bedbc660"
           }
         }
       ],
@@ -58,7 +58,7 @@
       },
       "id": "docs",
       "kind": "container",
-      "purpose": "index.html — the harness design page: link, a subether paragraph, the gate, the plan (ol#next); subether.html — the mod's design page: five figures, six d3 charts fed by data/*.json."
+      "purpose": "index.html — the harness design page: link, a subether paragraph, the gate, the plan (ol#next); subether.html — the mod's design page: five figures, seven d3 charts fed by data/*.json."
     }
   },
   "version": 2

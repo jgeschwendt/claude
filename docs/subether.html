@@ -13,6 +13,7 @@
 <script type="module" src="charts/hooks.js"></script>
 <script type="module" src="charts/judge.js"></script>
 <script type="module" src="charts/markers.js"></script>
+<script type="module" src="charts/session.js"></script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23634776'/%3E%3Cg transform='translate(2.4 2.4) scale(0.0437)' fill='white'%3E%3Cpath d='M40,88H73a32,32,0,0,0,62,0h81a8,8,0,0,0,0-16H135a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16Zm64-24A16,16,0,1,1,88,80,16,16,0,0,1,104,64ZM216,168H199a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16h97a32,32,0,0,0,62,0h17a8,8,0,0,0,0-16Zm-48,24a16,16,0,1,1,16-16A16,16,0,0,1,168,192Z'/%3E%3C/g%3E%3C/svg%3E" />
 <style>
 /* the d3 charts (docs/charts/*.js): kind slots validated with the dataviz validator, light on #ffffff, dark on #08090a */
@@ -115,6 +116,28 @@ svg.is-focus .chart-row:not(.is-lit) { opacity: 0.35; }
 .chart-dayband { fill: var(--ui-surface-raised); stroke: var(--ui-border); }
 .chart-threshold { stroke: var(--ui-fg-muted); stroke-dasharray: 4 3; }
 .chart-ring.is-regex { stroke: var(--ui-fg-faint); }
+/* session.js: the life of a session */
+.chart-lane { fill: var(--ui-fg); opacity: 0.03; }
+.chart-lane.is-trail { opacity: 0.07; }
+.chart-axis path { stroke: var(--ui-border); }
+.chart-life-links path { fill: none; stroke: var(--ui-fg-faint); stroke-width: 1; }
+.chart-life-item { cursor: default; outline: none; }
+.chart-life-dot circle { fill: var(--ui-fg-muted); }
+.chart-life-dot.is-stub circle { fill: var(--ui-surface); stroke: var(--ui-fg-faint); stroke-dasharray: 2 2; }
+.chart-life-dot.is-stub text { fill: var(--ui-fg-faint); }
+.chart-life-chip { fill: var(--ui-fg); font-size: 11px; }
+.chart-life-event { font-size: 10px; }
+.chart-life-dot .chart-life-event { fill: var(--ui-fg-muted); }
+.chart-life-judge .chart-threshold { stroke: var(--ui-fg-faint); stroke-dasharray: none; }
+.chart-life-bar { fill: var(--ui-fg-faint); }
+.chart-life-bar.is-over { fill: var(--ui-accent); }
+.chart-life-ok { fill: var(--ui-ok); font-family: var(--ui-font-sans); font-size: 11px; font-weight: 700; }
+.chart-life-diamond.is-correction { fill: var(--ui-accent); }
+.chart-life-diamond.is-guard { fill: var(--ui-danger); }
+.chart-life-item:focus-visible circle, .chart-life-item:focus-visible .chart-hit, .chart-life-item:focus-visible .chart-life-diamond { stroke: var(--ui-accent); stroke-width: 2; }
+svg.is-focus .chart-life-item:not(.is-lit) { opacity: 0.25; }
+svg.is-focus .chart-life-links path:not(.is-lit) { stroke-opacity: 0.2; }
+svg.is-focus .chart-life-links path.is-lit { stroke: var(--ui-fg); }
 .chart-table { overflow-x: auto; }
 .chart-table td { font-family: var(--ui-font-mono); font-size: 12px; vertical-align: top; }
 .chart-table td:last-child { font-family: var(--ui-font-sans); min-width: 16rem; }
@@ -163,6 +186,7 @@ svg.is-focus .chart-row:not(.is-lit) { opacity: 0.35; }
     <a class="pill" href="#why">why</a>
     <a class="pill" href="#install">install</a>
     <a class="pill" href="#events">events</a>
+    <a class="pill" href="#session">session</a>
     <a class="pill" href="#gauge">gauge</a>
     <a class="pill" href="#pane">pane</a>
     <a class="pill" href="#markers">markers</a>
@@ -275,6 +299,17 @@ claude plugin test plugins/subether</pre>
   <p class="docs-note">Every binary runs from <code class="code">~/.local/bin</code> and never
     raises: a failure is one dim log line
     (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/sandman.ts">plugins/subether/hooks/sandman.ts</a>).</p>
+</section>
+
+<section class="docs-section" id="session" data-component="session">
+  <header>
+    <h2 class="h2">A session</h2>
+    <p class="docs-note">One session from <code class="code">session.start</code> to <code class="code">session.end</code>: each moment's event, the hook it reaches and what that writes, the judge's four probabilities, and the trail event a judged prompt or a guarded call leaves. The session is invented; each moment's hook, effects, markers and threshold are checked against the hook graph and the code's constants by the gate.</p>
+  </header>
+  <figure class="figure">
+    <div class="chart" id="session-life"><noscript><p class="docs-note">This chart needs JavaScript; its data is <a class="link" href="data/session.json">docs/data/session.json</a>.</p></noscript></div>
+    <figcaption>The life of a session: event, hook, judge and trail lanes, time left to right, a crowded stretch spread and the axis following it; a bar at or over 0.8 becomes a trail event. Data: <a href="data/session.json">docs/data/session.json</a>, held to hooks.json, markers.ts, check.ts and judge.json by the gate.</figcaption>
+  </figure>
 </section>
 
 <section class="docs-section" id="gauge" data-component="gauge">
@@ -482,7 +517,7 @@ claude plugin test plugins/subether</pre>
     (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/scripts/test.ts">scripts/test.ts</a>)
     runs every step at once — the chart data against the source
     (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/scripts/charts.ts">scripts/charts.ts</a>:
-    the hooks, atoms, the call machine's writes and judge constants, and the public samples' keys), fmt check,
+    the hooks, atoms, the call machine's writes and judge constants, the session's moments, and the public samples' keys), fmt check,
     oxlint, tsc at the root and in the mod, the unit tests,
     monitor-github's selftest, <code class="code">claude plugin validate --strict</code> and
     <code class="code">claude plugin test</code> — and prints a step's output only when it fails.</p>

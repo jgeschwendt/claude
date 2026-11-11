@@ -1,7 +1,9 @@
 #!/usr/bin/env bun
 // The gate: the chart data against the source, fmt check, lint, monitor-github's selftest, tsc at the root and in the
 // mod, the unit tests, validate and the mod's tests, run at once; each step's output is printed only when it fails, and
-// the exit code is 1 when any did.
+// the exit code is 1 when any did. The mod's tsc needs the declarations the engine writes into the mod's
+// `.claude-plugin/types/` when an interactive session loads it (no command writes them), so a checkout no session has
+// loaded, CI's among them, skips that one step and says so.
 const STEPS: Record<string, string[]> = {
   'docs': ['bun', 'scripts/charts.ts'],
   'fmt': ['bun', 'fmt', '--check'],
@@ -26,5 +28,12 @@ const isGreen = async ([name, argv]: [string, string[]]): Promise<boolean> => {
   return isOk;
 };
 
-const results = await Promise.all(Object.entries(STEPS).map((step) => isGreen(step)));
+const hasTypes = await Bun.file(
+  'plugins/subether/.claude-plugin/types/claude-code/index.d.ts',
+).exists();
+if (!hasTypes) {
+  console.log('– tsc:mod skipped: no engine-written types in this checkout');
+}
+const steps = Object.entries(STEPS).filter(([name]) => hasTypes || name !== 'tsc:mod');
+const results = await Promise.all(steps.map((step) => isGreen(step)));
 process.exitCode = results.every(Boolean) ? 0 : 1;

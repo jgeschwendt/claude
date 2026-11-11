@@ -1,4 +1,4 @@
 {
-  "description": "subether: first-prompt recall, injected pane, guards, tool log, judged markers, shadow check, gauge, window clock",
+  "description": "subether: first-prompt recall, injected pane, guards, tool log, judged markers, gauge, window clock",
   "modules": ["./register.tsx"]
 }

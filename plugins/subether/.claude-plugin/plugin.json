@@ -1,6 +1,6 @@
 {
   "author": { "name": "jgeschwendt" },
-  "description": "The harness's mod: first-prompt sandman recall and the injected pane, house-rule guards and the daily tool log, System One judged markers and the shadow check, the gauge row and the five-hour window clock.",
+  "description": "The harness's mod: first-prompt sandman recall and the injected pane, house-rule guards and the daily tool log, System One judged markers, the gauge row and the five-hour window clock.",
   "name": "subether",
   "types": "./types/index.d.ts",
   "version": "0.5.0"

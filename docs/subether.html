@@ -87,7 +87,6 @@ svg.is-focus .chart-row:not(.is-lit) { opacity: 0.35; }
 .chart-node text.chart-owner { fill: var(--ui-fg-muted); font-family: var(--ui-font-sans); font-size: 11px; }
 .chart-final { fill: none; stroke: var(--ui-border-strong); }
 .chart-initial { fill: var(--ui-fg-muted); }
-.chart-edge.is-shadow .chart-arrow { stroke-dasharray: 4 3; }
 .chart-edge:focus-visible .chart-hitline { stroke: var(--ui-accent); stroke-width: 2; }
 /* judge.js: the judge state machines */
 .chart-status-icon { fill: var(--ui-bg); font-family: var(--ui-font-sans); font-size: 11px; font-weight: 700; }
@@ -136,8 +135,8 @@ svg.is-focus .chart-row:not(.is-lit) { opacity: 0.35; }
   <p class="lead docs-lead"><code class="code">subether</code> is the from-scratch successor of
     <code class="code">perpetual</code>, built on native mod events: the gauge row under the prompt,
     the injected pane, the Bash and <code class="code">.yml</code> guards, the daily tool log, the System
-    One judged markers and the shadow check are live; the subagent pin, docket, the session-end take and
-    the shift band are to come. Its contract is
+    One judged markers, the subagent pin and the session-end take are live; docket and the shift band are
+    to come. Its contract is
     <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/README.md">plugins/subether/README.md</a>;
     this page is the design and what is open.</p>
   <nav class="row docs-toc" aria-label="sections">
@@ -244,7 +243,6 @@ claude plugin test plugins/subether</pre>
       <tr><td rowspan="3"><code class="code">tool.call</code></td><td>—</td><td>the daily tool log; registered first, so outermost</td><td>live</td></tr>
       <tr><td><code class="code">Bash</code></td><td>the Bash guard</td><td>live</td></tr>
       <tr><td><code class="code">Edit</code>, <code class="code">Write</code></td><td>deny a <code class="code">.yml</code> path</td><td>live</td></tr>
-      <tr><td><code class="code">tool.check</code></td><td>—</td><td>the shadow check: core's decision unchanged, an asked call judged beside it</td><td>live</td></tr>
       <tr><td><code class="code">turn.step</code></td><td>—</td><td>the gauge's effort flag</td><td>live</td></tr>
       <tr><td><code class="code">turn.complete</code></td><td>main loop</td><td><code class="code">docket --hook</code> with a synthesized Stop payload</td><td>chunk 6</td></tr>
       <tr><td rowspan="3"><code class="code">ui.render</code></td><td><code class="code">PromptHint</code></td><td>the gauge row</td><td>live</td></tr>
@@ -344,15 +342,6 @@ claude plugin test plugins/subether</pre>
     <li><strong>a learned gate</strong> — a free <code class="code">GET /v1/models</code> at start;
       429/529 marks a backend down for its retry-after, 401/403 for the session, a Kev timeout busy for
       60 s. Its state shows in the pane.</li>
-    <li><strong>check</strong> — the same judge shadows auto mode's classifier
-      (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/check.ts">plugins/subether/hooks/check.ts</a>,
-      on <code class="code">tool.check</code>): core's decision is returned unchanged, and each
-      <code class="code">ask</code> on a real call the tool does not report read-only is judged unawaited on
-      <code class="code">destructive</code>, <code class="code">outbound</code>,
-      <code class="code">secrets</code> and <code class="code">routine</code>, the answer a
-      <code class="code">check</code> line in the <a class="link" href="#log">tool log</a> joined to the
-      call's. Shadow only, until a week of lines sets the thresholds at which it answers
-      <code class="code">allow</code> or <code class="code">deny</code> itself.</li>
   </ul>
   <figure class="figure">
     <div class="chart" id="judge-states"><noscript><p class="docs-note">This chart needs JavaScript; its data is <a class="link" href="data/judge.json">docs/data/judge.json</a>.</p></noscript></div>
@@ -395,7 +384,7 @@ claude plugin test plugins/subether</pre>
   </ul>
   <figure class="figure">
     <div class="chart" id="call-machine"><noscript><p class="docs-note">This chart needs JavaScript; its data is <a class="link" href="data/call.json">docs/data/call.json</a>.</p></noscript></div>
-    <figcaption>One tool call as a state machine: requested, guarded (Bash, Edit, Write), checked, asked, running, and where it ends — done, failed or denied, each writing its call line; the shadow judge forks from an ask unawaited and writes a check line. Data: <a href="data/call.json">docs/data/call.json</a>, its writes held to the hook graph's effects, checked by the gate.</figcaption>
+    <figcaption>One tool call as a state machine: requested, guarded (Bash, Edit, Write), checked, asked, running, and where it ends — done, failed or denied, each writing its call line. Data: <a href="data/call.json">docs/data/call.json</a>, its writes held to the hook graph's effects, checked by the gate.</figcaption>
   </figure>
 </section>
 
@@ -409,13 +398,11 @@ claude plugin test plugins/subether</pre>
     <li><strong>where</strong> — <code class="code">~/.local/state/subether/tools/&lt;yyyy-mm-dd&gt;.jsonl</code>
       (<code class="code">$CLAUDE_TOOL_LOG_DIR</code>, else
       <code class="code">$XDG_STATE_HOME/subether/tools</code>), the day local to the call's start.</li>
-    <li><strong>what</strong> — three line kinds, the key order the README's.
+    <li><strong>what</strong> — two line kinds, the key order the README's.
       <code class="code">call</code>: every call, built-in and MCP, main loop and subagents, denials
       included: when, session, agent, cwd, tool, id, duration, outcome
       (<code class="code">denied</code>/<code class="code">error</code>/<code class="code">ok</code>),
       the size of what the model read, Bash's flags, and the arguments.
-      <code class="code">check</code>: the shadow judge on an asked call: when, session, agent, tool,
-      id (joining it to the call's line), core's decision, judge, the four markers, tokens, latency.
       <code class="code">prompt</code>: a typed prompt's judgment: when, session, head (the first 120
       characters, newlines as spaces), judge, the four markers, those trailed, tokens, latency.</li>
     <li><strong>the cut</strong> — every string argument cut at 2,000 characters with
@@ -424,8 +411,7 @@ claude plugin test plugins/subether</pre>
       &gt;&gt;</code> (O_APPEND, so sessions' lines land whole), not awaited; a failed append is one
       dim log line.</li>
   </ul>
-  <p>The live view, a day's calls by hour and outcome, latency per tool and the shadow judge's
-    answers, is on bifrost · portals (<code class="code">/system/portals</code>), over the real day file.</p>
+  <p>The live view, a day's calls by hour and outcome, and latency per tool, is on bifrost · portals (<code class="code">/system/portals</code>), over the real day file.</p>
 </section>
 
 <section class="docs-section" id="state" data-component="state">
@@ -512,9 +498,10 @@ claude plugin test plugins/subether</pre>
       <code class="code">agent.spawn</code> pin under a premium parent and <code class="code">session.end</code> →
       <code class="code">sandman take --hook</code>; still to come: the context cap's
       <code class="code">guard</code> trail.</li>
-    <li>✔ 2026-11-06 <strong>Shadow check</strong> (owner: "i'd rather use my typesafe tokens for
-      automode than my anthropic ones, lets shadow so we can shift spend to my typesafe subscription"):
-      the <a class="link" href="#markers">check</a>.</li>
+    <li><strong>Line judge</strong> (since 2026-11-10 · "i will use jev to check all the lines once at
+      the end instead of on the fly"): Jev judges the <a class="link" href="#log">tool log</a>'s lines in
+      one pass at the end rather than per call, and becomes the classifier that selects context for
+      <code class="code">sandman recall</code>.</li>
     <li><strong>Docket</strong>: digest, dead-session sweep, synthesized Stop, Notification and
       UserPromptSubmit payloads, the session's resolve at end.</li>
     <li><strong>Context</strong>: the other first-prompt sources (report, docket digest, sweep) and

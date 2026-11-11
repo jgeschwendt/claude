@@ -1,6 +1,6 @@
-// One tool call as a state machine: the states from docs/data/call.json on their grid, the transitions between them,
-// the unawaited shadow judge dashed. A write wears its effect kind's hue from docs/data/hooks.json, the same as the hook
-// graph; scripts/charts.ts checks every write names one of its hook's effects, and the machine's shape.
+// One tool call as a state machine: the states from docs/data/call.json on their grid, the transitions between them. A
+// write wears its effect kind's hue from docs/data/hooks.json, the same as the hook graph; scripts/charts.ts checks
+// every write names one of its hook's effects, and the machine's shape.
 import { d3, hover, load, mount, redraw, widthOf } from "./lib.js";
 
 const root = document.getElementById("call-machine");
@@ -33,7 +33,6 @@ const { frame, hide, show } = mount(root, {
   legend: [
     { color: "var(--ui-fg-faint)", label: "state" },
     { color: "var(--ui-fg-muted)", label: "terminal", mark: "ring" },
-    { color: "var(--ui-fg-muted)", label: "shadow · unawaited", mark: "dash" },
     { color: "var(--ui-fg-muted)", label: "transition", mark: "line" },
     ...writeKinds.map((k) => ({ color: `var(--kind-${slot.get(k)})`, label: `write · ${k}` })),
   ],
@@ -83,7 +82,7 @@ const draw = () => {
     const tip = (da) => `${q.x - 8 * Math.cos(angle + da)},${q.y - 8 * Math.sin(angle + da)}`;
     return { d: `M${p.x},${p.y}Q${c.x},${c.y} ${q.x},${q.y}`, head: `M${tip(0.45)}L${q.x},${q.y}L${tip(-0.45)}`, label };
   };
-  const edgeSel = svg.append("g").selectAll("g").data(edges).join("g").attr("class", "chart-edge").classed("is-shadow", (e) => e.shadow === true).attr("tabindex", 0);
+  const edgeSel = svg.append("g").selectAll("g").data(edges).join("g").attr("class", "chart-edge").attr("tabindex", 0);
   edgeSel.append("path").attr("class", "chart-hitline").attr("d", (e) => geo(e).d);
   edgeSel.append("path").attr("class", "chart-arrow").attr("d", (e) => geo(e).d);
   edgeSel.append("path").attr("class", "chart-head").attr("d", (e) => geo(e).head);
@@ -95,8 +94,8 @@ const draw = () => {
     d3.select(this).append("rect").attr("class", "chart-badge").attr("x", box.x - 12).attr("y", box.y + 3).attr("width", 8).attr("height", 8).attr("rx", 2).style("fill", colorOf(e.writes[0]));
   });
 
-  // states: a rounded node, its name, its owner; a terminal ringed, the shadow dashed, the initial a dot and arrow in
-  const nodeSel = svg.append("g").selectAll("g").data(data.states).join("g").attr("class", "chart-node chart-state").classed("is-stub", (s) => s.shadow === true).attr("tabindex", 0).attr("transform", (s) => `translate(${at(s).x},${at(s).y})`);
+  // states: a rounded node, its name, its owner; a terminal ringed, the initial a dot and arrow in
+  const nodeSel = svg.append("g").selectAll("g").data(data.states).join("g").attr("class", "chart-node chart-state").attr("tabindex", 0).attr("transform", (s) => `translate(${at(s).x},${at(s).y})`);
   nodeSel.append("rect").attr("width", NODE.w).attr("height", NODE.h).attr("rx", NODE.h / 2);
   nodeSel.filter((s) => s.terminal).append("rect").attr("class", "chart-final").attr("x", -4).attr("y", -4).attr("width", NODE.w + 8).attr("height", NODE.h + 8).attr("rx", NODE.h / 2 + 4);
   nodeSel.append("text").attr("x", NODE.w / 2).attr("y", 19).attr("text-anchor", "middle").text((s) => s.name);
@@ -122,7 +121,7 @@ const draw = () => {
       ["is", s.doc],
       ["owner", owner.get(s.owner).doc],
       ...(s.writes ?? []).map((w) => ["on entry", `${w.label} → ${w.target} (by ${w.hook})`]),
-      ...["initial", "terminal", "shadow"].filter((flag) => s[flag]).map((flag) => [flag, "yes"]),
+      ...["initial", "terminal"].filter((flag) => s[flag]).map((flag) => [flag, "yes"]),
     ]);
   }, off);
   hover(edgeSel, (event, e) => {
@@ -130,7 +129,6 @@ const draw = () => {
     show(event.currentTarget.querySelector("text"), e.on, [
       ["from → to", `${e.from} → ${e.to}`],
       ...(e.writes ?? []).map((w) => ["writes", `${w.label} → ${w.target} (by ${w.hook})`]),
-      ...(e.shadow ? [["shadow", "unawaited"]] : []),
     ]);
   }, off);
 };

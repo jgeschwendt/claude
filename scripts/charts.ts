@@ -136,7 +136,7 @@ const ids = new Set(data.hooks.map((hook) => hook.id));
 /**
 call.json's fixed owners, its states by name, the states reachable from the initial one, and its writes
 */
-const OWNERS = new Set(['check', 'engine', 'guard', 'judge', 'tool']);
+const OWNERS = new Set(['engine', 'guard', 'tool']);
 const owners = new Set(machine.owners.map(({ name }) => name));
 const stateNames = new Set(machine.states.map(({ name }) => name));
 const initials = machine.states.filter(({ initial }) => initial === true);

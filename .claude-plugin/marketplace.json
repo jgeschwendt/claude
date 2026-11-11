@@ -13,7 +13,7 @@
     {
       "name": "subether",
       "source": "./plugins/subether",
-      "description": "The harness's first-prompt recall, injected pane, house-rule guards, tool log, judged markers, shadow check, gauge and window clock."
+      "description": "The harness's first-prompt recall, injected pane, house-rule guards, tool log, judged markers, gauge and window clock."
     }
   ]
 }

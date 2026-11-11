@@ -1,8 +1,6 @@
-// subether: first-prompt recall and the injected pane, guards and the tool log, judged markers and the shadow check, the
-// gauge and window clock, the subagent pin and the session-end take; the docket hooks and the shift band are stubs or to
-// come.
+// subether: first-prompt recall and the injected pane, guards and the tool log, judged markers, the gauge and window
+// clock, the subagent pin and the session-end take; the docket hooks and the shift band are stubs or to come.
 import type { Register } from 'claude-code';
-import { check } from './check';
 import { context } from './context';
 import { hint, measure, start, step } from './gauge';
 import { bash, bashFailed, yml, ymlFailed } from './guard';
@@ -50,9 +48,6 @@ export const register: Register = (on) => {
   on('tool.call', { tool: 'Bash' }, bash).catch(bashFailed);
   // deny an Edit/Write to a `.yml` path, trail the denial; fail closed too
   on('tool.call', { tool: ['Edit', 'Write'] }, yml).catch(ymlFailed);
-  // chunk 5b · shadow: the judge's probabilities beside core's decision; flips to allow/deny once a week of lines gives
-  // the thresholds
-  on('tool.check', check).catch(async ($, e, next) => await next(e));
   // the gauge's effort flag
   on('turn.step', step);
   // chunk 6 · hand the main loop's answer to `docket --hook` as a Stop payload

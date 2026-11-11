@@ -1,24 +1,20 @@
 {
   "owners": [
-    { "doc": "check.ts check: core's verdict returned unchanged, an ask judged beside it", "name": "check" },
     { "doc": "Claude Code's core: raises tool.call, then tool.check, settles an ask, runs the tool", "name": "engine" },
     { "doc": "guard.ts bash (Bash) or yml (Edit/Write): the house rules, read as Bash reads argv", "name": "guard" },
-    { "doc": "judge.ts judge: TypeSafe first, Kev as fallback; never awaited by the call", "name": "judge" },
     { "doc": "the tool itself", "name": "tool" }
   ],
   "states": [
-    { "col": 0, "doc": "the model's tool_use; tool.call is raised and toollog.ts log notes the clock, outermost", "initial": true, "name": "requested", "owner": "engine", "row": 1 },
-    { "col": 1, "doc": "Bash, Edit or Write only: guard.ts reads the command as Bash would, or the path, against the house rules", "name": "guarded", "owner": "guard", "row": 1 },
-    { "col": 2, "doc": "tool.check: rules, the permission mode and the tool's own check settle allow, deny or ask; check.ts returns the verdict unchanged", "name": "checked", "owner": "check", "row": 1 },
-    { "col": 3, "doc": "the mode settles the ask: auto mode's classifier, or the person", "name": "asked", "owner": "engine", "row": 1 },
-    { "col": 4, "doc": "the tool runs", "name": "running", "owner": "tool", "row": 1 },
-    { "col": 4, "doc": "the shadow: four yes-probabilities beside core's decision, a judge's answer or none; the call never waits for it", "name": "judged", "owner": "judge", "row": 0, "shadow": true, "terminal": true,
-      "writes": [{ "hook": "check.check", "label": "check line, when a judge answered", "target": "tools/<day>.jsonl" }] },
-    { "col": 5, "doc": "the result goes back to the model", "name": "done", "owner": "engine", "row": 1, "terminal": true,
+    { "col": 0, "doc": "the model's tool_use; tool.call is raised and toollog.ts log notes the clock, outermost", "initial": true, "name": "requested", "owner": "engine", "row": 0 },
+    { "col": 1, "doc": "Bash, Edit or Write only: guard.ts reads the command as Bash would, or the path, against the house rules", "name": "guarded", "owner": "guard", "row": 0 },
+    { "col": 2, "doc": "tool.check: rules, the permission mode and the tool's own check settle allow, deny or ask", "name": "checked", "owner": "engine", "row": 0 },
+    { "col": 3, "doc": "the mode settles the ask: auto mode's classifier, or the person", "name": "asked", "owner": "engine", "row": 0 },
+    { "col": 4, "doc": "the tool runs", "name": "running", "owner": "tool", "row": 0 },
+    { "col": 5, "doc": "the result goes back to the model", "name": "done", "owner": "engine", "row": 0, "terminal": true,
       "writes": [{ "hook": "toollog.log", "label": "call line · ok", "target": "tools/<day>.jsonl" }] },
-    { "col": 5, "doc": "the tool reported an error; the result still goes back to the model", "name": "failed", "owner": "engine", "row": 2, "terminal": true,
+    { "col": 5, "doc": "the tool reported an error; the result still goes back to the model", "name": "failed", "owner": "engine", "row": 1, "terminal": true,
       "writes": [{ "hook": "toollog.log", "label": "call line · error", "target": "tools/<day>.jsonl" }] },
-    { "col": 2, "doc": "the call never runs; the deny text goes back to the model", "name": "denied", "owner": "engine", "row": 2, "terminal": true,
+    { "col": 2, "doc": "the call never runs; the deny text goes back to the model", "name": "denied", "owner": "engine", "row": 1, "terminal": true,
       "writes": [{ "hook": "toollog.log", "label": "call line · denied", "target": "tools/<day>.jsonl" }] }
   ],
   "transitions": [
@@ -30,7 +26,6 @@
     { "from": "checked", "on": "allow", "to": "running" },
     { "from": "checked", "on": "deny", "to": "denied" },
     { "from": "checked", "on": "ask", "to": "asked" },
-    { "from": "asked", "on": "a real call · not read-only — unawaited", "shadow": true, "to": "judged" },
     { "from": "asked", "on": "approved", "to": "running" },
     { "from": "asked", "on": "refused", "to": "denied" },
     { "from": "running", "on": "result", "to": "done" },

@@ -22,7 +22,6 @@
     { "doc": "the engine reports a usage reading", "kind": "lifecycle", "name": "session.measure" },
     { "doc": "the session starts", "kind": "lifecycle", "name": "session.start" },
     { "doc": "a tool call, built-in or MCP, main loop or subagent", "kind": "tool", "name": "tool.call" },
-    { "doc": "core's permission decision for a call, before it runs", "kind": "tool", "name": "tool.check" },
     { "doc": "the main loop's answer is done (the Stop moment)", "kind": "turn", "name": "turn.complete" },
     { "doc": "one model request inside a turn, streamed", "kind": "turn", "name": "turn.step" },
     { "doc": "a part of the interface is drawn", "kind": "render", "name": "ui.render" }
@@ -119,18 +118,6 @@
       "effects": [{ "kind": "reply", "target": "tool deny" }, { "kind": "trail", "target": "~/.sandman/trail" }, { "kind": "ui", "target": "log line" }],
       "event": "tool.call", "file": "guard.ts", "fn": "yml", "id": "guard.yml", "matcher": { "tool": ["Edit", "Write"] },
       "reads": [], "status": "live", "writes": []
-    },
-    {
-      "catch": "pass", "chunk": "5b", "does": "shadow: judge an asked call beside core's decision, unawaited; a check line in the tool log",
-      "effects": [
-        { "kind": "file", "target": "tools/<day>.jsonl" },
-        { "kind": "http", "target": "api.typesafe.ai" },
-        { "kind": "http", "target": "127.0.0.1:1703" },
-        { "kind": "ui", "target": "log line" },
-        { "kind": "ui", "target": "re-render" }
-      ],
-      "event": "tool.check", "file": "check.ts", "fn": "check", "id": "check.check", "matcher": null,
-      "reads": ["gate"], "status": "live", "writes": ["gate"]
     },
     {
       "catch": "none", "chunk": 2, "does": "keep the main loop's effort for the gauge's flag",

@@ -122,4 +122,4 @@ const log: Hook<'tool.call'> = async ($, e, next) => {
   return result;
 };
 
-export { cut, log };
+export { log };

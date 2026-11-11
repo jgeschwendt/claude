@@ -67,7 +67,7 @@ const engine = (
     ...fixture<object>(environment),
   });
   on('http.fetch', ($, e) => {
-    sent.push(...(e.url.includes('typesafe') ? [JSON.parse(e.init?.body ?? '')] : []));
+    sent.push(...(e.url.includes('typesafe') ? [JSON.parse(String(e.init?.body))] : []));
     const answers = Object.entries(fixture<object>(markers ?? '{}')).map(
       ([name, noul]) => `"${name}":{"noul":${noul}}`,
     );

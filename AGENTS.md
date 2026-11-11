@@ -19,7 +19,7 @@ invariants:
 | .mise/tasks/    | `link` (symlink entries into `~/.claude`; `--check` only reports) and `link.test.ts`, its end-to-end test against a scratch home                                                                       |
 | docs/           | `index.html`: the harness design page and the plan (`ol#next`); `subether.html`: the mod's design page, its hook graph fed by `data/hooks.json`                                                         |
 | plugins/        | Claude Code mods — `subether` (first-prompt recall and pane, guards, tool log, judged markers, gauge and window clock); its README and `tests/` (`claude plugin test`)                     |
-| scripts/        | `test.ts`, the gate `mise run check` runs: every step at once — fmt, lint, tsc, the unit tests (`*.test.ts` under `.mise/tasks` and `skills`), monitor-github's selftest, the mod's validate and tests |
+| scripts/        | `test.ts`, the gate `mise run check` runs: every step at once — fmt, lint, tsc, the unit tests (`*.test.ts` under `.mise/tasks` and `skills`), monitor-github's selftest, the mod's validate and tests; the mod's own tsc runs only where a session has loaded it (the engine writes its types), so not in CI |
 | rules/          | house standards, one file per language or practice, read through `~/.claude/rules`                                                                                                                     |
 | skills/         | personal skills, read through `~/.claude/skills`; `skills/synced/` is Claude Code's, gitignored                                                                                                        |
 

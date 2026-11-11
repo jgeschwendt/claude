@@ -123,7 +123,7 @@ test('TypeSafe answers first: its probabilities and input tokens kept, the beare
     headers: { 'authorization': `Bearer ${KEY}`, 'content-type': 'application/json' },
     method: 'POST',
   });
-  expect(JSON.parse(fetches[0]?.init?.body ?? '')).toMatchObject({ model: 'jev-latest' });
+  expect(JSON.parse(String(fetches[0]?.init?.body))).toMatchObject({ model: 'jev-latest' });
   expect(state.judged).toEqual([
     { at: NOW, head: 'no', judge: 'typesafe', markers: LOW, tokens: TOKENS },
   ]);
@@ -170,7 +170,7 @@ for (const [name, reply, down, why] of [
     expect(fetches.map(({ judge }) => judge)).toEqual(['typesafe', 'kev']);
     expect(fetches[1]?.url).toBe('http://127.0.0.1:1703/v1/systemone');
     expect(fetches[1]?.init?.headers).toEqual({ 'content-type': 'application/json' });
-    expect(JSON.parse(fetches[1]?.init?.body ?? '')).toMatchObject({ model: 'kev-latest' });
+    expect(JSON.parse(String(fetches[1]?.init?.body))).toMatchObject({ model: 'kev-latest' });
     expect(state.gate).toEqual({ kev: { why: '' }, typesafe: { until: NOW + down * MINUTE, why } });
     expect(state.judged).toEqual([{ at: NOW, head: 'no', judge: 'kev', markers: LOW }]);
     expect(logs).toEqual([`judge: typesafe down (${why})`]);

@@ -1,0 +1,65 @@
+{
+  "adrs": {},
+  "landmarks": {
+    "link-never-overwrites": {
+      "file": ".mise/tasks/link",
+      "line": 35,
+      "node": "/"
+    }
+  },
+  "nodes": {
+    "/": {
+      "budget": null,
+      "claims": [
+        {
+          "anchor": "※ link-never-overwrites",
+          "enforced_by": null,
+          "id": "link-never-overwrites",
+          "kind": "invariant",
+          "resolved": ".mise/tasks/link:35",
+          "text": "link never overwrites — an entry in ~/.claude that is a real file or a foreign link is reported `drift` and left alone; only missing entries are linked",
+          "verified": {
+            "digest": null,
+            "sha": "5936b1cb8245bca57856eddf42dd7ea8225446ed"
+          }
+        }
+      ],
+      "commands": {
+        "lint": "bun --bun oxlint",
+        "test": "bun run test"
+      },
+      "contains": [
+        "docs"
+      ],
+      "declared": {
+        "allow": [],
+        "decided_by": [],
+        "depends": []
+      },
+      "extracted": {
+        "imports": []
+      },
+      "id": "/",
+      "kind": "system",
+      "purpose": "Claude Code harness — global config, rules, skills and the subether mod; `mise run link` symlinks each entry into ~/.claude."
+    },
+    "docs": {
+      "budget": null,
+      "claims": [],
+      "commands": {},
+      "contains": [],
+      "declared": {
+        "allow": [],
+        "decided_by": [],
+        "depends": []
+      },
+      "extracted": {
+        "imports": []
+      },
+      "id": "docs",
+      "kind": "container",
+      "purpose": "index.html, the harness design page; subether.html, the mod's: four figures, three d3 charts (hook graph, atoms, call machine); the live data views are bifrost's /system/portals."
+    }
+  },
+  "version": 2
+}

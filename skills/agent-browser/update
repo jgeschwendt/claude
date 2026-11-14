@@ -1,35 +1,39 @@
 #!/usr/bin/env bash
-# Bump the agent-browser binary (pinned in the global mise config — the GitHub release's native build) and re-vendor
-# SKILL.md from upstream beside it, keeping our provenance trailer. Prints updated / unchanged for the skill.
+# Bump the agent-browser binary (pinned in the global mise config — the GitHub release's native build), then fetch
+# what that build ships without, from the installed version's tag: the skill content `agent-browser skills get`
+# serves, into ~/.agent-browser/skill-data, and the discovery stub SKILL.md beside this file, upstream's byte for
+# byte. Prints updated / unchanged for the stub.
 set -euo pipefail
 
 mise -C "$HOME" --quiet upgrade --bump github:vercel-labs/agent-browser
 
-url="https://raw.githubusercontent.com/vercel-labs/agent-browser/refs/heads/main/skills/agent-browser/SKILL.md"
 dir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd -P)"
+home="${AGENT_BROWSER_HOME:-$HOME/.agent-browser}"
 skill="$dir/SKILL.md"
-tmp="$(mktemp "$dir/.SKILL.md.XXXXXX")"
-trap 'rm -f "$tmp"' EXIT
+version="$(mise -C "$HOME" x -- agent-browser --version | awk '{print $2}')"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
 
-curl -fsSL --max-time 30 "$url" >"$tmp"
-[[ "$(head -n 1 "$tmp")" == "---" ]] && grep -q '^name: agent-browser$' "$tmp" || {
-	echo "refuse: upstream is not an agent-browser SKILL.md" >&2
+curl -fsSL --max-time 60 "https://codeload.github.com/vercel-labs/agent-browser/tar.gz/refs/tags/v$version" |
+	tar -xz -C "$work" --strip-components 1 \
+		"agent-browser-$version/skill-data" "agent-browser-$version/skills/agent-browser/SKILL.md"
+stub="$work/skills/agent-browser/SKILL.md"
+[[ -f "$work/skill-data/core/SKILL.md" && "$(head -n 1 "$stub")" == "---" ]] &&
+	grep -q '^name: agent-browser$' "$stub" || {
+	echo "refuse: v$version carries no agent-browser SKILL.md and skill-data/core" >&2
 	exit 1
 }
 
-cat >>"$tmp" <<EOF
+mkdir -p "$home"
+rm -rf "$home/skill-data.new"
+mv "$work/skill-data" "$home/skill-data.new"
+rm -rf "$home/skill-data"
+mv "$home/skill-data.new" "$home/skill-data"
 
-Vendored from vercel-labs/agent-browser by \`update\` beside this file — everything above is upstream's, byte for byte; propose changes upstream, never edit them here. Upstream source:
-
-\`\`\`
-$url
-\`\`\`
-EOF
-
-if cmp -s "$tmp" "$skill"; then
+if cmp -s "$stub" "$skill"; then
 	echo "unchanged"
 else
-	chmod 644 "$tmp"
-	mv "$tmp" "$skill"
+	chmod 644 "$stub"
+	mv "$stub" "$skill"
 	echo "updated"
 fi

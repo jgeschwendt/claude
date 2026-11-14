@@ -1,8 +1,14 @@
 {
   "outputStyle": "Proactive",
   "permissions": {
-    "allow": [
-      "Bash(git *)"
-    ]
+    "allow": ["Bash(git *)"]
+  },
+  "extraKnownMarketplaces": {
+    "jgeschwendt": {
+      "source": {
+        "source": "directory",
+        "path": "/Users/jlg/.grove/code/jgeschwendt/claude/main"
+      }
+    }
   }
 }

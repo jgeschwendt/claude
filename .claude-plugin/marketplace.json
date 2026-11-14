@@ -1,0 +1,19 @@
+{
+  "name": "jgeschwendt",
+  "description": "jgeschwendt's Claude Code harness mods.",
+  "owner": {
+    "name": "jgeschwendt"
+  },
+  "plugins": [
+    {
+      "name": "monitor",
+      "source": "./skills/monitor",
+      "description": "Machine monitor that broadcasts a shared flag-file state to every interactive session as a notification."
+    },
+    {
+      "name": "subether",
+      "source": "./plugins/subether",
+      "description": "The harness's first-prompt recall seed, recall pane, house-rule guards, tool log, gauge and window clock."
+    }
+  ]
+}

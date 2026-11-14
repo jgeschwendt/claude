@@ -1,16 +1,30 @@
 ---
 paths:
-  - "**/*.md"
+  - '**/*.md'
 ---
 
 # Documentation
 
-Out of scope: pipeline-owned markdown (`~/.sandman/memories/` banks, their `MEMORY.md`) — dream/reflect-derived files are never hand-edited; route changes through the pipeline (CLAUDE.md § Memory). A memory this session itself wrote via `remember` may be updated in place (bump `updated:`) rather than duplicated. (reconciled 2026-08-27 · `~/.orrery/memory/` no longer exists; sandman owns session memory)
+Out of scope: pipeline-owned markdown (`~/.sandman/memories/` banks, their `MEMORY.md`) — dream/reflect-derived files are never hand-edited; route changes through the pipeline (CLAUDE.md § Memory). A memory this session itself wrote via `remember` may be updated in place (bump `updated:`) rather than duplicated.
 
 ## Present tense only
 
 - **Living docs describe what exists today.** Migrations, predecessors, retired designs, and the decision process live in git history and plans — never in documentation. A "what X was, and where it went" section is a deletion, not a record. (since 2026-07-27 · orrery atlas recut — "Remove anything about the migration … that's git history.")
 - **A feature is not done until its end-to-end flow is in the repo's living docs.** Trigger, components crossed, data path, configuration — into whatever the repo designates (stele AGENTS.md nodes and docs/ where adopted, the README elsewhere); a stub being wired up counts. (since 2026-07 · grove)
+
+## Where things live
+
+- **A contract is a page too — `docs/<name>.html` beside `docs/index.html`, linked from it, proxied at gigantic.dev/<project>/<name>.html.** No `docs/*.md`: the format specs, protocol contracts and guides that used to stay as markdown (BANK-FORMAT.md, MCP.md, SPEC.md, GUIDE.md) convert to pages with one `<section id>` per heading, and code, AGENTS and prompts cite them as `docs/<name>.html#<section>`. Routine definitions (`docs/routines/*.md`, a cloud routine's `README.md`) are runner input, not docs, and stay. (since 2026-10-19 · sandman: "lets make these files part of the gh pages site: docs/BANK-FORMAT.md and docs/MCP.md. no more md docs")
+- **A README is the name and one sentence, nothing else.** `# <name>` then one line of what the thing is — the sandman model: "Shifting sands for agentic sessions—`sandman` molds memory and runs the night shift." No docs link (gigantic.dev/<project>/ is the page, found from the landing), no license paragraph (`LICENSE.md` is the license), no "external contributions" line (never part of the license), no commands, no install. Everything operational — how it deploys, env vars, proxy rules, commands, how to add a project — lives in `AGENTS.md`, the contract agents read; the design and the plan live on the page; a section that would need updating when the code changes is moved, never kept. One exemption: a package whose README is its registry landing (HexDocs, npm) keeps the full document, because the registry renders it (since 2026-10-20 · pty: "skip pty that will be a hex doc at some point"). (since 2026-10-19 · gigantic.dev: "README.md should be as short as possible, its a cover, it shouldn't drift"; 2026-10-20 · sandman 299a3f3 cut the cover to one line and dropped the license paragraph; "can we drop External contributions are not accepted")
+
+## Pages
+
+- **World class: as tight as possible, minimal yet complete.** Every sentence earns its place, and the page covers the whole public surface once; the reference stays one link away instead of restated. (since 2026-10-26 · verax docs: "i want these to be world class, as tight as possible, minimal yet complete")
+- **A docs pass tightens as it corrects.** Bringing a page current and making it denser are one job: every currency, migration or rename pass over a page also cuts slop (hedges, restated context, duplicated prose/tables, dead stamps) and reports lines before → after; a pass that only adds is a failed pass. (since 2026-11-01 · docs-currency pass: 'make sure they all tighten the docs too, no more slop')
+- **Docs are a deliverable equal to code, from the first slice.** A new project, a rewrite or a feature ships its page with its d3 charts and in-page figures (the `figure` skill) in the same change as the code; a brief to an implementing agent names the page, its charts and its figures beside the code and tests, never "README and AGENTS only". (since 2026-11-10 · the sandman rewrite's first brief left the page out: "docs with d3 charts and figures are also equally important")
+- **A docs page is reviewed live, with the hud on it.** Serve the page through `@jlg/hud`'s review server (jgeschwendt/typescript `packages/hud` README § Serve: `bun packages/hud/src/serve.ts <docs dir>`), which injects the comment layer without touching the source; watch `ws://127.0.0.1:<port>/__hud/watch` (one line per comment, the unanswered backlog replayed on every reconnect) with a background command that exits on the first `comment` or `reply` line and reconnects on close, started again after each one is answered — it has no expiry, where a Monitor lapses after 30 minutes and a lapsed watch misses comments ("your monitor has a bug", 2026-11-13); the watch stays up for as long as the server does, quiet hours included; answer each thread with `POST /__hud/reply` and leave resolving to the owner. Never poll the store or edit it by hand. (since 2026-11-11 · sandman rewrite docs: "let get my hud on the docs, i want to comment with feedback"; "monitor my threads too")
+- **The page is where we design: a settled decision lands on it in the same turn.** A design choice agreed in conversation or in a comment thread is drawn and written on the page before the reply that reports it, with what is not built yet marked as such (a dashed "next" mark on a chart, a Next entry) and what runs today still stated; a decision that lives only in a thread is a stale page. (since 2026-11-13 · sandman rewrite: "lest keep the html updated, this is our spec / where we design")
+- **Examples prove themselves.** A code example runs on the page, editable, and the output shown under it is the output of a real run, checked by the test suite — never a hand-written result comment. (since 2026-10-26 · verax docs: "can our example blocks be repls that run and prove the use cases?")
 
 ## Machine portability
 

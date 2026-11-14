@@ -1,0 +1,4 @@
+{
+  "description": "subether: first-prompt recall seed, recall pane, guards, tool log, gauge, window clock",
+  "modules": ["./register.tsx"]
+}

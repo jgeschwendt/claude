@@ -1,0 +1,143 @@
+{
+  "atoms": [
+    { "doc": "the gauge's effort flag: the main loop's last turn.step effort", "file": "gauge.tsx", "name": "effort", "resetBy": "/clear · /resume · /branch" },
+    { "doc": "the gauge's last usage reading", "file": "gauge.tsx", "name": "gauge", "resetBy": "/clear · /resume · /branch" },
+    { "doc": "planned · chunk 8: the band's last trail event; no atom yet", "file": null, "name": "last", "resetBy": "/clear · /resume · /branch" },
+    { "doc": "whether a composer prompt was seen yet, to tell a --bg opening brief apart", "file": "toollog.ts", "name": "opened", "resetBy": "/clear · /resume · /branch" },
+    { "doc": "the session's recalls: the first prompt's seed, failures too, then each pull the agent ran", "file": "context.ts", "name": "recalls", "resetBy": "/clear · /resume · /branch" },
+    { "doc": "the gauge's token trend for its ETA, the newest 40", "file": "gauge.tsx", "name": "samples", "resetBy": "/clear · /resume · /branch" },
+    { "doc": "planned · chunk 7: the docket threads the per-prompt digest has shown; no atom yet", "file": null, "name": "seen", "resetBy": "/clear · /resume · /branch" },
+    { "doc": "planned · chunk 8: the sandman shift the band shows; no atom yet", "file": null, "name": "shift", "resetBy": "/clear · /resume · /branch" },
+    { "doc": "the pane's rows pressed away from their default, by key; the newest recall open, the rest shut", "file": "pane.tsx", "name": "toggled", "resetBy": "/clear · /resume · /branch" }
+  ],
+  "events": [
+    { "doc": "a subagent is about to spawn", "kind": "agent", "name": "agent.spawn" },
+    { "doc": "the settings-hook Notification, relayed; no native notification event exists", "kind": "classic", "name": "classic.Notification" },
+    { "doc": "a slash command the mod registered runs", "kind": "prompt", "name": "command.run" },
+    { "doc": "a prompt is submitted, before the model sees it", "kind": "prompt", "name": "prompt.submit" },
+    { "doc": "the session ends, under the end budget", "kind": "lifecycle", "name": "session.end" },
+    { "doc": "the engine reports a usage reading", "kind": "lifecycle", "name": "session.measure" },
+    { "doc": "the session starts", "kind": "lifecycle", "name": "session.start" },
+    { "doc": "a tool call, built-in or MCP, main loop or subagent", "kind": "tool", "name": "tool.call" },
+    { "doc": "the main loop's answer is done (the Stop moment)", "kind": "turn", "name": "turn.complete" },
+    { "doc": "one model request inside a turn, streamed", "kind": "turn", "name": "turn.step" },
+    { "doc": "a part of the interface is drawn", "kind": "render", "name": "ui.render" }
+  ],
+  "hooks": [
+    {
+      "catch": "pass", "chunk": 5, "does": "pin a spawn with no model, not a fork, under a premium parent to opus",
+      "effects": [{ "kind": "reply", "target": "spawn model" }, { "kind": "ui", "target": "log line" }],
+      "event": "agent.spawn", "file": "pin.ts", "fn": "pin", "id": "pin.pin", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 6, "does": "hand the notification to docket --hook",
+      "effects": [{ "kind": "process", "target": "docket" }],
+      "event": "classic.Notification", "file": "register.tsx", "fn": null, "id": "stub:classic.Notification",
+      "matcher": { "notification_type": ["agent_needs_input", "idle_prompt", "permission_prompt"] },
+      "reads": [], "status": "stub", "writes": []
+    },
+    {
+      "catch": "none", "chunk": 3, "does": "/subether opens the recall pane asked",
+      "effects": [{ "kind": "ui", "target": "pane" }],
+      "event": "command.run", "file": "pane.tsx", "fn": "command", "id": "pane.command", "matcher": { "command": "subether" },
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 3, "does": "the first prompt with an ask (origin.kind bridge, composer, coordinator, scheduled-trigger, sdk or slack-ping) under each session id seeds: sandman-next recall writes the start mark, its stdout one capped context block",
+      "effects": [
+        { "kind": "process", "target": "sandman-next recall" },
+        { "kind": "reply", "target": "prompt context" },
+        { "kind": "ui", "target": "log line" }
+      ],
+      "event": "prompt.submit", "file": "context.ts", "fn": "context", "id": "context.context", "matcher": null,
+      "reads": ["recalls"], "status": "live", "writes": ["recalls"]
+    },
+    {
+      "catch": "pass", "chunk": 4, "does": "append a typed prompt to the day's tool log, unjudged and unawaited",
+      "effects": [{ "kind": "file", "target": "tools/<day>.jsonl" }, { "kind": "ui", "target": "log line" }],
+      "event": "prompt.submit", "file": "toollog.ts", "fn": "prompt", "id": "toollog.prompt", "matcher": { "origin": { "kind": "composer" } },
+      "reads": ["opened"], "status": "live", "writes": ["opened"]
+    },
+    {
+      "catch": "pass", "chunk": 5, "does": "sandman-next take on every reason under the end bound; chunk 6 · the docket resolve",
+      "effects": [{ "kind": "process", "target": "sandman-next take" }, { "kind": "ui", "target": "log line" }],
+      "event": "session.end", "file": "take.ts", "fn": "take", "id": "take.take", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "none", "chunk": 2, "does": "take the gauge reading; persist the five-hour window",
+      "effects": [{ "kind": "file", "target": "window.json" }, { "kind": "ui", "target": "log line" }],
+      "event": "session.measure", "file": "gauge.tsx", "fn": "measure", "id": "gauge.measure", "matcher": null,
+      "reads": ["gauge", "samples"], "status": "live", "writes": ["gauge", "samples"]
+    },
+    {
+      "catch": "none", "chunk": 2, "does": "the gauge's first reading and a 15 s usage poll in interactive sessions",
+      "effects": [{ "kind": "file", "target": "window.json" }, { "kind": "ui", "target": "log line" }],
+      "event": "session.start", "file": "gauge.tsx", "fn": "start", "id": "gauge.start", "matcher": null,
+      "reads": ["gauge", "samples"], "status": "live", "writes": ["gauge", "samples"]
+    },
+    {
+      "catch": "none", "chunk": 3, "does": "open the pane unasked, register /subether",
+      "effects": [{ "kind": "ui", "target": "/subether" }, { "kind": "ui", "target": "pane" }],
+      "event": "session.start", "file": "pane.tsx", "fn": "opening", "id": "pane.opening", "matcher": { "isInteractive": true },
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 4, "does": "append every call to the day's tool log; outermost, so it sees denials",
+      "effects": [{ "kind": "file", "target": "tools/<day>.jsonl" }, { "kind": "ui", "target": "log line" }],
+      "event": "tool.call", "file": "toollog.ts", "fn": "log", "id": "toollog.log", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "deny", "chunk": 4, "does": "deny a house-forbidden Bash command, trailed first; fail closed",
+      "effects": [{ "kind": "reply", "target": "tool deny" }, { "kind": "trail", "target": "~/.sandman/trail" }, { "kind": "ui", "target": "log line" }],
+      "event": "tool.call", "file": "guard.ts", "fn": "bash", "id": "guard.bash", "matcher": { "tool": "Bash" },
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "deny", "chunk": 4, "does": "deny an Edit/Write to a .yml path, trailed first; fail closed",
+      "effects": [{ "kind": "reply", "target": "tool deny" }, { "kind": "trail", "target": "~/.sandman/trail" }, { "kind": "ui", "target": "log line" }],
+      "event": "tool.call", "file": "guard.ts", "fn": "yml", "id": "guard.yml", "matcher": { "tool": ["Edit", "Write"] },
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 3, "does": "keep each recall the agent pulls, by Bash or MCP, for the pane",
+      "effects": [],
+      "event": "tool.call", "file": "context.ts", "fn": "pull", "id": "context.pull", "matcher": { "tool": "/^(?:Bash|mcp__sandman(?:-next)?__recall)$/u" },
+      "reads": [], "status": "live", "writes": ["recalls"]
+    },
+    {
+      "catch": "none", "chunk": 2, "does": "keep the main loop's effort for the gauge's flag",
+      "effects": [],
+      "event": "turn.step", "file": "gauge.tsx", "fn": "step", "id": "gauge.step", "matcher": null,
+      "reads": ["effort"], "status": "live", "writes": ["effort"]
+    },
+    {
+      "catch": "none", "chunk": 6, "does": "hand the main loop's answer to docket --hook as a Stop payload",
+      "effects": [{ "kind": "process", "target": "docket" }],
+      "event": "turn.complete", "file": "register.tsx", "fn": null, "id": "stub:turn.complete", "matcher": null,
+      "reads": [], "status": "stub", "writes": []
+    },
+    {
+      "catch": "none", "chunk": 2, "does": "draw the gauge row under the prompt, the engine's hint beneath",
+      "effects": [{ "kind": "ui", "target": "hint line" }],
+      "event": "ui.render", "file": "gauge.tsx", "fn": "hint", "id": "gauge.hint", "matcher": { "component": "PromptHint" },
+      "reads": ["effort", "gauge", "samples"], "status": "live", "writes": []
+    },
+    {
+      "catch": "none", "chunk": 3, "does": "draw the pane's body: a row per recall, its path, due work, always-set and sent lines by bank or topic",
+      "effects": [{ "kind": "ui", "target": "pane" }],
+      "event": "ui.render", "file": "pane.tsx", "fn": "pane", "id": "pane.pane", "matcher": { "component": "Pane" },
+      "reads": ["recalls", "toggled"], "status": "live", "writes": ["toggled"]
+    }
+  ],
+  "kinds": [
+    { "doc": "a $.state atom written", "name": "state" },
+    { "doc": "a file on disk written", "name": "file" },
+    { "doc": "a sandman trail event appended", "name": "trail" },
+    { "doc": "a ~/.local/bin binary run", "name": "process" },
+    { "doc": "what the hook hands back to the engine", "name": "reply" },
+    { "doc": "the interface: the pane, the hint line, a log line, a command", "name": "ui" }
+  ]
+}

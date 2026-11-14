@@ -1,0 +1,7 @@
+{
+  "author": { "name": "jgeschwendt" },
+  "description": "The harness's mod: the first prompt's sandman recall seed and the recall pane, house-rule guards and the daily tool log, the gauge row and the five-hour window clock.",
+  "name": "subether",
+  "types": "./types/index.d.ts",
+  "version": "0.5.0"
+}

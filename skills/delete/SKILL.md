@@ -1,79 +1,45 @@
 ---
 name: delete
-description: THE forget — wipe the current conversation outright, no pointer, no archive copy, no extraction, unrecoverable. Stops this session's background jobs, destroys the live transcript, its subagent files, anything already archived, and the short-term pointer, then closes the session and erases the exit flush. The privacy ending; every other ending is taken into the archive for dreaming. There is no softer delete — this verb is always the hard one. Triggers on "/delete", "delete this session", "hard delete this session", "erase this session".
+description: Erase the current conversation so that nothing of it is kept: no archive copy, no memory extraction, not recoverable. Every other ending is archived into sandman. Use on "/delete", "delete this session", "erase this session".
 ---
 
-# Delete → the conversation is erased
+# /delete
 
-Every other ending is taken: the SessionEnd hook archives the transcript into
-`~/.sandman/.archive/` and mints a pointer, and the dream pass extracts from it later.
-This one leaves nothing — for material that should never have been written down.
-The take ending has its own verb, `/dissolve` — end the conversation and keep it.
+Exiting a session normally archives its transcript into `~/.sandman` for later extraction. This ending leaves nothing, for material that should never have been written down. Run the three steps in order.
 
-Run the steps **in order** — this is live work only a running session can do.
+## 1. Stop what this session started
 
-## 1. Stop background jobs — only the ones THIS session started
+Kill only processes this session launched, by their own PIDs. Other sessions run their own servers and jobs. If you started nothing, say so.
 
-Do **not** `pkill` by name; other sessions run their own dev servers and tasks. Kill only
-processes you launched this session, by their **specific PIDs**. If you started nothing,
-say so and move on.
+## 2. Erase
 
-## 2. Erase the conversation
-
-```
+```sh
 ~/.local/bin/sandman forget "${CLAUDE_SESSION_ID:-$CLAUDE_CODE_SESSION_ID}"
 ```
 
-It destroys every copy of this session — the live transcript, its subagent files,
-anything `take` already archived under `~/.sandman/.archive/`, and the short-term
-pointer — widest reach first, so an interrupted run leaves the conversation harder to
-recover, never easier. Both id variables are read because only `CLAUDE_CODE_SESSION_ID`
-is set in a background job (observed 2026-08-25). Bank memories are untouched: a memory already committed was
-asked for. The SessionEnd hook's `take --hook` then finds nothing and exits quietly —
-no pointer is minted for a transcript that no longer exists.
+This destroys the live transcript, its subagent files, any archived copy and the short-term pointer, widest reach first. Memories already committed with `remember` stay: they were asked for. A background job sets only `CLAUDE_CODE_SESSION_ID`, which is why both are read.
 
 ## 3. End the session
 
-**Interactive session:**
+Claude Code rewrites the transcript as it exits and the session-end hook archives that regrown copy, so the script arms a detached watcher that runs `forget` again once the process is gone. Never skip it.
 
-```
+Interactive session (drop the argument when `$CLAUDE_SCRATCHPAD_DIR` is unset):
+
+```sh
 bash ~/.claude/skills/delete/scripts/delete-session.sh "$CLAUDE_SCRATCHPAD_DIR"
 ```
 
-(Omit the argument if `$CLAUDE_SCRATCHPAD_DIR` is unset — that just skips scratchpad
-cleaning.) The script cleans the scratchpad, resolves **this session's** CLI process
-(ancestor-only, never a sibling), detaches a watcher that erases the transcript the CLI
-re-creates on its way out, and closes the CLI (Ctrl-C twice, escalating to SIGTERM).
+Background job, which cannot signal itself: arm the watcher, then stop the job by the first eight characters of `$CLAUDE_CODE_SESSION_ID`.
 
-**Background agent** (`claude --bg`) — it has no TTY and cannot close itself with
-signals, so arm the watcher first, then stop the job by its short id (the first 8
-characters of `$CLAUDE_CODE_SESSION_ID`):
-
-```
+```sh
 bash ~/.claude/skills/delete/scripts/delete-session.sh --watch-only
 claude stop <short-id>
 ```
 
-Skipping `--watch-only` is what left the regrown transcript on disk (observed
-2026-08-25): the CLI's exit flush re-creates the `.jsonl` that `forget` destroyed, and
-`claude stop` alone never removes it. Nothing resurrects the conversation as a queue
-pointer — `take --hook` exits quietly on a session whose files `forget` already
-destroyed. (verified 2026-07-29 · live probe, Claude Code 2.1.220: `claude stop` fires
-`SessionEnd(reason=other)`.)
+If the script reports the session still running, ask him to type `/exit`; the watcher erases the transcript however the process ends.
 
-### Caveats — state them, don't hide them
+## Say what survives
 
-- **`~/.claude/history.jsonl` survives.** It keeps one line per prompt (cwd + the prompt
-  text) and is Claude Code's own file, not sandman's — nothing here touches it. A
-  hard-deleted conversation's PROMPTS live there until that file is filtered by hand.
-- **The exit is best-effort.** The signal is sent from inside a running tool call and the
-  CLI may absorb the first interrupt as a turn-cancel. If the script reports "still
-  running", tell the user to type `/exit` — the watcher erases the transcript however the
-  process ends.
-- If the terminal looks wrong after exit (raw mode), `reset` fixes it.
+Only when step 3 printed `is erased; the exit flush is watched`, tell him the conversation is erased and not recoverable. Otherwise relay the script's fallback: the exit will regrow the transcript, so `/exit`, then `sandman forget <sid>` from outside.
 
-## Completion
-
-State plainly that the conversation is gone and that nothing was kept.
-
-> Conversation erased — no buffer copy left, nothing extractable, not recoverable.
+Either way, name what Claude Code itself keeps, which nothing here touches: `~/.claude/history.jsonl` holds each prompt's text until it is filtered by hand, and `~/.claude/file-history/<sid>/`, `~/.claude/session-env/<sid>` and background-task output under the temp directory's `<sid>/tasks/` remain.

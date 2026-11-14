@@ -1,6 +1,6 @@
 ---
 paths:
-  - "**/*.{bash,sh}"
+  - '**/*.{bash,sh}'
 ---
 
 # Bash

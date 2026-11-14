@@ -1,6 +1,6 @@
 ---
 paths:
-  - "**/*.{ex,exs}"
+  - '**/*.{ex,exs}'
 ---
 
 # Elixir

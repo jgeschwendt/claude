@@ -342,10 +342,10 @@ claude plugin test plugins/subether</pre>
     <li><strong>fail closed</strong> — a command nested past 16 levels or 64 groups, or one it cannot
       read, is denied as unreadable; a hook that throws or times out before passing the call on denies
       it through its <code class="code">.catch</code>.</li>
-    <li><strong>trailed</strong> — each denial first runs <code class="code">sandman trail append
-      --kind guard --rationale "&lt;rule&gt;: &lt;first 200 chars&gt;" --ref session:&lt;id&gt;</code>
-      (plus <code class="code">--shift</code> when set), 5 s; a failed trail is one dim log line and
-      the call is still denied.</li>
+    <li><strong>marked</strong> — each denial first runs <code class="code">sandman-next mark</code> on
+      <code class="code">{"kind":"guard","rationale":"&lt;rule&gt;: &lt;first 200 chars&gt;","session","tool"}</code>,
+      5 s, one <code class="code">guard</code> line in sandman's ledger; a failed mark is one dim log line
+      and the call is still denied.</li>
     <li><strong>not seen</strong> — a saved alias, variable indirection, arguments fed from a pipe,
       <code class="code">env -S</code>, package runners.</li>
   </ul>
@@ -465,7 +465,7 @@ claude plugin test plugins/subether</pre>
       <code class="code">agent.spawn</code> pin under a premium parent and <code class="code">session.end</code> →
       <code class="code">sandman-next take</code>; ✔ 2026-11-13 the recall seed, which writes the start mark,
       and the pane rebuilt around it; still to come: the context cap's
-      <code class="code">guard</code> trail.</li>
+      <code class="code">guard</code> mark.</li>
     <li><strong>Line judge</strong> (since 2026-11-10 · "i will use jev to check all the lines once at
       the end instead of on the fly"): Jev judges the <a class="link" href="#log">tool log</a>'s call and
       prompt lines in one pass at the end rather than per call, and becomes the classifier that selects context for

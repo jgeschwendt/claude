@@ -59,41 +59,48 @@ if (!rep?.reproduced)
   return none(`not reproduced: ${rep?.observed ?? 'reproduction agent failed'}`);
 const CASE = `Failure: ${symptom}\nRepro: ${rep.command}\nExpected: ${rep.expected}\nObserved: ${rep.observed}\nSuite baseline (${rep.suite}): ${rep.baseline}\nFacts:\n${rep.facts.join('\n')}`;
 
-const tested = (
-  await pipeline(
-    ANGLES,
-    (angle) =>
-      run(
-        'Investigate',
-        angle.split(':')[0],
-        `${CASE}\n\nPropose root-cause hypotheses for this failure from one angle: ${angle}. Each must name the observation that would kill it, one its rivals would not predict. Return none rather than a hypothesis that cannot be killed. ${READ_ONLY}`,
-        obj({ hypotheses: arr(obj({ claim: str, kill: str })) }),
-      ),
-    (r, angle) =>
-      parallel(
-        r.hypotheses.map((h, i) => async () => ({
-          ...h,
-          ...(await run(
-            'Investigate',
-            `${angle.split(':')[0]} #${i + 1}`,
-            `${CASE}\n\nTest one hypothesis: ${h.claim}\nIt dies if: ${h.kill}\nInstrument, log and run until the discriminating observation is in hand. Verdict supports only when you observed what this hypothesis predicts and its rivals do not; refutes when the kill observation occurs; inconclusive otherwise. Evidence is the commands and output that decided it. ${READ_ONLY}`,
-            obj({
-              evidence: str,
-              verdict: { enum: ['inconclusive', 'refutes', 'supports'], type: 'string' },
-            }),
-          )),
-        })),
-      ),
-  )
-)
-  .flat()
-  .filter((h) => h?.verdict);
+const probed = await pipeline(
+  ANGLES,
+  (angle) =>
+    run(
+      'Investigate',
+      angle.split(':')[0],
+      `${CASE}\n\nPropose root-cause hypotheses for this failure from one angle: ${angle}. Each must name the observation that would kill it, one its rivals would not predict. Return none rather than a hypothesis that cannot be killed. ${READ_ONLY}`,
+      obj({ hypotheses: arr(obj({ claim: str, kill: str })) }),
+    ),
+  (r, angle) =>
+    parallel(
+      r.hypotheses.map((h, i) => async () => ({
+        ...h,
+        ...(await run(
+          'Investigate',
+          `${angle.split(':')[0]} #${i + 1}`,
+          `${CASE}\n\nTest one hypothesis: ${h.claim}\nIt dies if: ${h.kill}\nInstrument, log and run until the discriminating observation is in hand. Verdict supports only when you observed what this hypothesis predicts and its rivals do not; refutes when the kill observation occurs; inconclusive otherwise. Evidence is the commands and output that decided it. ${READ_ONLY}`,
+          obj({
+            evidence: str,
+            verdict: { enum: ['inconclusive', 'refutes', 'supports'], type: 'string' },
+          }),
+        ).catch(() => null)),
+      })),
+    ),
+);
+// a dead proposer or tester may have held the rival cause: with any gap, nothing is fixed
+const gaps = [
+  ...ANGLES.filter((_, i) => !probed[i]).map((a) => `${a.split(':')[0]}: proposer died`),
+  ...probed
+    .flat()
+    .filter((h) => h && !h.verdict)
+    .map((h) => `untested: ${h.claim}`),
+];
+const tested = probed.flat().filter((h) => h?.verdict);
 const line = (h) => `${h.claim}: ${h.evidence}`;
 const eliminated = tested.filter((h) => h.verdict === 'refutes').map(line);
 const survivors = tested.filter((h) => h.verdict === 'supports');
-if (survivors.length !== 1)
+// an inconclusive rival is still a candidate cause: a lone supporter beside one is not sole
+const undecided = tested.filter((h) => h.verdict === 'inconclusive').length;
+if (survivors.length !== 1 || undecided || gaps.length)
   return none(
-    `${survivors.length} causes survived; open: ${
+    `${gaps.length ? `investigation incomplete (${gaps.join('; ')}); ` : ''}${survivors.length} causes survived, ${undecided} inconclusive; open: ${
       tested
         .filter((h) => h.verdict !== 'refutes')
         .map(line)

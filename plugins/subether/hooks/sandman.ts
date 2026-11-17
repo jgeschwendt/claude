@@ -1,14 +1,13 @@
 /**
-The `~/.local/bin` runner, the trail append perpetual's `append($, kind, rationale)` made, the daily tool log's append
-and its line builder. Each is a function declaration: past an import the engine follows `$` only into
-one (`claude plugin validate`)
+The `~/.local/bin` runner, the guard's ledger mark, the daily tool log's append and its line builder. Each is a
+function declaration: past an import the engine follows `$` only into one (`claude plugin validate`)
 */
 import type { EngineInterface, ProcessRunInit } from 'claude-code';
 
 /**
-perpetual's trail append timeout
+the guard mark's timeout
 */
-const TRAIL_TIMEOUT = 5000;
+const MARK_TIMEOUT = 5000;
 /**
 how many words of argv a log line names it by: the binary and its verb
 */
@@ -39,14 +38,12 @@ async function run(
 }
 
 /**
-`sandman trail append --kind <kind> --rationale <rationale> --ref session:<id>`, plus `--shift $SANDMAN_SHIFT` when
-set, within 5 s; a failure is `run`'s log line
+`sandman-next mark` on `{"kind":"guard","rationale","session","tool"}` within 5 s: one `guard` line in sandman's ledger
+(contract: the sandman repo's AGENTS.md `### sandman mark`); a failure is `run`'s log line
 */
-async function trail($: EngineInterface, kind: string, rationale: string): Promise<void> {
-  const [id, shift] = await Promise.all([$.session.id(), $.env.get('SANDMAN_SHIFT')]);
-  const argv = ['sandman', 'trail', 'append', '--kind', kind, '--rationale', rationale];
-  const tail = shift === undefined || shift === '' ? [] : ['--shift', shift];
-  await run($, [...argv, '--ref', `session:${id}`, ...tail], { timeoutMs: TRAIL_TIMEOUT });
+async function mark($: EngineInterface, tool: string, rationale: string): Promise<void> {
+  const stdin = JSON.stringify({ kind: 'guard', rationale, session: await $.session.id(), tool });
+  await run($, ['sandman-next', 'mark'], { stdin, timeoutMs: MARK_TIMEOUT });
 }
 
 /**
@@ -81,4 +78,4 @@ function object(pairs: [string, string | undefined][]): string {
   return `{${pairs.map(([key, value]) => `"${key}":${value ?? 'null'}`).join(',')}}`;
 }
 
-export { append, object, run, trail };
+export { append, mark, object, run };

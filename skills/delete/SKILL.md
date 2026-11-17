@@ -14,14 +14,14 @@ Kill only processes this session launched, by their own PIDs. Other sessions run
 ## 2. Erase
 
 ```sh
-~/.local/bin/sandman forget "${CLAUDE_SESSION_ID:-$CLAUDE_CODE_SESSION_ID}"
+~/.local/bin/sandman-next forget "${CLAUDE_SESSION_ID:-$CLAUDE_CODE_SESSION_ID}"
 ```
 
-This destroys the live transcript, its subagent files, any archived copy and the short-term pointer, widest reach first. Memories already committed with `remember` stay: they were asked for. A background job sets only `CLAUDE_CODE_SESSION_ID`, which is why both are read.
+It drops the session's ledger lines first, so the exit's take archives nothing, then removes the live transcript, its subagent files, any archived copy, the short-term pointer and every memory, knowledge page and trace attributed to the session (a `remember --session` note included), and scrubs the id from what remains. What a consolidate merged into another memory stays in that memory's body. It prints `forgot: <n> removed, <n> rewritten`, or `nothing to forget`, exit 0; any other exit is a failed erase to relay. A background job sets only `CLAUDE_CODE_SESSION_ID`, which is why both are read.
 
 ## 3. End the session
 
-Claude Code rewrites the transcript as it exits and the session-end hook archives that regrown copy, so the script arms a detached watcher that runs `forget` again once the process is gone. Never skip it.
+Claude Code rewrites the transcript as it exits, and a late guard mark or an encode in flight can name the session after the erase, so the script arms a detached watcher that deletes the regrown transcript and runs `forget` again once the process is gone. Never skip it.
 
 Interactive session (drop the argument when `$CLAUDE_SCRATCHPAD_DIR` is unset):
 
@@ -40,6 +40,6 @@ If the script reports the session still running, ask him to type `/exit`; the wa
 
 ## Say what survives
 
-Only when step 3 printed `is erased; the exit flush is watched`, tell him the conversation is erased and not recoverable. Otherwise relay the script's fallback: the exit will regrow the transcript, so `/exit`, then `sandman forget <sid>` from outside.
+Only when step 3 printed `is erased; the exit flush is watched`, tell him the conversation is erased and not recoverable. Otherwise relay the script's fallback: the exit will regrow the transcript, so `/exit`, then `sandman-next forget <sid>` from outside.
 
 Either way, name what Claude Code itself keeps, which nothing here touches: `~/.claude/history.jsonl` holds each prompt's text until it is filtered by hand, and `~/.claude/file-history/<sid>/`, `~/.claude/session-env/<sid>` and background-task output under the temp directory's `<sid>/tasks/` remain.

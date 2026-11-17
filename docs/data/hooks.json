@@ -90,14 +90,14 @@
       "reads": [], "status": "live", "writes": []
     },
     {
-      "catch": "deny", "chunk": 4, "does": "deny a house-forbidden Bash command, trailed first; fail closed",
-      "effects": [{ "kind": "reply", "target": "tool deny" }, { "kind": "trail", "target": "~/.sandman/trail" }, { "kind": "ui", "target": "log line" }],
+      "catch": "deny", "chunk": 4, "does": "deny a house-forbidden Bash command, marked in sandman's ledger first; fail closed",
+      "effects": [{ "kind": "process", "target": "sandman-next mark" }, { "kind": "reply", "target": "tool deny" }, { "kind": "ui", "target": "log line" }],
       "event": "tool.call", "file": "guard.ts", "fn": "bash", "id": "guard.bash", "matcher": { "tool": "Bash" },
       "reads": [], "status": "live", "writes": []
     },
     {
-      "catch": "deny", "chunk": 4, "does": "deny an Edit/Write to a .yml path, trailed first; fail closed",
-      "effects": [{ "kind": "reply", "target": "tool deny" }, { "kind": "trail", "target": "~/.sandman/trail" }, { "kind": "ui", "target": "log line" }],
+      "catch": "deny", "chunk": 4, "does": "deny an Edit/Write to a .yml path, marked in sandman's ledger first; fail closed",
+      "effects": [{ "kind": "process", "target": "sandman-next mark" }, { "kind": "reply", "target": "tool deny" }, { "kind": "ui", "target": "log line" }],
       "event": "tool.call", "file": "guard.ts", "fn": "yml", "id": "guard.yml", "matcher": { "tool": ["Edit", "Write"] },
       "reads": [], "status": "live", "writes": []
     },
@@ -135,7 +135,6 @@
   "kinds": [
     { "doc": "a $.state atom written", "name": "state" },
     { "doc": "a file on disk written", "name": "file" },
-    { "doc": "a sandman trail event appended", "name": "trail" },
     { "doc": "a ~/.local/bin binary run", "name": "process" },
     { "doc": "what the hook hands back to the engine", "name": "reply" },
     { "doc": "the interface: the pane, the hint line, a log line, a command", "name": "ui" }

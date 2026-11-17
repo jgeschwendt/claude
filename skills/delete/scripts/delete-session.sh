@@ -11,19 +11,20 @@
 # sibling) → detach a watcher that erases the transcript the CLI writes on its way out →
 # close the CLI (Ctrl-C twice, escalating to SIGTERM).
 #
-# The watcher is the load-bearing half. `sandman forget` erases the live `.jsonl` while the
-# CLI is still running, and the CLI's final flush RE-CREATES it — a write that happens
+# The watcher is the load-bearing half. `sandman-next forget` erases the live `.jsonl` while
+# the CLI is still running, and the CLI's final flush RE-CREATES it — a write that happens
 # after every in-session tool call has returned, so nothing in-session can prevent it. The
-# watcher outlives the CLI, waits for the pid to die, and erases whatever regrew — and
-# `sandman forget`s again: the SessionEnd hook's `take --hook` runs inside the CLI before it
-# dies and archives the regrown file with a queue pointer, which only forget reaches.
+# watcher outlives the CLI, waits for the pid to die, and erases whatever regrew, then runs
+# `sandman-next forget` again for what landed after the first run: the mod's session-end
+# `take` archives nothing (forget dropped the start mark it needs), but a guard mark of a
+# later denied call, or an encode in flight, names the session and only forget reaches it.
 #
 # --watch-only exists for a background agent (`claude --bg`), which cannot close itself
 # with signals: arm the watcher here, then stop the job from outside with
 # `claude stop <short-id>`. Without it that ending leaves the regrown transcript on disk.
 #
 # Self-contained by rule: this script is the last thing a deleted conversation runs, so it
-# depends on nothing but bash, the paths below and `sandman` (best-effort: absent, the
+# depends on nothing but bash, the paths below and `sandman-next` (best-effort: absent, the
 # projects sweep still runs). (The sid/component/projects-dir helpers
 # were sourced from the orrery clone until 2026-08-25; they are inlined now.)
 #
@@ -103,8 +104,8 @@ job_dir=""
 if [ -z "$cli_pid" ]; then
   echo "  ✻ Could not identify this session's CLI process safely — nothing closed."
   echo "    Interactive: type /exit. Background agent: stop it from outside"
-  echo "    (claude stop <short-id>). The erase already ran; re-run sandman forget"
-  echo "    afterwards to remove the transcript the exit flush re-creates."
+  echo "    (claude stop <short-id>). The erase already ran; once it has exited, run"
+  echo "    sandman-next forget $sid to remove the transcript the exit flush re-creates."
   exit 1
 fi
 
@@ -115,8 +116,8 @@ fi
 # Claude Code writes beside it. No nullglob in the child — the `-f`/`-d` tests are what make
 # an unmatched glob a no-op.
 #
-# A live job is retired with `claude rm` first: left alive, `take --hook`
-# declines it as live-job and the job stays resumable (2026-10-26). A failed rm still erases.
+# A live job is retired with `claude rm` first: left alive, its `state.json` keeps the session
+# resumable (2026-10-26). A failed rm still erases.
 # shellcheck disable=SC2016
 nohup bash -c '
   sid="$1"; pid="$2"; projects="$3"; poll="$4"; flush="$5"; sandman="$6"; jobdir="$7"
@@ -135,7 +136,7 @@ nohup bash -c '
     [ -d "$d" ] && rm -rf "$d"
   done
   "$sandman" forget "$sid"
-' _ "$sid" "$cli_pid" "$PROJECTS_DIR" "$WATCH_POLL_SECONDS" "$FLUSH_GRACE_SECONDS" "${SANDMAN_BIN:-$HOME/.local/bin/sandman}" "$job_dir" \
+' _ "$sid" "$cli_pid" "$PROJECTS_DIR" "$WATCH_POLL_SECONDS" "$FLUSH_GRACE_SECONDS" "${SANDMAN_BIN:-$HOME/.local/bin/sandman-next}" "$job_dir" \
   >/dev/null 2>&1 &
 disown
 

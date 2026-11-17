@@ -85,7 +85,7 @@ const context: Hook<'prompt.submit'> = async ($, e, next) => {
     ? `${text.slice(0, text.lastIndexOf('\n', CAP) + 1 || CAP)}… [${reason}]`
     : text;
   if (isCut) {
-    // chunk 4 · trail guard: `sandman trail append --kind guard --rationale <reason>`
+    // chunk 4 · a guard mark: `sandman-next mark` on `{"kind":"guard","rationale":<reason>,…}`
     $.ui.log(reason);
   }
   const at = await $.clock.now();

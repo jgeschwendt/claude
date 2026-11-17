@@ -2,11 +2,11 @@
 The Bash guard, lifted from perpetual 0.2.12 (origin/main `plugins/perpetual/hooks/perpetual.mjs`: `commands`, `judge`,
 `git`), typed, its logic unchanged: the command line tokenized as Bash would read it, each simple command's argv judged
 against the house rules. What it cannot read it denies, by returning a reason, never by throwing. The `tool.call` hooks
-deny a Bash command it judges, and an Edit/Write to a `.yml` path, trailing each denial
+deny a Bash command it judges, and an Edit/Write to a `.yml` path, marking each denial in sandman's ledger
 */
 import type { CatchHandler, EngineInterface, MatchedHook, ToolCallResult } from 'claude-code';
 import { field } from './gauge';
-import { trail } from './sandman';
+import { mark } from './sandman';
 
 /**
 Bash commands the house rules forbid, by guard, each with the rule that forbids it
@@ -1073,7 +1073,7 @@ const decide = (command: string): string | undefined => {
 };
 
 /**
-how much of the denied command or path the trail's rationale carries
+how much of the denied command or path the mark's rationale carries
 */
 const RATIONALE = 200;
 const YML = /\.yml$/iu;
@@ -1088,50 +1088,54 @@ const messageOf = (error: unknown): string => {
 };
 
 /**
-The deny of a call the guard failed on before it passed the call on, trailed with the same text; a failed trail is one log line
+The deny of a `tool` call the guard failed on before it passed the call on, marked with the same text; a failed mark
+is one log line
 */
-const unread = async ($: EngineInterface, why: string): Promise<ToolCallResult> => {
+const unread = async ($: EngineInterface, tool: string, why: string): Promise<ToolCallResult> => {
   const text = `subether: the guard could not read this call (${why.split('\n', 1)[0] ?? ''}) — it is denied, not run; rephrase the command`;
-  await trail($, 'guard', text).catch((error: unknown) => {
-    $.ui.log(`sandman trail append failed: ${String(error)}`);
+  await mark($, tool, text).catch((error: unknown) => {
+    $.ui.log(`sandman-next mark failed: ${String(error)}`);
   });
   return { deny: text };
 };
 
 /**
-Trails the denial (`sandman trail append --kind guard`, a failed run one log line) and denies with the house rule; a trail that rejects (a `$` call refused) fails the guard, which denies all the same. Caught here, not left to the `.catch` handler: in the kit a rejection under the tool log's hook, which wraps this one, fails that hook instead
+Marks the denial of a `tool` call on `subject` (`sandman-next mark`, kind `guard`; a failed run one log line) and denies with the house rule; a mark that rejects (a `$` call refused) fails the guard, which denies all the same. Caught here, not left to the `.catch` handler: in the kit a rejection under the tool log's hook, which wraps this one, fails that hook instead
 */
 const refuse = async (
   $: EngineInterface,
-  reason: string,
-  subject: string,
+  { reason, subject, tool }: { reason: string; subject: string; tool: string },
 ): Promise<ToolCallResult> =>
-  await trail($, 'guard', `${reason}: ${subject.slice(0, RATIONALE)}`)
+  await mark($, tool, `${reason}: ${subject.slice(0, RATIONALE)}`)
     .then((): ToolCallResult => ({ deny: `subether: ${reason}.` }))
-    .catch(async (error: unknown) => await unread($, messageOf(error)));
+    .catch(async (error: unknown) => await unread($, tool, messageOf(error)));
 
 /**
 A Bash command the house rules forbid is denied; any other goes on unchanged
 */
 const bash: MatchedHook<'tool.call', { tool: 'Bash' }> = async ($, e, next) => {
   const reason = decide(e.command);
-  return reason === undefined ? await next(e) : await refuse($, reason, e.command);
+  return reason === undefined
+    ? await next(e)
+    : await refuse($, { reason, subject: e.command, tool: e.tool });
 };
 
 /**
 An Edit or Write to a `.yml` path is denied; any other goes on unchanged
 */
 const yml: MatchedHook<'tool.call', { tool: ['Edit', 'Write'] }> = async ($, e, next) =>
-  YML.test(e.file_path) ? await refuse($, YML_RULE, e.file_path) : await next(e);
+  YML.test(e.file_path)
+    ? await refuse($, { reason: YML_RULE, subject: e.file_path, tool: e.tool })
+    : await next(e);
 
 /**
 Fail closed: a guard that threw or timed out before it called `next` denies the call (`Caught.called`, `Caught.error`:
 d.ts 1218–1229, `HookFailure` 5370–5386); one that failed after keeps what `next` settled to
 */
 const bashFailed: CatchHandler<typeof bash> = async ($, e, next) =>
-  next.called ? await next(e) : await unread($, next.error.message ?? next.error.kind);
+  next.called ? await next(e) : await unread($, e.tool, next.error.message ?? next.error.kind);
 
 const ymlFailed: CatchHandler<typeof yml> = async ($, e, next) =>
-  next.called ? await next(e) : await unread($, next.error.message ?? next.error.kind);
+  next.called ? await next(e) : await unread($, e.tool, next.error.message ?? next.error.kind);
 
 export { bash, bashFailed, decide, yml, ymlFailed };

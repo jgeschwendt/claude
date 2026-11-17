@@ -1,4 +1,4 @@
-// End-to-end checks on the /delete session script against a scratch HOME: stub `ps`, `claude` and `sandman` on its
+// End-to-end checks on the /delete session script against a scratch HOME: stub `ps`, `claude` and `sandman-next` on its
 // `.local/bin`, and a `sleep` standing in for this session's CLI. macOS only, where the script runs.
 import { expect, test } from 'bun:test';
 
@@ -12,18 +12,18 @@ type Rig = { cli: Bun.Subprocess; home: string };
 
 /**
 The stub `ps` names only the stand-in's pid `claude`, makes it every pid's parent, gives it argv `$ARGS` and no TTY;
-the stub `claude` and `sandman` append their argv to `$HOME/calls`
+the stub `claude` and `sandman-next` append their argv to `$HOME/calls`
 */
 const rig = async (): Promise<Rig> => {
   const root = await Bun.$`realpath $(mktemp -d)`.text();
   const home = root.trim();
   const log = 'echo "$(basename "$0") $*" >>"$HOME/calls"';
   const ps = `case $2 in comm=) [ "$4" = "$CLI" ] && echo /x/claude || echo zsh ;; args=) echo "$ARGS" ;; ppid=) echo " $CLI" ;; tty=) echo '??' ;; esac`;
-  const stubs = Object.entries({ claude: log, ps, sandman: log });
+  const stubs = Object.entries({ 'claude': log, ps, 'sandman-next': log });
   await Promise.all(
     stubs.map(([stub, body]) => Bun.write(`${home}/.local/bin/${stub}`, `#!/bin/sh\n${body}\n`)),
   );
-  await Bun.$`chmod 755 ${home}/.local/bin/claude ${home}/.local/bin/ps ${home}/.local/bin/sandman`;
+  await Bun.$`chmod 755 ${home}/.local/bin/claude ${home}/.local/bin/ps ${home}/.local/bin/sandman-next`;
   return { cli: Bun.spawn(['sleep', '60']), home };
 };
 
@@ -96,9 +96,13 @@ macos(
     await Promise.all(job.map((path) => Bun.write(`${home}/.claude/${path}`, '{}')));
     const [code, out] = arm(session, 'claude');
     await end(session);
-    const calls = await settle(`${home}/calls`, 'sandman forget', Date.now() + SETTLE_MS);
+    const calls = await settle(`${home}/calls`, 'sandman-next forget', Date.now() + SETTLE_MS);
     const regrew = await Bun.$`ls -A ${home}/.claude/projects/-p`.text();
-    expect([code, calls, regrew]).toEqual([0, `claude rm aaaaaaaa\nsandman forget ${SID}\n`, '']);
+    expect([code, calls, regrew]).toEqual([
+      0,
+      `claude rm aaaaaaaa\nsandman-next forget ${SID}\n`,
+      '',
+    ]);
     // the /delete skill reports the erase only on this line
     expect(out).toContain('is erased; the exit flush is watched');
   },

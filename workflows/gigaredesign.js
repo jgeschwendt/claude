@@ -36,34 +36,41 @@ const scout = await agent(
     }),
   ),
 );
-if (!scout?.green)
+if (!scout) return { stopped: 'the scout died — nothing was mapped or measured', scout: null };
+// the slug becomes a file name under ~/.claude/plans: nothing in it may leave that directory
+const slug = String(A.slug ?? scout.slug).replace(/[^A-Za-z0-9-]+/g, '-');
+if (!scout.green)
   return { stopped: 'red baseline — no stage can promise green on a red gate', scout };
 if (scout.unassigned.length) log(`unassigned files: ${scout.unassigned.join(', ')}`);
 
-const map = (
-  await parallel(
-    scout.components.map(
-      (c) => () =>
-        agent(
-          `Read component ${c.name} of ${scout.repo} whole: ${c.files.join(', ')}. Describe what is, not what should be — report bugs you meet as smells, never fix them.`,
-          O(
-            'Map',
-            obj({
-              dependedOnBy: strs,
-              dependsOn: strs,
-              name: str,
-              publicSurface: strs,
-              responsibility: str,
-              smells: strs,
-              stateOwned: strs,
-              tests: strs,
-            }),
-            { label: `read:${c.name}` },
-          ),
+const map = await parallel(
+  scout.components.map(
+    (c) => () =>
+      agent(
+        `Read component ${c.name} of ${scout.repo} whole: ${c.files.join(', ')}. Describe what is, not what should be — report bugs you meet as smells, never fix them.`,
+        O(
+          'Map',
+          obj({
+            dependedOnBy: strs,
+            dependsOn: strs,
+            name: str,
+            publicSurface: strs,
+            responsibility: str,
+            smells: strs,
+            stateOwned: strs,
+            tests: strs,
+          }),
+          { label: `read:${c.name}` },
         ),
-    ),
-  )
-).filter(Boolean);
+      ),
+  ),
+);
+const unread = scout.components.filter((_, i) => !map[i]).map((c) => c.name);
+if (unread.length)
+  return {
+    stopped: `unread components — a design over a partial map is a guess: ${unread.join(', ')}`,
+    scout,
+  };
 const MAP = `Repository ${scout.repo}${A.goal ? `, concern: ${A.goal}` : ''}.\n${INVARIANT}\nContract:\n${scout.contract.join('\n')}\nComponent map:\n${JSON.stringify(map)}`;
 
 const DESIGN = obj({
@@ -101,6 +108,8 @@ const designs = (
     ),
   )
 ).filter(Boolean);
+if (designs.length < STANCES.length)
+  return { stopped: 'a designer died — the panel is short a stance', designs };
 
 const CRITERIA = [
   'fit to the responsibilities the map actually shows, and how fully it resolves the map’s smells and the stated concern',
@@ -127,6 +136,8 @@ const scores = (
     ),
   )
 ).filter(Boolean);
+if (scores.length < CRITERIA.length)
+  return { stopped: 'a judge died — the designs are scored on too few criteria', designs, scores };
 
 const chosen = await agent(
   `${MAP}\nDesigns:\n${JSON.stringify(designs)}\nScores by criterion:\n${JSON.stringify(scores)}\nCommit to one design whole. Where designs differ in kind, pick a winner and never average them; graft an idea from a runner-up only where it leaves the winner's shape unchanged. If the winner keeps the current structure, set restructure false. Say why each losing design lost, and the risks the winner carries.`,
@@ -149,12 +160,16 @@ if (!chosen.design.restructure)
   };
 
 const planned = await agent(
-  `${MAP}\nGate: ${scout.gate}.\nChosen design:\n${JSON.stringify(chosen.design)}\nWrite the migration from today's structure to this design as ordered stages to ~/.claude/plans/${A.slug ?? scout.slug}.md, the shape /execute-plan reads: the repo and gate at the top, then per stage an id, a title, the files it owns, the stage ids it depends on, a brief that stands alone for an implementer, its verification, its rollback, and whether it ends in a commit. Every stage leaves the gate green and the system shippable; dependencies precede dependents; stages without an ordering edge own disjoint files. Contract items nothing covers get boundary tests in the first stage — boundary only, since internal tests pin the structure being demolished. The last stage wires the design's rules as executable guards and proves each fails once against a deliberate violation. Write only the plan file; change nothing in the repo.`,
+  `${MAP}\nGate: ${scout.gate}.\nChosen design:\n${JSON.stringify(chosen.design)}\nWrite the migration from today's structure to this design as ordered stages to ~/.claude/plans/${slug}.md, the shape /execute-plan reads: the repo and gate at the top, then per stage an id, a title, the files it owns, the stage ids it depends on, a brief that stands alone for an implementer, its verification, its rollback, and whether it ends in a commit. Every stage leaves the gate green and the system shippable; dependencies precede dependents; stages without an ordering edge own disjoint files. Contract items nothing covers get boundary tests in the first stage — boundary only, since internal tests pin the structure being demolished. The last stage wires the design's rules as executable guards and proves each fails once against a deliberate violation. Write only the plan file; change nothing in the repo.`,
   O('Plan', obj({ planPath: str, stages: { type: 'number' } })),
 );
+// the outcome leads: a caller is shown only the head of a long result
 return {
-  design: chosen.design,
+  ...(!planned && {
+    stopped: `the planner died — the design stands; ~/.claude/plans/${slug}.md may be missing or partly written, so do not execute it`,
+  }),
   planPath: planned?.planPath,
+  design: chosen.design,
   rejected: chosen.rejected,
   risks: chosen.risks,
   unassigned: scout.unassigned,

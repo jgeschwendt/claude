@@ -22,7 +22,7 @@
     { "from": "requested", "on": "any other tool", "to": "checked" },
     { "from": "guarded", "on": "no rule matches", "to": "checked" },
     { "from": "guarded", "on": "a rule matches · unreadable · the guard throws or times out", "to": "denied",
-      "writes": [{ "hook": "guard.bash", "label": "trail guard: <rule>: <first 200 chars>", "target": "~/.sandman/trail" }] },
+      "writes": [{ "hook": "guard.bash", "label": "guard mark: <rule>: <first 200 chars>", "target": "sandman-next mark" }] },
     { "from": "checked", "on": "allow", "to": "running" },
     { "from": "checked", "on": "deny", "to": "denied" },
     { "from": "checked", "on": "ask", "to": "asked" },

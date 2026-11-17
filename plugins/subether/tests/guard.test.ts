@@ -1,10 +1,10 @@
 import type { On } from 'claude-code';
 import { type Engine, expect, mock, test } from 'claude-code/testing';
 
-const BIN = '/home/test/.local/bin/sandman';
+const BIN = '/home/test/.local/bin/sandman-next';
 const PREFIX = 'subether: ';
 const RATIONALE = 200;
-const TRAIL_TIMEOUT = 5000;
+const MARK_TIMEOUT = 5000;
 
 /**
 the deny table's repeat counts: past the 16 nesting levels and 64 groups, or long lines within them
@@ -330,17 +330,12 @@ const ALLOWED: string[] = [
 ];
 
 /**
-The engine beneath: `sandman` answering `exitCode` (or refusing to start), `$.session.id` refused its first `failures`
+The engine beneath: `sandman-next` answering `exitCode` (or refusing to start), `$.session.id` refused its first `failures`
 times, the tool log's append answering ok, every run's argv and init, the log, and every call that reached the bottom
 */
 const engine = (
   on: On,
-  {
-    environment = {} as Record<string, string>,
-    exitCode = 0,
-    failures = 0,
-    isRefused = false,
-  } = {},
+  { exitCode = 0, failures = 0, isRefused = false } = {},
 ): {
   calls: unknown[];
   logs: string[];
@@ -350,10 +345,7 @@ const engine = (
   const logs: string[] = [];
   const runs: { argv: readonly string[]; init: unknown }[] = [];
   mock.clock(on, { now: 0 });
-  mock.env(on, {
-    ...fixture<Record<string, string>>('{"CLAUDE_TOOL_LOG_DIR":"/logs","HOME":"/home/test"}'),
-    ...environment,
-  });
+  mock.env(on, fixture('{"CLAUDE_TOOL_LOG_DIR":"/logs","HOME":"/home/test"}'));
   on('process.run', ($, e) => {
     const ran = { isStderrTruncated: false, isStdoutTruncated: false, stdout: '' };
     if (e.argv[0] !== BIN) {
@@ -397,31 +389,42 @@ const bash = async ($: Engine, command: string): Promise<unknown> =>
 const byText = (left = '', right = ''): number => left.localeCompare(right);
 
 /**
+The guard lines the runs' stdins mark
+*/
+const marks = (runs: { init: unknown }[]): unknown[] =>
+  runs.map(({ init }) => JSON.parse((init as { stdin: string }).stdin));
+
+/**
 The reason a denial carries, after `subether: ` and before the closing period
 */
 const reasonOf = (result: unknown): string =>
   String((result as { deny?: string }).deny).slice(PREFIX.length, -1);
 
 for (const [rule, subjects] of Object.entries(DENIED)) {
-  test(`a Bash call is denied by "${rule}", each denial trailed`, async ($, on) => {
+  test(`a Bash call is denied by "${rule}", each denial marked`, async ($, on) => {
     const { calls, runs } = engine(on);
     const results = await Promise.all(subjects.map(async (subject) => await bash($, subject)));
     expect(results).toEqual(subjects.map(() => ({ deny: expect.stringContaining(rule) })));
     const rationales = subjects.map(
       (subject, at) => `${reasonOf(results[at])}: ${subject.slice(0, RATIONALE)}`,
     );
-    expect(runs.map(({ argv }) => argv[argv.indexOf('--kind') + 1])).toEqual(
-      subjects.map(() => 'guard'),
-    );
-    expect(runs.map(({ argv }) => argv[argv.indexOf('--rationale') + 1]).toSorted(byText)).toEqual(
+    const marked = marks(runs) as { rationale: string }[];
+    expect(marked.map(({ rationale }) => rationale).toSorted(byText)).toEqual(
       rationales.toSorted(byText),
     );
-    expect(runs).toHaveLength(subjects.length);
+    expect(marked).toEqual(
+      subjects.map(() => ({
+        kind: 'guard',
+        rationale: expect.any(String),
+        session: 's1',
+        tool: 'Bash',
+      })),
+    );
     expect(calls).toEqual([]);
   });
 }
 
-test('every allowed command line reaches the engine, and trails nothing', async ($, on) => {
+test('every allowed command line reaches the engine, and marks nothing', async ($, on) => {
   const { calls, runs } = engine(on);
   const results = await Promise.all(ALLOWED.map(async (command) => await bash($, command)));
   expect(results).toEqual(ALLOWED.map(() => ({ result: 'ran' })));
@@ -429,7 +432,7 @@ test('every allowed command line reaches the engine, and trails nothing', async 
   expect(runs).toEqual([]);
 });
 
-test('a denied Bash call answers the house rule and trails it', async ($, on) => {
+test('a denied Bash call answers the house rule and marks it', async ($, on) => {
   const { calls, logs, runs } = engine(on);
   const subject = `git ${'-c a=b '.repeat(CONFIGS)}-c alias.n=x n`;
   const result = await bash($, subject);
@@ -438,60 +441,48 @@ test('a denied Bash call answers the house rule and trails it', async ($, on) =>
   expect(reason).toMatch(/^never mutate to inspect — `git checkout --`/u);
   expect(runs).toEqual([
     {
-      argv: [
-        BIN,
-        'trail',
-        'append',
-        '--kind',
-        'guard',
-        '--rationale',
-        `${reason}: ${subject.slice(0, RATIONALE)}`,
-        '--ref',
-        'session:s1',
-      ],
-      init: { timeoutMs: TRAIL_TIMEOUT },
+      argv: [BIN, 'mark'],
+      init: {
+        stdin: JSON.stringify({
+          kind: 'guard',
+          rationale: `${reason}: ${subject.slice(0, RATIONALE)}`,
+          session: 's1',
+          tool: 'Bash',
+        }),
+        timeoutMs: MARK_TIMEOUT,
+      },
     },
   ]);
   expect(calls).toEqual([]);
   expect(logs).toEqual([]);
 });
 
-test('a denial carries SANDMAN_SHIFT when set', async ($, on) => {
-  const { runs } = engine(on, {
-    environment: fixture<Record<string, string>>('{"SANDMAN_SHIFT":"shift-1"}'),
-  });
-  expect(await bash($, 'git stash')).toMatchObject({
-    deny: expect.stringContaining('never `git stash`'),
-  });
-  expect(runs[0]?.argv.slice(-'--shift shift-1'.split(' ').length)).toEqual(['--shift', 'shift-1']);
-});
-
-test('an allowed Bash call reaches the engine unchanged, and trails nothing', async ($, on) => {
+test('an allowed Bash call reaches the engine unchanged, and marks nothing', async ($, on) => {
   const { calls, runs } = engine(on);
   expect(await bash($, 'git stash list')).toMatchObject({ result: 'ran' });
   expect(calls).toEqual([expect.objectContaining({ command: 'git stash list', tool: 'Bash' })]);
   expect(runs).toEqual([]);
 });
 
-test('an Edit or Write to a .yml path is denied and trailed; .yaml goes on', async ($, on) => {
+test('an Edit or Write to a .yml path is denied and marked; .yaml goes on', async ($, on) => {
   const { calls, runs } = engine(on);
   const rule = 'YAML files end in `.yaml`, never `.yml` — rename on touch';
   const write = { content: '', file_path: '/r/.github/ci.YML', tool: 'Write' } as const;
   expect(await $.tool.call(write)).toMatchObject({ deny: `subether: ${rule}.` });
   expect(await $.tool.call(edit('/r/a.yml'))).toMatchObject({ deny: `subether: ${rule}.` });
-  expect(runs.map(({ argv }) => argv[argv.indexOf('--rationale') + 1])).toEqual([
-    `${rule}: /r/.github/ci.YML`,
-    `${rule}: /r/a.yml`,
+  expect(marks(runs)).toEqual([
+    { kind: 'guard', rationale: `${rule}: /r/.github/ci.YML`, session: 's1', tool: 'Write' },
+    { kind: 'guard', rationale: `${rule}: /r/a.yml`, session: 's1', tool: 'Edit' },
   ]);
   expect(await $.tool.call(edit('/r/ci.yaml'))).toMatchObject({ result: 'ran' });
   expect(calls).toEqual([expect.objectContaining({ file_path: '/r/ci.yaml' })]);
 });
 
 for (const [name, options, line] of [
-  ['exits non-zero', { exitCode: 1 }, 'sandman trail append exited 1: boom'],
-  ['cannot start', { isRefused: true }, expect.stringMatching(/^sandman trail append failed: /u)],
+  ['exits non-zero', { exitCode: 1 }, 'sandman-next mark exited 1: boom'],
+  ['cannot start', { isRefused: true }, expect.stringMatching(/^sandman-next mark failed: /u)],
 ] as const) {
-  test(`a trail that ${name} logs once and still denies`, async ($, on) => {
+  test(`a mark that ${name} logs once and still denies`, async ($, on) => {
     const { logs } = engine(on, options);
     expect(await bash($, 'git push -f')).toMatchObject({
       deny: expect.stringContaining('never force-push'),
@@ -510,21 +501,19 @@ for (const [tool, input] of [
   ['Bash', { command: 'git stash', tool: 'Bash' }],
   ['Edit', edit('/r/a.yml')],
 ] as const) {
-  test(`a ${tool} guard that throws denies the call and trails one guard event`, async ($, on) => {
+  test(`a ${tool} guard that throws denies the call and marks one guard line`, async ($, on) => {
     const { calls, logs, runs } = engine(on, { failures: 1 });
     expect(await $.tool.call(input)).toEqual({ deny: UNREAD });
-    expect(runs.map(({ argv }) => argv.slice(argv.indexOf('--kind') + 1))).toEqual([
-      ['guard', '--rationale', UNREAD, '--ref', 'session:s1'],
-    ]);
+    expect(marks(runs)).toEqual([{ kind: 'guard', rationale: UNREAD, session: 's1', tool }]);
     expect(calls).toEqual([]);
     expect(logs).toEqual([]);
   });
 }
 
-test('a failed guard whose trail fails too still denies, logging once', async ($, on) => {
+test('a failed guard whose mark fails too still denies, logging once', async ($, on) => {
   const { calls, logs, runs } = engine(on, { failures: 2 });
   expect(await bash($, 'git stash')).toEqual({ deny: UNREAD });
   expect(runs).toEqual([]);
   expect(calls).toEqual([]);
-  expect(logs).toEqual([expect.stringMatching(/^sandman trail append failed: /u)]);
+  expect(logs).toEqual([expect.stringMatching(/^sandman-next mark failed: /u)]);
 });

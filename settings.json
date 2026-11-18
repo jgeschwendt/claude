@@ -18,7 +18,7 @@
     "vercel@claude-plugins-official": true
   },
   "env": {
-    "CLAUDE_CODE_PLUGIN_DIRS": "/Users/jlg/.grove/code/jgeschwendt/claude/main/plugins/subether"
+    "CLAUDE_CODE_PLUGIN_DIRS": "~/.grove/code/jgeschwendt/claude/main/plugins/subether"
   },
   "extraKnownMarketplaces": {
     "typesafe-ai": {
@@ -32,13 +32,7 @@
   "inputNeededNotifEnabled": true,
   "model": "fable",
   "permissions": {
-    "allow": [
-      "Bash(~/.local/bin/dispatch:*)",
-      "Bash(~/.local/bin/docket:*)",
-      "Bash(~/.local/bin/sandman:*)",
-      "Bash(~/.local/bin/stele:*)",
-      "Bash(gh pr merge:*)"
-    ],
+    "allow": ["Bash(~/.local/bin/sandman:*)", "Bash(~/.local/bin/stele:*)", "Bash(gh pr merge:*)"],
     "defaultMode": "auto"
   },
   "preferredNotifChannel": "auto",

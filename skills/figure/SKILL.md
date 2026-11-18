@@ -60,7 +60,7 @@ The pull is to draw what was asked. Reading the page first is what catches the d
 - **Type**: `--ui-font-mono` for names, paths, commands and values; `--ui-font-sans` for sentences. Nothing under 12px. `--ui-fg` for content, `--ui-fg-muted` for secondary, `--ui-fg-faint` for decoration only, never the sole carrier of meaning.
 - **Arrows**: a stroked `<path>` in `--ui-fg-muted` with one shared `<marker markerUnits="userSpaceOnUse">` (without it the head scales with the stroke width); an arrow means "flows to" and ends on the box it points at.
 - **Width**: fluid to the page column. Under about 720px the drawing keeps its minimum width and scrolls inside its frame (`overflow-x: auto`); the page never scrolls sideways.
-- **Charts**: one ES module per chart in `docs/charts/`, over a shared `lib.js` that owns the fetch, the legend, the table toggle, the tooltip and the redraw on resize. Data lives in `docs/data/`. d3 7.9.0 loads once from cdnjs as the page global. Text enters through d3's `.text`, never as HTML. Precedent: jgeschwendt/sandman `docs/charts/lib.js`, `docs/charts/flow.js`, `docs/index.html` (on its `rewrite` branch until that lands on main).
+- **Charts**: one ES module per chart in `docs/charts/`, over a shared `lib.js` that owns the fetch, the legend, the table toggle, the tooltip and the redraw on resize. Data lives in `docs/data/`. d3 7.9.0 loads once from cdnjs as the page global. Text enters through d3's `.text`, never as HTML. Precedent: jgeschwendt/sandman `docs/charts/lib.js`, `docs/charts/flow.js`, `docs/index.html`.
 
 **Success criteria**: every colour, radius, space and font in the drawing is a `--ui-*` token or a `--kind-N` slot from step 4; no element is an image.
 

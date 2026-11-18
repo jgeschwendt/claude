@@ -40,13 +40,10 @@
 .chart-frame { background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); overflow-x: auto; padding: 16px; }
 .chart-frame svg { display: block; max-width: none; font-family: var(--ui-font-mono); font-size: 12px; }
 .chart-links path { fill: none; stroke: var(--ui-fg-faint); stroke-opacity: 0.55; stroke-width: 2; }
-.chart-links path.is-stub { stroke-dasharray: 4 4; }
 .chart-heads text { fill: var(--ui-fg-faint); font-family: var(--ui-font-sans); font-size: 11px; letter-spacing: var(--ui-tracking-caps); text-transform: uppercase; }
 .chart-node { cursor: default; outline: none; }
 .chart-node rect:first-child { fill: var(--ui-surface-raised); stroke: var(--ui-border-strong); }
 .chart-node text { fill: var(--ui-fg); }
-.chart-node.is-stub rect:first-child { stroke-dasharray: 4 3; }
-.chart-node.is-stub text { fill: var(--ui-fg-faint); }
 .chart-node:focus-visible rect:first-child { stroke: var(--ui-accent); stroke-width: 2; }
 svg.is-focus .chart-links path:not(.is-lit) { stroke-opacity: 0.12; }
 svg.is-focus .chart-links path.is-lit { stroke: var(--ui-fg); stroke-opacity: 0.9; }
@@ -127,8 +124,8 @@ svg.is-focus .chart-row:not(.is-lit) { opacity: 0.35; }
   <p class="eyebrow">the harness's Claude Code mod</p>
   <p class="lead docs-lead"><code class="code">subether</code> is the from-scratch successor of
     <code class="code">perpetual</code>, built on native mod events: the gauge row under the prompt,
-    the recall seed and its pane, the Bash and <code class="code">.yml</code> guards, the daily tool log, the subagent pin and the session-end take are live; docket
-    and the shift band are to come. Its contract is
+    the recall seed and its pane, the Bash and <code class="code">.yml</code> guards, the daily tool log, the subagent pin and the session-end take are live; the
+    shift band is to come. Its contract is
     <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/README.md">plugins/subether/README.md</a>;
     this page is the design and what is open.</p>
   <nav class="row docs-toc" aria-label="sections">
@@ -160,8 +157,7 @@ svg.is-focus .chart-row:not(.is-lit) { opacity: 0.35; }
     Enterprise login), an installed mod's <code class="code">classic.*</code> hooks never run, so
     that design goes dark exactly where it is most needed.</p>
   <ul class="stack claims" role="list">
-    <li><strong>native first</strong> — every hook is on a native event but
-      <code class="code">classic.Notification</code>: no native notification event exists.</li>
+    <li><strong>native first</strong> — every hook is on a native event.</li>
     <li><strong>the stand-in</strong> — no native event injects at session start, so the first
       <code class="code">prompt.submit</code> attaches its <code class="code">context</code> block
       instead (<a class="link" href="#pane">pane</a>).</li>
@@ -192,12 +188,11 @@ svg.is-focus .chart-row:not(.is-lit) { opacity: 0.35; }
       then the <code class="code">CLAUDE_CODE_PLUGIN_DIRS</code> entry is dropped. A relative-path plugin
       of a marketplace added from a local path loads in place too (Claude Code 2.1.318 docs), so no
       <code class="code">version</code> bump per change; check its <code class="code">installPath</code>
-      then. Until cutover <code class="code">mise run link</code>'s mod check is broken on this branch: it
-      still reads <code class="code">plugins/perpetual</code>.</li>
+      then.</li>
     <li><strong>perpetual is gone</strong> — uninstalled 2026-11-06 (owner: "make sure we are no
       longer running perpetual too, remove the plugin definition to be safe"): its
-      <code class="code">enabledPlugins</code> row and cache removed. Until chunks 6–8 land there is no
-      docket hook and no shift band.</li>
+      <code class="code">enabledPlugins</code> row and cache removed. Until chunk 8 lands there is no
+      shift band.</li>
   </ul>
   <pre class="snippet">claude plugin validate plugins/subether --strict
 claude plugin test plugins/subether</pre>
@@ -208,9 +203,9 @@ claude plugin test plugins/subether</pre>
     <h2 class="h2">Events</h2>
     <p class="docs-note">What
       <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/hooks/register.tsx">plugins/subether/hooks/register.tsx</a>
-      wires; a planned row is a pass-through stub until its chunk lands.</p>
+      wires; a planned row is not wired until its chunk lands.</p>
   </header>
-  <figure class="figure"><img class="figure-light" src="figures/session-events.png" alt="Seven stations on one rail, left to right: session.start, the first prompt.submit, each prompt.submit, tool.call (highlighted), session.measure, turn.complete and session.end; under each, what subether does there." /><img class="figure-dark" src="figures/session-events-dark.png" alt="" aria-hidden="true" loading="lazy" /><figcaption>One session, event by event: every native event a session raises and what subether does at each. Source: Claude Design canvas <a href="https://claude.ai/artifact/MTz8JkYYiUUbNG7svL9sPS">claude figures</a>, board session-events.</figcaption></figure>
+  <figure class="figure"><img class="figure-light" src="figures/session-events.png" alt="Six stations on one rail, left to right: session.start, the first prompt.submit, each prompt.submit, tool.call (highlighted), session.measure and session.end; under each, what subether does there." /><img class="figure-dark" src="figures/session-events-dark.png" alt="" aria-hidden="true" loading="lazy" /><figcaption>One session, event by event: every native event a session raises and what subether does at each. Source: Claude Design canvas <a href="https://claude.ai/artifact/MTz8JkYYiUUbNG7svL9sPS">claude figures</a>, board session-events.</figcaption></figure>
   <figure class="figure">
     <div class="chart" id="hook-graph"><noscript><p class="docs-note">The hook graph needs JavaScript; its data is <a class="link" href="data/hooks.json">docs/data/hooks.json</a>.</p></noscript></div>
     <figcaption>The hook graph: every registration in register.tsx, what it reads and writes, and where its effects land. Data: <a href="data/hooks.json">docs/data/hooks.json</a>, checked by the gate.</figcaption>
@@ -222,21 +217,19 @@ claude plugin test plugins/subether</pre>
     </thead>
     <tbody>
       <tr><td><code class="code">agent.spawn</code></td><td>—</td><td>pin a spawn with no <code class="code">model</code>, not a fork, under a premium parent (<code class="code">fable</code>/<code class="code">mythos</code>) to <code class="code">opus</code>, one log line</td><td>live</td></tr>
-      <tr><td><code class="code">classic.Notification</code></td><td><code class="code">agent_needs_input</code>, <code class="code">idle_prompt</code>, <code class="code">permission_prompt</code></td><td><code class="code">docket --hook</code> with <code class="code">e</code></td><td>chunk 6</td></tr>
       <tr><td><code class="code">command.run</code></td><td><code class="code">subether</code></td><td>open the recall pane</td><td>live</td></tr>
-      <tr><td rowspan="3"><code class="code">prompt.submit</code></td><td rowspan="2">—</td><td>first prompt with an ask under each session id: the <code class="code">sandman-next recall</code> seed, which writes the start mark, as one capped <code class="code">context</code> block</td><td>live</td></tr>
-      <tr><td>per-prompt docket digest; the other first-prompt sources</td><td>chunks 6, 7</td></tr>
+      <tr><td rowspan="3"><code class="code">prompt.submit</code></td><td rowspan="2">—</td><td>first prompt with an ask under each session id: the <code class="code">sandman recall</code> seed, which writes the start mark, as one capped <code class="code">context</code> block</td><td>live</td></tr>
+      <tr><td>the other first-prompt source, <code class="code">sandman report --hook</code></td><td>chunk 7</td></tr>
       <tr><td><code class="code">composer</code></td><td>a <code class="code">prompt</code> line in the <a class="link" href="#log">tool log</a>, unjudged and unawaited</td><td>live</td></tr>
-      <tr><td><code class="code">session.end</code></td><td>—</td><td><code class="code">sandman-next take</code> on every reason under the 1.5 s bound (the binary decides and records the end in sandman's ledger); chunk 6 · the session's docket resolve beside it</td><td>live; chunk 6</td></tr>
+      <tr><td><code class="code">session.end</code></td><td>—</td><td><code class="code">sandman take</code> on every reason under the 1.5 s bound (the binary decides and records the end in sandman's ledger)</td><td>live</td></tr>
       <tr><td><code class="code">session.measure</code></td><td>—</td><td>the gauge reading; the five-hour window → <code class="code">window.json</code></td><td>live</td></tr>
       <tr><td rowspan="2"><code class="code">session.start</code></td><td>—</td><td>the gauge's first reading and 15 s poll; later the band's commands and timer</td><td>live · chunk 8</td></tr>
       <tr><td><code class="code">isInteractive</code></td><td>open the pane unasked, register <code class="code">/subether</code></td><td>live</td></tr>
       <tr><td rowspan="4"><code class="code">tool.call</code></td><td>—</td><td>the daily tool log; registered first, so outermost</td><td>live</td></tr>
       <tr><td><code class="code">Bash</code></td><td>the Bash guard</td><td>live</td></tr>
       <tr><td><code class="code">Edit</code>, <code class="code">Write</code></td><td>deny a <code class="code">.yml</code> path</td><td>live</td></tr>
-      <tr><td><code class="code">/^(?:Bash|mcp__sandman(?:-next)?__recall)$/u</code></td><td>keep each recall the agent pulls for the pane</td><td>live</td></tr>
+      <tr><td><code class="code">/^(?:Bash|mcp__sandman__recall)$/u</code></td><td>keep each recall the agent pulls for the pane</td><td>live</td></tr>
       <tr><td><code class="code">turn.step</code></td><td>—</td><td>the gauge's effort flag</td><td>live</td></tr>
-      <tr><td><code class="code">turn.complete</code></td><td>main loop</td><td><code class="code">docket --hook</code> with a synthesized Stop payload</td><td>chunk 6</td></tr>
       <tr><td rowspan="3"><code class="code">ui.render</code></td><td><code class="code">PromptHint</code></td><td>the gauge row</td><td>live</td></tr>
       <tr><td><code class="code">Pane</code></td><td>the recall pane's body</td><td>live</td></tr>
       <tr><td><code class="code">AbovePrompt</code></td><td>the shift row</td><td>chunk 8</td></tr>
@@ -293,14 +286,14 @@ claude plugin test plugins/subether</pre>
       <code class="code">sdk</code>, <code class="code">scheduled-trigger</code> or <code class="code">coordinator</code>
       (so again after <code class="code">/clear</code>, and a <code class="code">--bg</code> or
       <code class="code">-p</code> session's opening brief); a task notification, a peer's message or any other
-      harness prompt passes and leaves the slot — runs <code class="code">sandman-next recall</code>
+      harness prompt passes and leaves the slot — runs <code class="code">sandman recall</code>
       (5 s; it bounds itself at 4) on <code class="code">{cwd, interactive, prompt, session, surface}</code>,
       <code class="code">interactive</code> whether a terminal draws the session and
       <code class="code">surface</code> the first that does. It writes the session's start mark, the one the
       take and the encode read, and prints within 9,000 characters; the stdout is one
       <code class="code">context</code> block, capped at 10,000 as a guard, cut at a line break and the cut
       named. Tried once per id; a failure attaches nothing, and the prompt always goes through.</li>
-    <li><strong>the pulls</strong> — each Bash <code class="code">sandman[-next] recall</code> or MCP
+    <li><strong>the pulls</strong> — each Bash <code class="code">sandman recall</code> or MCP
       <code class="code">recall</code> whose result carries a <code class="code">recall · </code> header.</li>
     <li><strong>the rows</strong> — <code class="code">recall · &lt;n&gt; pulls · &lt;sent&gt; sent</code>, then
       a row per recall, newest first and open: <code class="code">▾ &lt;hh:mm&gt;  seed|agent  &lt;cue&gt;  &lt;n&gt; sent</code>
@@ -342,7 +335,7 @@ claude plugin test plugins/subether</pre>
     <li><strong>fail closed</strong> — a command nested past 16 levels or 64 groups, or one it cannot
       read, is denied as unreadable; a hook that throws or times out before passing the call on denies
       it through its <code class="code">.catch</code>.</li>
-    <li><strong>marked</strong> — each denial first runs <code class="code">sandman-next mark</code> on
+    <li><strong>marked</strong> — each denial first runs <code class="code">sandman mark</code> on
       <code class="code">{"kind":"guard","rationale":"&lt;rule&gt;: &lt;first 200 chars&gt;","session","tool"}</code>,
       5 s, one <code class="code">guard</code> line in sandman's ledger; a failed mark is one dim log line
       and the call is still denied.</li>
@@ -400,8 +393,7 @@ claude plugin test plugins/subether</pre>
       <code class="code">samples</code> (the token trend for the ETA), <code class="code">toggled</code>
       (the pane's rows pressed from their default).</li>
     <li><strong>declared, planned</strong> — <code class="code">last</code> and
-      <code class="code">shift</code> (the band, chunk 8), <code class="code">seen</code> (the docket
-      threads the per-prompt digest has shown, chunk 7).</li>
+      <code class="code">shift</code> (the band, chunk 8).</li>
     <li><strong>reset</strong> — <code class="code">/clear</code>, <code class="code">/resume</code>
       and <code class="code">/branch</code> reset every atom to its default: the next prompt seeds
       again, the pane empties and the gauge waits for its next reading.</li>
@@ -423,7 +415,7 @@ claude plugin test plugins/subether</pre>
     (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/scripts/charts.ts">scripts/charts.ts</a>:
     the hooks, atoms and the call machine's writes), fmt check,
     oxlint, tsc at the root and in the mod, the unit tests,
-    <code class="code">claude plugin validate --strict</code> and
+    <code class="code">claude plugin validate</code> and
     <code class="code">claude plugin test</code> — and prints a step's output only when it fails.</p>
   <ul class="stack claims" role="list">
     <li><strong>hk</strong>
@@ -463,28 +455,21 @@ claude plugin test plugins/subether</pre>
       … i also want every tool call logged to a file, one log per day").</li>
     <li><strong>Sandman</strong>: ✔ 2026-11-06 the
       <code class="code">agent.spawn</code> pin under a premium parent and <code class="code">session.end</code> →
-      <code class="code">sandman-next take</code>; ✔ 2026-11-13 the recall seed, which writes the start mark,
+      <code class="code">sandman take</code>; ✔ 2026-11-13 the recall seed, which writes the start mark,
       and the pane rebuilt around it; still to come: the context cap's
       <code class="code">guard</code> mark.</li>
     <li><strong>Line judge</strong> (since 2026-11-10 · "i will use jev to check all the lines once at
       the end instead of on the fly"): Jev judges the <a class="link" href="#log">tool log</a>'s call and
       prompt lines in one pass at the end rather than per call, and becomes the classifier that selects context for
       <code class="code">sandman recall</code>.</li>
-    <li><strong>Docket</strong>: digest, dead-session sweep, synthesized Stop, Notification and
-      UserPromptSubmit payloads, the session's resolve at end.</li>
-    <li><strong>Context</strong>: the other first-prompt sources (report, docket digest, sweep) and
-      the per-prompt changed-threads digest, capped 2,500.</li>
+    <li><strong>Context</strong>: the other first-prompt source,
+      <code class="code">sandman report --hook</code>.</li>
     <li><strong>Band</strong>: the shift row above the prompt — atoms, 15 s timer,
-      <code class="code">AbovePrompt</code> render, <code class="code">/docket</code>
-      <code class="code">/shift</code> <code class="code">/trail</code>.</li>
+      <code class="code">AbovePrompt</code> render, <code class="code">/shift</code> <code class="code">/trail</code>.</li>
     <li><strong>README and cutover</strong>: below.</li>
   </ol>
   <h3 class="h3">Cutover</h3>
   <ol class="stack">
-    <li><code class="code">mise run link</code>
-      (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/.mise/tasks/link">.mise/tasks/link</a>)
-      still reads <code class="code">plugins/perpetual</code>, so it is broken on this branch; point it at
-      subether.</li>
     <li>AGENTS "Working here", and this repo's design page sections for the mod and marketplace.</li>
     <li>The README behaviour table brought level with the tree; the version bumped.</li>
     <li><code class="code">settings.json</code>: <code class="code">enabledPlugins</code> gains

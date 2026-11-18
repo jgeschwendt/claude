@@ -1,5 +1,5 @@
-// End-to-end checks on the link task, copied into a scratch checkout (it resolves the checkout from its own path, so
-// the trunk's plugin.json is the scratch one) and run against a scratch CLAUDE_HOME.
+// End-to-end checks on the link task, copied into a scratch checkout (it resolves the checkout from its own path) and
+// run against a scratch CLAUDE_HOME.
 import { expect, test } from 'bun:test';
 
 const rig = async (): Promise<{
@@ -9,11 +9,7 @@ const rig = async (): Promise<{
 }> => {
   const root = await Bun.$`realpath $(mktemp -d)`.text();
   const [checkout, home] = [`${root.trim()}/checkout`, `${root.trim()}/home`];
-  await Bun.$`mkdir -p ${home}/plugins ${checkout}/.mise/tasks && cp ${import.meta.dir}/link ${checkout}/.mise/tasks/`;
-  await Bun.write(
-    `${checkout}/plugins/perpetual/.claude-plugin/plugin.json`,
-    '{ "version": "1.0.0" }',
-  );
+  await Bun.$`mkdir -p ${home} ${checkout}/.mise/tasks && cp ${import.meta.dir}/link ${checkout}/.mise/tasks/`;
   const link = async (...argv: string[]): Promise<string> => {
     const environment = { ...process.env, CLAUDE_HOME: home };
     const run = await Bun.$`${checkout}/.mise/tasks/link ${argv}`
@@ -25,23 +21,8 @@ const rig = async (): Promise<{
   return { checkout, home, link };
 };
 
-// The perpetual line is `ok` only while every user-scope copy is the trunk's version, whatever a project-scope copy
-// holds; an older, newer or missing install fails the check and names its fix.
-test.each([
-  [['1.0.0'], 0, 'ok: perpetual 1.0.0'],
-  [['1.0.0', '1.0.0'], 0, 'ok: perpetual 1.0.0'],
-  [
-    ['0.0.1'],
-    1,
-    'differs: perpetual 0.0.1 ≠ trunk 1.0.0 (claude plugin update perpetual@jgeschwendt)',
-  ],
-  [
-    ['99.0.0'],
-    1,
-    'differs: perpetual 99.0.0 ≠ trunk 1.0.0 (claude plugin update perpetual@jgeschwendt)',
-  ],
-  [[], 1, 'missing: perpetual (claude plugin install perpetual@jgeschwendt)'],
-])('perpetual installed at %p', async (installed, code, line) => {
+// A home linked throughout passes the check.
+test('a linked home is ok', async () => {
   const { checkout, home, link } = await rig();
   const entries = [
     'rules',
@@ -51,19 +32,10 @@ test.each([
     'settings.json',
     'settings.local.json',
   ];
-  await Promise.all(
-    entries.map(async (entry) => {
-      await Bun.$`ln -s ${checkout}/${entry} ${home}/${entry}`;
-    }),
+  await Promise.all(entries.map((entry) => Bun.$`ln -s ${checkout}/${entry} ${home}/${entry}`));
+  expect(await link('--check')).toBe(
+    ['0', ...entries.map((entry) => `ok: ${entry}`), ''].join('\n'),
   );
-  const scopes = [
-    { scope: 'project', version: '0.0.0' },
-    ...installed.map((version) => ({ scope: 'user', version })),
-  ];
-  const plugins = { 'perpetual@jgeschwendt': scopes };
-  await Bun.write(`${home}/plugins/installed_plugins.json`, JSON.stringify({ plugins }));
-  const ok = entries.map((entry) => `ok: ${entry}`);
-  expect(await link('--check')).toBe([code, ...ok, line, ''].join('\n'));
 });
 
 /**
@@ -79,7 +51,6 @@ const lines = (missing: string, stale: string): string =>
     'ok: settings.json',
     `${missing}: settings.local.json`,
     `${stale}: gone`,
-    'missing: perpetual (claude plugin install perpetual@jgeschwendt)',
     '',
   ].join('\n');
 

@@ -8,15 +8,6 @@ Each pass-through: the engine's hook, answering with the event it saw, the fire,
 */
 const PASS: [string, (on: On) => void, ($: Engine) => Promise<unknown>, string][] = [
   [
-    'classic.Notification',
-    (on): void => {
-      on('classic.Notification', ($, e) => ({ stopReason: JSON.stringify(e) }));
-    },
-    async ($): Promise<unknown> =>
-      await $.classic.Notification({ message: SENTINEL, notification_type: 'idle_prompt' }),
-    'stopReason',
-  ],
-  [
     'prompt.submit',
     (on): void => {
       on('prompt.submit', ($, e) => ({ text: JSON.stringify(e) }));
@@ -50,21 +41,6 @@ const PASS: [string, (on: On) => void, ($: Engine) => Promise<unknown>, string][
     async ($): Promise<unknown> =>
       await $.tool.call({ content: SENTINEL, file_path: '/w/a.md', tool: 'Write' }),
     'result',
-  ],
-  [
-    'turn.complete',
-    (on): void => {
-      on('turn.complete', ($, e) => ({ text: JSON.stringify(e) }));
-    },
-    async ($): Promise<unknown> =>
-      await $.turn.complete({
-        answer: SENTINEL,
-        durationMs: 1,
-        isAborted: false,
-        reason: 'answer',
-        turnId: 't',
-      }),
-    'text',
   ],
 ];
 

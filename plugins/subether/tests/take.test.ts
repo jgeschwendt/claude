@@ -44,7 +44,7 @@ const engine = (
 };
 
 for (const reason of ['clear', 'logout', 'other', 'prompt_input_exit', 'resume']) {
-  test(`${reason}: sandman-next take on cwd, reason and session, 1.5 s, then core with the end unchanged`, async ($, on) => {
+  test(`${reason}: sandman take on cwd, reason and session, 1.5 s, then core with the end unchanged`, async ($, on) => {
     const { ends, logs, runs } = engine(on);
     expect(await $.session.end(end(reason))).toEqual({ sessionId: 's1' });
     expect([ends, logs, runs]).toEqual([
@@ -52,7 +52,7 @@ for (const reason of ['clear', 'logout', 'other', 'prompt_input_exit', 'resume']
       [],
       [
         {
-          argv: ['/home/test/.local/bin/sandman-next', 'take'],
+          argv: ['/home/test/.local/bin/sandman', 'take'],
           stdin: `{"cwd":"/w","reason":"${reason}","session":"s1"}`,
           timeoutMs: TAKE,
         },
@@ -64,7 +64,7 @@ for (const reason of ['clear', 'logout', 'other', 'prompt_input_exit', 'resume']
 test('a take that fails is a log line, and core still ends the session', async ($, on) => {
   const { ends, logs } = engine(on, { exitCode: 1 });
   await $.session.end(end('other'));
-  expect([ends, logs]).toEqual([[end('other')], ['sandman-next take exited 1: no such session']]);
+  expect([ends, logs]).toEqual([[end('other')], ['sandman take exited 1: no such session']]);
 });
 
 test('a take that throws passes the end on', async ($, on) => {

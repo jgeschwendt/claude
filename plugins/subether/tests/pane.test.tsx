@@ -20,7 +20,7 @@ const SEED = [
   '  · 0a1b2c3d 2025-08-01 — Rerun the alpha bench (on · the box) — soon (jgeschwendt/alpha)',
   `  · 6e7f8a9b ${TODAY} — Draft the beta release notes`,
   '  · 4e5f6a7b waiting: after grove ships — Cut sandman over',
-  '  … 2 more: sandman-next due',
+  '  … 2 more: sandman due',
   'always · about the person, or pinned',
   '  · Prefers short replies (user · common/user_short.md) — lead with the result',
   '  · ~Writes terse commits (user · traces/common/user_terse.md) — one line',
@@ -30,7 +30,7 @@ const SEED = [
   '.92 ~Beta retries back off twice (feedback · traces/-work-beta/feedback_retry.md) — then stops',
   '.90 Mock clocks drift (knowledge · knowledge/rust/mock_clocks.md) — a mock hides drift',
   '.80 ~Cut a release (playbook · traces/@rust/playbook_cut_a_release.md) — build, gate, tag',
-  'read one in full: sandman-next show <path>',
+  'read one in full: sandman show <path>',
 ].join('\n');
 const STDERR = 'sandman recall: embed: exit status: 7: curl\nrecall: scorer="kev" ms=1686\n';
 
@@ -41,7 +41,7 @@ const hhmm = (at: number): string =>
     .toString({ smallestUnit: 'minute' });
 
 /**
-The engine beneath: `sandman-next` printing the seed, the commands registered, the panes opened
+The engine beneath: `sandman` printing the seed, the commands registered, the panes opened
 */
 const engine = (
   on: On,
@@ -134,14 +134,14 @@ test("the first prompt's seed is one open row: its path and time, a failed stage
     '!      0a1b2c3d 2025-08-01 — Rerun the alpha bench (on · the box) — soon (jgeschwendt/alpha)',
     `      6e7f8a9b ${TODAY} — Draft the beta release notes`,
     '      4e5f6a7b waiting: after grove ships — Cut sandman over',
-    '~      … 2 more: sandman-next due',
+    '~      … 2 more: sandman due',
     '*  ▾ always · 2',
     '      Prefers short replies  user',
     '      ~Writes terse commits  user',
     '~  -work-alpha',
     '*  ▸ .99 Alpha deploys need the vpn  project',
     '*  ▾ .95 Pass a clock in  feedback',
-    '~      tests take time from a clock\n      sandman-next show -work-alpha/feedback_clock.md',
+    '~      tests take time from a clock\n      sandman show -work-alpha/feedback_clock.md',
     '~  traces/-work-beta',
     '*  ▸ .92 ~Beta retries back off twice  feedback',
     '~  knowledge · rust',

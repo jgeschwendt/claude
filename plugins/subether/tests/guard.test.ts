@@ -1,7 +1,7 @@
 import type { On } from 'claude-code';
 import { type Engine, expect, mock, test } from 'claude-code/testing';
 
-const BIN = '/home/test/.local/bin/sandman-next';
+const BIN = '/home/test/.local/bin/sandman';
 const PREFIX = 'subether: ';
 const RATIONALE = 200;
 const MARK_TIMEOUT = 5000;
@@ -330,7 +330,7 @@ const ALLOWED: string[] = [
 ];
 
 /**
-The engine beneath: `sandman-next` answering `exitCode` (or refusing to start), `$.session.id` refused its first `failures`
+The engine beneath: `sandman` answering `exitCode` (or refusing to start), `$.session.id` refused its first `failures`
 times, the tool log's append answering ok, every run's argv and init, the log, and every call that reached the bottom
 */
 const engine = (
@@ -479,8 +479,8 @@ test('an Edit or Write to a .yml path is denied and marked; .yaml goes on', asyn
 });
 
 for (const [name, options, line] of [
-  ['exits non-zero', { exitCode: 1 }, 'sandman-next mark exited 1: boom'],
-  ['cannot start', { isRefused: true }, expect.stringMatching(/^sandman-next mark failed: /u)],
+  ['exits non-zero', { exitCode: 1 }, 'sandman mark exited 1: boom'],
+  ['cannot start', { isRefused: true }, expect.stringMatching(/^sandman mark failed: /u)],
 ] as const) {
   test(`a mark that ${name} logs once and still denies`, async ($, on) => {
     const { logs } = engine(on, options);
@@ -515,5 +515,5 @@ test('a failed guard whose mark fails too still denies, logging once', async ($,
   expect(await bash($, 'git stash')).toEqual({ deny: UNREAD });
   expect(runs).toEqual([]);
   expect(calls).toEqual([]);
-  expect(logs).toEqual([expect.stringMatching(/^sandman-next mark failed: /u)]);
+  expect(logs).toEqual([expect.stringMatching(/^sandman mark failed: /u)]);
 });

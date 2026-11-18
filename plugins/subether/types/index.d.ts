@@ -7,15 +7,12 @@ declare module 'claude-code' {
       gauge: Gauge;
       /** planned · chunk 8: the band's `last:`, today's newest trail event; no atom() yet */
       last: TrailEvent | null;
-      /** whether a composer prompt was seen yet, so a `--bg` session's opening prompt (dispatch's brief) is told apart */
+      /** whether a composer prompt was seen yet, so a `--bg` session's opening prompt (its launcher's brief) is told apart */
       opened: boolean;
       /** the session's recalls, oldest first: the seed its first prompt ran, then each pull the agent ran */
       recalls: Recall[];
       /** the gauge's token trend for its ≈ETA, oldest first */
       samples: Sample[];
-      /** planned · chunk 7: the docket threads the per-prompt digest has shown, by id, so it names only changed ones; no
-       * atom() yet */
-      seen: Record<string, string>;
       /** planned · chunk 8: the sandman shift the band shows, from `~/.sandman/shifts/current.json`; no atom() yet */
       shift: Shift | null;
       /** the pane's rows pressed away from their default (the newest recall open, the rest shut), by key */

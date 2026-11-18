@@ -274,7 +274,7 @@ for (const [name, input, prompted] of [
   });
 }
 
-test("a --bg session's opening prompt is dispatch's brief, left out; its second is logged", async ($, on) => {
+test("a --bg session's opening prompt is its launcher's brief, left out; its second is logged", async ($, on) => {
   const { appends, time } = engine(on, {
     environment: fixture('{"CLAUDE_CODE_SESSION_KIND":"bg","CLAUDE_TOOL_LOG_DIR":"/logs"}'),
   });

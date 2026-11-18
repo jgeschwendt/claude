@@ -1,5 +1,5 @@
 /**
-The session-end take: `sandman-next take` on every reason, since the binary decides (no start mark, `resume`, a session
+The session-end take: `sandman take` on every reason, since the binary decides (no start mark, `resume`, a session
 a background job still names) and records the end in sandman's ledger; contract: the sandman repo's AGENTS.md
 `### sandman take`. The start mark it needs is the seed's (context.ts)
 */
@@ -21,8 +21,7 @@ const take: Hook<'session.end'> = async ($, e, next) => {
     reason: e.reason,
     session: e.sessionId,
   });
-  await run($, ['sandman-next', 'take'], { stdin, timeoutMs: TAKE });
-  // chunk 6 · docket resolve <id> --reason "session ended" per notification thread of the session, by id
+  await run($, ['sandman', 'take'], { stdin, timeoutMs: TAKE });
   return await next(e);
 };
 

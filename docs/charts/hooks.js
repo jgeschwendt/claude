@@ -10,8 +10,8 @@ const GAP = 8;
 const HEAD = 20;
 const COLS = [180, 250, 170];
 
-// column 2: hooks grouped by file, files in order of their first registration, the stubs last
-const files = [...new Set(data.hooks.map((h) => h.file))].toSorted((a, b) => (a === "register.tsx") - (b === "register.tsx"));
+// column 2: hooks grouped by file, files in order of their first registration
+const files = [...new Set(data.hooks.map((h) => h.file))];
 const hooks = files.flatMap((file) => data.hooks.filter((h) => h.file === file));
 const stack = (groups) => {
   let y = 0;
@@ -28,7 +28,7 @@ const stack = (groups) => {
   }
   return { at, heads, height: y };
 };
-const hookCol = stack(files.map((file) => [file === "register.tsx" ? "register.tsx · stubs" : file, hooks.filter((h) => h.file === file)]));
+const hookCol = stack(files.map((file) => [file, hooks.filter((h) => h.file === file)]));
 const mid = (ys) => d3.mean(ys) ?? 0;
 
 // column 1: events by the mean row of their hooks
@@ -57,7 +57,7 @@ const slot = new Map(kinds.map((k) => [k.name, k.slot]));
 
 const describe = (h) => [
   ["matcher", h.matcher === null ? "—" : JSON.stringify(h.matcher)],
-  ["fn", h.fn === null ? `${h.file} (inline stub)` : `${h.file}:${h.fn}`],
+  ["fn", `${h.file}:${h.fn}`],
   ["chunk", `${h.chunk} · ${h.status}`],
   ["catch", h.catch],
   ["reads", h.reads.join(", ") || "—"],
@@ -65,12 +65,12 @@ const describe = (h) => [
 ];
 const labelOf = (h) => {
   const match = h.matcher === null ? "" : ` · ${Object.values(h.matcher).flat().map((v) => (typeof v === "object" ? Object.values(v).join() : v === true ? Object.keys(h.matcher)[0] : String(v))).join(", ")}`;
-  return h.status === "stub" ? `${h.event} · chunk ${h.chunk}` : `${h.fn}${match}`;
+  return `${h.fn}${match}`;
 };
 
 const { frame, hide, show } = mount(root, {
   head: ["hook", "event", "matcher", "file:fn", "chunk", "catch", "reads", "writes", "effects", "does"],
-  legend: [...kinds.map((k) => ({ color: `var(--kind-${k.slot})`, doc: k.doc, label: k.name })), { label: "stub (planned)", mark: "stub" }],
+  legend: [...kinds.map((k) => ({ color: `var(--kind-${k.slot})`, doc: k.doc, label: k.name }))],
   rows: hooks.map((h) => [h.id, h.event, ...describe(h).slice(0, 3).map(([, v]) => v), h.catch, describe(h)[4][1], describe(h)[5][1], h.effects.map((e) => `${e.kind}: ${e.target}`).join("; ") || "—", h.does]),
   view: "graph",
 });
@@ -86,10 +86,10 @@ const draw = () => {
   const link = d3.linkHorizontal().x((d) => d[0]).y((d) => d[1]);
   const cy = (y) => y + ROW / 2;
   const links = [
-    ...hooks.map((h) => ({ dashed: h.status === "stub", from: events.find((e) => e.name === h.event), hook: h, path: [[xs[0] + COLS[0], cy(eventCol.at.get(events.find((e) => e.name === h.event)))], [xs[1], cy(hookCol.at.get(h))]] })),
-    ...[...effects.values()].flatMap((e) => e.hooks.map((h) => ({ dashed: h.status === "stub", effect: e, hook: h, path: [[xs[1] + COLS[1], cy(hookCol.at.get(h))], [xs[2], cy(effectCol.at.get(e))]] }))),
+    ...hooks.map((h) => ({ from: events.find((e) => e.name === h.event), hook: h, path: [[xs[0] + COLS[0], cy(eventCol.at.get(events.find((e) => e.name === h.event)))], [xs[1], cy(hookCol.at.get(h))]] })),
+    ...[...effects.values()].flatMap((e) => e.hooks.map((h) => ({ effect: e, hook: h, path: [[xs[1] + COLS[1], cy(hookCol.at.get(h))], [xs[2], cy(effectCol.at.get(e))]] }))),
   ];
-  const linkSel = svg.append("g").attr("class", "chart-links").selectAll("path").data(links).join("path").attr("d", (d) => link({ source: d.path[0], target: d.path[1] })).classed("is-stub", (d) => d.dashed);
+  const linkSel = svg.append("g").attr("class", "chart-links").selectAll("path").data(links).join("path").attr("d", (d) => link({ source: d.path[0], target: d.path[1] }));
 
   const heads = svg.append("g").attr("class", "chart-heads");
   for (const [col, x] of [[eventCol, xs[0]], [hookCol, xs[1]], [effectCol, xs[2]]]) {
@@ -100,7 +100,7 @@ const draw = () => {
     svg.append("g").selectAll("g").data(items).join("g").attr("class", `chart-node ${cls}`).attr("transform", (d) => `translate(${x},${at.get(d)})`).attr("tabindex", 0).call((g) => g.append("rect").attr("width", w).attr("height", ROW).attr("rx", 6));
   const eventSel = nodes(events, xs[0], COLS[0], eventCol.at, "is-event");
   eventSel.append("text").attr("x", 8).attr("y", 16).text((d) => d.name);
-  const hookSel = nodes(hooks, xs[1], COLS[1], hookCol.at, "is-hook").classed("is-stub", (d) => d.status === "stub");
+  const hookSel = nodes(hooks, xs[1], COLS[1], hookCol.at, "is-hook");
   hookSel.append("text").attr("x", 8).attr("y", 16).text(labelOf);
   const effectSel = nodes([...effects.values()], xs[2], COLS[2], effectCol.at, "is-effect");
   effectSel.append("rect").attr("class", "chart-mark").attr("x", 8).attr("y", 8).attr("width", 8).attr("height", 8).attr("rx", 2).style("fill", (d) => `var(--kind-${slot.get(d.kind)})`);

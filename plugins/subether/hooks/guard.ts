@@ -1094,13 +1094,13 @@ is one log line
 const unread = async ($: EngineInterface, tool: string, why: string): Promise<ToolCallResult> => {
   const text = `subether: the guard could not read this call (${why.split('\n', 1)[0] ?? ''}) — it is denied, not run; rephrase the command`;
   await mark($, tool, text).catch((error: unknown) => {
-    $.ui.log(`sandman-next mark failed: ${String(error)}`);
+    $.ui.log(`sandman mark failed: ${String(error)}`);
   });
   return { deny: text };
 };
 
 /**
-Marks the denial of a `tool` call on `subject` (`sandman-next mark`, kind `guard`; a failed run one log line) and denies with the house rule; a mark that rejects (a `$` call refused) fails the guard, which denies all the same. Caught here, not left to the `.catch` handler: in the kit a rejection under the tool log's hook, which wraps this one, fails that hook instead
+Marks the denial of a `tool` call on `subject` (`sandman mark`, kind `guard`; a failed run one log line) and denies with the house rule; a mark that rejects (a `$` call refused) fails the guard, which denies all the same. Caught here, not left to the `.catch` handler: in the kit a rejection under the tool log's hook, which wraps this one, fails that hook instead
 */
 const refuse = async (
   $: EngineInterface,

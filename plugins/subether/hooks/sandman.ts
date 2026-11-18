@@ -38,12 +38,12 @@ async function run(
 }
 
 /**
-`sandman-next mark` on `{"kind":"guard","rationale","session","tool"}` within 5 s: one `guard` line in sandman's ledger
+`sandman mark` on `{"kind":"guard","rationale","session","tool"}` within 5 s: one `guard` line in sandman's ledger
 (contract: the sandman repo's AGENTS.md `### sandman mark`); a failure is `run`'s log line
 */
 async function mark($: EngineInterface, tool: string, rationale: string): Promise<void> {
   const stdin = JSON.stringify({ kind: 'guard', rationale, session: await $.session.id(), tool });
-  await run($, ['sandman-next', 'mark'], { stdin, timeoutMs: MARK_TIMEOUT });
+  await run($, ['sandman', 'mark'], { stdin, timeoutMs: MARK_TIMEOUT });
 }
 
 /**

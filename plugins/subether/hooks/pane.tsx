@@ -102,7 +102,7 @@ const parse = (text: string, stderr = ''): Parts => {
       of: Number(head.of),
       sent: Number(head.sent),
     },
-    me: find(/^read one in full: (?<hit>\S+) show/u) ?? 'sandman-next',
+    me: find(/^read one in full: (?<hit>\S+) show/u) ?? 'sandman',
     more: find(/^ {2}… (?<hit>\d+) more: /u),
     ms: find(/ ms=(?<hit>\d+)/u),
     none: find(/^(?<hit>nothing recalled.*)$/u),

@@ -9,7 +9,7 @@ const STATS = 'recall: scorer="pplx" ms=1958\n';
 const TIMEOUT = 5000;
 
 /**
-The engine beneath: `sandman-next` answering `stdout()`/`exitCode` (rejecting when `isThrown`), on `surfaces`, under
+The engine beneath: `sandman` answering `stdout()`/`exitCode` (rejecting when `isThrown`), on `surfaces`, under
 the session id `id()`; each of its runs, the log lines, every prompt that reached the bottom, and each recalls write
 */
 const engine = (
@@ -39,7 +39,7 @@ const engine = (
       stderr: '',
       stdout: '',
     };
-    if (!String(e.argv[0]).endsWith('sandman-next')) {
+    if (!String(e.argv[0]).endsWith('sandman')) {
       return { value: ran };
     }
     runs.push({ argv: e.argv, stdin: e.init?.stdin, timeoutMs: e.init?.timeoutMs });
@@ -73,7 +73,7 @@ const submit = async ($: Engine, extra: Partial<PromptSubmitInput> = {}): Promis
   await $.prompt.submit({ origin: { kind: 'composer' }, text: 'hi', wait: false, ...extra });
 };
 
-test('the first prompt seeds: sandman-next recall on its stdin, 5 s, stdout attached after what it carried, recorded with stderr', async ($, on) => {
+test('the first prompt seeds: sandman recall on its stdin, 5 s, stdout attached after what it carried, recorded with stderr', async ($, on) => {
   const { logs, prompts, recalls, runs } = engine(on);
   await submit($, { context: ['earlier'] });
   expect([logs, prompts.map(({ context }) => context), runs]).toEqual([
@@ -81,7 +81,7 @@ test('the first prompt seeds: sandman-next recall on its stdin, 5 s, stdout atta
     [['earlier', SEED]],
     [
       {
-        argv: ['/home/test/.local/bin/sandman-next', 'recall'],
+        argv: ['/home/test/.local/bin/sandman', 'recall'],
         stdin: '{"cwd":"/w","interactive":true,"prompt":"hi","session":"s1","surface":"terminal"}',
         timeoutMs: TIMEOUT,
       },
@@ -138,7 +138,7 @@ test('a seed past the cap is cut at its last line break, named, and logged; with
   await submit($);
   [session, stdout] = ['s2', 'c'.repeat(CAP + 1)];
   await submit($);
-  const reason = `context cap: sandman-next recall printed ${long.length} chars, cap ${CAP}`;
+  const reason = `context cap: sandman recall printed ${long.length} chars, cap ${CAP}`;
   expect(prompts.map(({ context }) => context?.[0])).toEqual([
     `${'a'.repeat(CAP - 1)}\n… [${reason}]`,
     expect.stringMatching(new RegExp(`^c{${CAP}}… \\[context cap: `, 'u')),
@@ -155,7 +155,7 @@ for (const [name, options, line] of [
     await submit($);
     await submit($);
     expect([logs, prompts.map(({ context }) => context), runs.length]).toEqual([
-      [`context: sandman-next recall: ${line}`],
+      [`context: sandman recall: ${line}`],
       [undefined, undefined],
       1,
     ]);
@@ -165,10 +165,10 @@ for (const [name, options, line] of [
 
 test('a pull the agent ran, by Bash or MCP, is kept once its result has a recall header; another Bash call, or a denied one, is not', async ($, on) => {
   const { recalls } = engine(on);
-  const pulled = 'sandman-next recall --cue x\nrecall · x · 0 of 3';
+  const pulled = 'sandman recall --cue x\nrecall · x · 0 of 3';
   await $.tool.call({ command: pulled, tool: 'Bash' });
   await $.tool.call({ command: 'sandman recall --cue x', tool: 'Bash' });
-  await $.tool.call({ command: 'sandman-next recall --cue x; git stash', tool: 'Bash' });
+  await $.tool.call({ command: 'sandman recall --cue x; git stash', tool: 'Bash' });
   await $.tool.call({ command: 'cat f\nrecall · x · 0 of 3', tool: 'Bash' });
   await $.tool.call({ cue: 'recall · y · 1 of 3', tool: 'mcp__sandman__recall' });
   expect(recalls()).toEqual([

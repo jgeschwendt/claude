@@ -144,7 +144,7 @@ const log: Hook<'tool.call'> = async ($, e, next) => {
 };
 
 /**
-The prompt's line, keys in the wire order: kind (`prompt`), at, session, head. Skipped: a prompt over 400 characters, one starting `# `, and a `claude --bg` session's opening prompt (dispatch's brief)
+The prompt's line, keys in the wire order: kind (`prompt`), at, session, head. Skipped: a prompt over 400 characters, one starting `# `, and a `claude --bg` session's opening prompt (its launcher's brief)
 */
 const logged = async ($: EngineInterface, text: string): Promise<void> => {
   const isOpening = !(await read($, opened));

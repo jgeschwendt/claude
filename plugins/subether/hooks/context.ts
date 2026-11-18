@@ -1,6 +1,6 @@
 /**
 The recall's two entries (contract: the sandman repo's AGENTS.md `### sandman recall`). The seed: a session's first
-prompt, and the first under a new id (after `/clear`), runs `sandman-next recall`, which writes the session's start mark
+prompt, and the first under a new id (after `/clear`), runs `sandman recall`, which writes the session's start mark
 and prints the instructions, the due work, the always-set and the prompt's ranked lines, attached as one context block under
 perpetual's 10,000 cap. The pull: each recall the agent runs, by Bash or MCP, kept beside it for the pane
 */
@@ -35,7 +35,7 @@ the seed bounds itself at 4 s; 5 s covers its start
 const TIMEOUT = 5000;
 
 /**
-`sandman-next recall` on the seed's stdin: `interactive` and `surface` as `session.start` reads them (a terminal under the REPL; `$.session.surfaces()[0]`, left out where nothing draws), so the start mark it writes keeps both. A non-zero exit rejects
+`sandman recall` on the seed's stdin: `interactive` and `surface` as `session.start` reads them (a terminal under the REPL; `$.session.surfaces()[0]`, left out where nothing draws), so the start mark it writes keeps both. A non-zero exit rejects
 */
 const seed = async (
   $: EngineInterface,
@@ -54,7 +54,7 @@ const seed = async (
     session,
     surface: surfaces[0],
   });
-  const argv = [`${home ?? ''}/.local/bin/sandman-next`, 'recall'];
+  const argv = [`${home ?? ''}/.local/bin/sandman`, 'recall'];
   const { exitCode, stderr, stdout } = await $.process.run(argv, { stdin, timeoutMs: TIMEOUT });
   if (exitCode !== 0) {
     throw new Error(`exited ${exitCode}: ${stderr.trim().split('\n', 1)[0] ?? ''}`);
@@ -75,17 +75,17 @@ const context: Hook<'prompt.submit'> = async ($, e, next) => {
     return await next(e);
   }
   const { stdout, ...ran } = await seed($, e.text).catch((error: unknown) => {
-    $.ui.log(`context: sandman-next recall: ${String(error)}`);
+    $.ui.log(`context: sandman recall: ${String(error)}`);
     return { error: String(error), stdout: '' };
   });
   const text = stdout.trim();
-  const reason = `context cap: sandman-next recall printed ${text.length} chars, cap ${CAP}`;
+  const reason = `context cap: sandman recall printed ${text.length} chars, cap ${CAP}`;
   const isCut = text.length > CAP;
   const kept = isCut
     ? `${text.slice(0, text.lastIndexOf('\n', CAP) + 1 || CAP)}… [${reason}]`
     : text;
   if (isCut) {
-    // chunk 4 · a guard mark: `sandman-next mark` on `{"kind":"guard","rationale":<reason>,…}`
+    // chunk 4 · a guard mark: `sandman mark` on `{"kind":"guard","rationale":<reason>,…}`
     $.ui.log(reason);
   }
   const at = await $.clock.now();
@@ -97,7 +97,7 @@ const context: Hook<'prompt.submit'> = async ($, e, next) => {
 };
 
 /**
-A pull: a Bash `sandman[-next] recall` or the MCP `recall`, kept once its result carries a recall header; the result
+A pull: a Bash `sandman recall` or the MCP `recall`, kept once its result carries a recall header; the result
 passes on as it came
 */
 const pull: MatchedHook<'tool.call', { tool: RegExp }> = async ($, e, next) => {

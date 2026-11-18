@@ -14,7 +14,7 @@ Kill only processes this session launched, by their own PIDs. Other sessions run
 ## 2. Erase
 
 ```sh
-~/.local/bin/sandman-next forget "${CLAUDE_SESSION_ID:-$CLAUDE_CODE_SESSION_ID}"
+~/.local/bin/sandman forget "${CLAUDE_SESSION_ID:-$CLAUDE_CODE_SESSION_ID}"
 ```
 
 It drops the session's ledger lines first, so the exit's take archives nothing, then removes the live transcript, its subagent files, any archived copy, the short-term pointer and every memory, knowledge page and trace attributed to the session (a `remember --session` note included), and scrubs the id from what remains. What a consolidate merged into another memory stays in that memory's body. It prints `forgot: <n> removed, <n> rewritten`, or `nothing to forget`, exit 0; any other exit is a failed erase to relay. A background job sets only `CLAUDE_CODE_SESSION_ID`, which is why both are read.
@@ -40,6 +40,6 @@ If the script reports the session still running, ask him to type `/exit`; the wa
 
 ## Say what survives
 
-Only when step 3 printed `is erased; the exit flush is watched`, tell him the conversation is erased and not recoverable. Otherwise relay the script's fallback: the exit will regrow the transcript, so `/exit`, then `sandman-next forget <sid>` from outside.
+Only when step 3 printed `is erased; the exit flush is watched`, tell him the conversation is erased and not recoverable. Otherwise relay the script's fallback: the exit will regrow the transcript, so `/exit`, then `sandman forget <sid>` from outside.
 
 Either way, name what Claude Code itself keeps, which nothing here touches: `~/.claude/history.jsonl` holds each prompt's text until it is filtered by hand, and `~/.claude/file-history/<sid>/`, `~/.claude/session-env/<sid>` and background-task output under the temp directory's `<sid>/tasks/` remain.

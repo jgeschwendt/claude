@@ -7,7 +7,7 @@
     "jgeschwendt": {
       "source": {
         "source": "directory",
-        "path": "/Users/jlg/.grove/code/jgeschwendt/claude/main"
+        "path": "~/.grove/code/jgeschwendt/claude/main"
       }
     }
   }

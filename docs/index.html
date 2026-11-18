@@ -63,23 +63,17 @@
   <p><code class="code">mise run link</code> (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/.mise/tasks/link">.mise/tasks/link</a>)
     links <code class="code">CLAUDE.md</code>, <code class="code">rules/</code>,
     <code class="code">settings.json</code>, <code class="code">settings.local.json</code>,
-    <code class="code">skills/</code> and <code class="code">workflows/</code>, then compares the installed mod with the trunk's. On the
-    <code class="code">perpetual/rewrite</code> branch that compare is broken until cutover: it still reads
-    <code class="code">plugins/perpetual/.claude-plugin/plugin.json</code>.</p>
+    <code class="code">skills/</code> and <code class="code">workflows/</code>. The mod is not compared: it loads in place, so there is no
+    versioned copy to fall behind.</p>
   <ul class="stack claims" role="list">
     <li><strong>never overwrites</strong> — an entry that is a real file or a foreign link is
       <code class="code">drift:</code> and left alone; merge it into the checkout by hand, then
       re-link. Only a missing entry is linked.</li>
     <li><strong>prunes its own</strong> — a link into this checkout for an entry no longer listed
       is <code class="code">unlink:</code>, removed.</li>
-    <li><strong>reports the mod</strong> — <code class="code">differs:</code> when the user-scope
-      <code class="code">perpetual</code> install is not the trunk's
-      <code class="code">plugin.json</code> version, <code class="code">missing:</code> when it is
-      not installed.</li>
     <li><strong><code class="code">--check</code></strong> changes nothing, reports
       <code class="code">missing:</code> / <code class="code">stale:</code> instead, and exits 1 on
-      anything but <code class="code">ok</code>; a plain run exits 1 only on drift or a mod line
-      other than <code class="code">ok</code>.</li>
+      anything but <code class="code">ok</code>; a plain run exits 1 only on drift.</li>
   </ul>
 </section>
 
@@ -91,11 +85,11 @@
       <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/README.md">plugins/subether/README.md</a>.</p>
   </header>
   <p><code class="code">subether</code>, the from-scratch successor of <code class="code">perpetual</code>
-    (uninstalled 2026-11-06), seeds a session's first prompt with <code class="code">sandman-next recall</code>,
+    (uninstalled 2026-11-06), seeds a session's first prompt with <code class="code">sandman recall</code>,
     which also marks its start, and shows that and the agent's later pulls in a pane, guards Bash and
     <code class="code">*.yml</code> writes by the house rules, logs every tool call and typed prompt, keeps the
     gauge row and five-hour window clock, and hands each ending
-    session to <code class="code">sandman-next take</code>; the docket hooks and the shift band are to come. The repo is the local marketplace <code class="code">jgeschwendt</code>
+    session to <code class="code">sandman take</code>; the shift band is to come. The repo is the local marketplace <code class="code">jgeschwendt</code>
     (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/.claude-plugin/marketplace.json">.claude-plugin/marketplace.json</a>),
     listing <code class="code">subether</code> and <code class="code">monitor</code>
     (<code class="code">skills/monitor</code>).</p>

@@ -194,7 +194,7 @@ test('string arguments are cut at 2,000 characters, nested ones too', async ($, 
   const { appends, time } = engine(on);
   const long = 'x'.repeat(CUT + EXTRA);
   await call($, time, { content: long, file_path: '/w/a.md', tool: 'Write' });
-  await call($, time, { options: [long], title: 't', tool: 'mcp__docket__open' });
+  await call($, time, { options: [long], title: 't', tool: 'mcp__sandman__remember' });
   const cut = `${'x'.repeat(CUT)}…[cut ${EXTRA} chars]`;
   expect(lines(appends).map((line) => (line as { input: unknown }).input)).toEqual([
     { content: cut, file_path: '/w/a.md' },
@@ -209,7 +209,7 @@ test('an MCP call from a subagent logs its name and agent, the reserved keys str
     consent: 'The user pressed "1: Yes"',
     id: 't1',
     requestMeta: { 'anthropic/sources': '[]' },
-    tool: 'mcp__docket__show',
+    tool: 'mcp__sandman__show',
     tool_use_id: 'tu2',
   });
   expect(lines(appends)).toEqual([
@@ -217,7 +217,7 @@ test('an MCP call from a subagent logs its name and agent, the reserved keys str
       agent: 'a1',
       id: 'tu2',
       input: { id: 't1' },
-      tool: 'mcp__docket__show',
+      tool: 'mcp__sandman__show',
     }),
   ]);
 });

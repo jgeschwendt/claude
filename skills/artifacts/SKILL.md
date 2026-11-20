@@ -1,17 +1,17 @@
 ---
-name: figure
+name: artifacts
 description: Draw a docs figure in the page itself — live HTML/SVG or a d3 chart on the gigantic design system's tokens — with no canvas, no export and no image file.
 when_to_use: >
   Use when a docs page (docs/index.html, docs/<name>.html) needs a figure,
   diagram or chart: "add a figure", "draw a diagram for the docs", "the docs
-  need a chart", "/figure", or a brief that names a figure slot. Not for UI
+  need a chart", "/artifacts", or a brief that names a figure slot. Not for UI
   mockups or taste previews before building (Claude Design), not for charts
   inside a product (that product's own chart conventions), not for README or
   markdown (no figures there).
 argument-hint: '[page] [what the figure must show]'
 ---
 
-# /figure — a docs figure drawn in the page
+# /artifacts — a docs figure drawn in the page
 
 A figure is real DOM in the docs page: themed by the design system's tokens, readable as text, and pinnable per element by the `@jlg/hud` comment layer. Nothing is drawn elsewhere and exported.
 

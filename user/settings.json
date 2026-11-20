@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "cleanupPeriodDays": 365,
+  "env": {
+    "CLAUDE_CODE_PLUGIN_DIRS": "~/.grove/code/jgeschwendt/claude/main/plugins/subether"
+  },
+  "attribution": {
+    "sessionUrl": false
+  },
+  "permissions": {
+    "allow": [
+      "Bash(~/.local/bin/sandman:*)",
+      "Bash(~/.local/bin/stele:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(git push --force-with-lease*)",
+      "Bash(git -C * push --force-with-lease*)"
+    ],
+    "defaultMode": "auto"
+  },
+  "model": "fable",
+  "worktree": {
+    "baseRef": "fresh",
+    "bgIsolation": "none"
+  },
+  "enabledPlugins": {
+    "rust-analyzer-lsp@claude-plugins-official": true,
+    "subether@synced": false,
+    "typesafe@typesafe-ai": true,
+    "typescript-lsp@claude-plugins-official": true,
+    "vercel@claude-plugins-official": true
+  },
+  "extraKnownMarketplaces": {
+    "typesafe-ai": {
+      "source": {
+        "source": "github",
+        "repo": "typesafe-ai/skills"
+      }
+    }
+  },
+  "effortLevel": "high",
+  "askUserQuestionTimeout": "never",
+  "tui": "fullscreen",
+  "voice": {
+    "enabled": true,
+    "mode": "hold"
+  },
+  "autoMemoryEnabled": false,
+  "skipDangerousModePermissionPrompt": false,
+  "skipWorkflowUsageWarning": true,
+  "theme": "auto",
+  "editorMode": "normal",
+  "verbose": false,
+  "preferredNotifChannel": "auto",
+  "switchModelsOnFlag": true,
+  "autoContinueAtUsageLimit": false,
+  "remoteControlAtStartup": false,
+  "autoUploadSessions": false,
+  "inputNeededNotifEnabled": true,
+  "agentPushNotifEnabled": true,
+  "skipAutoPermissionPrompt": true,
+  "autoMode": {},
+  "voiceEnabled": true,
+  "defaultToAgentsView": false,
+  "feedbackSurveyState": {
+    "lastShownTime": 1754086909438
+  }
+}

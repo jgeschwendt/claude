@@ -1,7 +1,7 @@
 .DS_Store
 CLAUDE.local.md
 
-# written by Claude Code through the ~/.claude/skills link
+# Claude Code's own; link moves it into a real ~/.claude/skills/, finding it by this entry
 skills/synced/
 
 # dependencies

@@ -16,7 +16,8 @@ const DENY = {
     'never mutate to inspect — `git checkout --`/`.`/`-f`/`<rev> <path>`/`--ours`/`--pathspec-from-file`, `git switch -f`, a worktree `git restore`, `git read-tree -u`/`--reset` and a `git -c alias.…` that can hide any of them discard every uncommitted change to the path, co-resident work included; undo your own edit by re-editing',
   clean: 'never mutate to inspect — `git clean` deletes untracked files, co-resident work included',
   deep: 'the guard cannot read a command nested this deep — split it into plain commands',
-  force: 'never force-push — push a new branch or a new commit instead',
+  force:
+    'never force-push — push a new branch or a new commit, or lease the exact commit you replace: --force-with-lease=<ref>:<sha>',
   pkill:
     "pkill -f matches every process's full argv — kill by resolved PID: `lsof -ti :<port>` or `pgrep -x <name>`, inspect, then `kill <pid>`",
   reset:
@@ -213,6 +214,7 @@ const GIT_VALUED =
 const HARD = /^--ha(?:rd?)?(?:=|$)/u;
 const HEX = /^[xu]/u;
 const INDEX_FORCE = /^--f|^-[^-]*f/u;
+const LEASED = /^--force-with-lease=[^:]+:[\da-f]{7,40}$/u;
 const INLINE_ALIAS =
   /^GIT_CONFIG_(?:KEY_\d+|PARAMETERS)=(?:.*[\s'"])?(?:alias|include(?:if)?)\./isu;
 const INLINE_CONFIG = /^(?:-c|--config-env=)(?<value>.*)/su;
@@ -708,7 +710,9 @@ const checkout = (rest: readonly string[]): Guard | undefined => {
 
 const push = (rest: readonly string[]): Guard | undefined => {
   const { flags, pos } = split(rest, PUSH);
-  const isForced = flags.some((word) => FORCE.test(word));
+  // a lease naming the sha it replaces cannot overwrite a commit the pusher has not seen (2026-11-20: publishing
+  // the day's amended sync commit)
+  const isForced = flags.some((word) => FORCE.test(word) && !LEASED.test(word));
   return isForced || pos.some((word) => word.startsWith('+')) ? 'force' : undefined;
 };
 

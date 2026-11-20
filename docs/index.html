@@ -57,20 +57,22 @@
   <header>
     <h2 class="h2">Link</h2>
     <p class="docs-note"><code class="code">~/.claude</code> is not a repo: Claude Code's runtime
-      state, plus one symlink into this checkout per entry it reads.</p>
+      state, plus one symlink into this checkout per item it reads.</p>
   </header>
   <!-- figures: none yet -->
   <p><code class="code">mise run link</code> (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/.mise/tasks/link">.mise/tasks/link</a>)
-    links <code class="code">CLAUDE.md</code>, <code class="code">rules/</code>,
-    <code class="code">settings.json</code>, <code class="code">settings.local.json</code>,
-    <code class="code">skills/</code> and <code class="code">workflows/</code>. The mod is not compared: it loads in place, so there is no
-    versioned copy to fall behind.</p>
+    links each <code class="code">rules/*.md</code>, <code class="code">skills/*/</code> and
+    <code class="code">workflows/*.js</code> into a real directory of that name, so another setup's items sit
+    beside ours, and each <code class="code">user/</code> file at the top: <code class="code">CLAUDE.md</code> (the user
+    memory; the root <code class="code">CLAUDE.md</code> is the project's, importing <code class="code">AGENTS.md</code>)
+    and <code class="code">settings.json</code>. A new item is live only after a run. The mod loads in place, so it is
+    not linked.</p>
   <ul class="stack claims" role="list">
-    <li><strong>never overwrites</strong> — an entry that is a real file or a foreign link is
-      <code class="code">drift:</code> and left alone; merge it into the checkout by hand, then
-      re-link. Only a missing entry is linked.</li>
-    <li><strong>prunes its own</strong> — a link into this checkout for an entry no longer listed
-      is <code class="code">unlink:</code>, removed.</li>
+    <li><strong>never overwrites</strong> — an item path, or one of the three directories, that is a real file or
+      a foreign link is <code class="code">drift:</code> and left alone; merge it by hand, then re-link.</li>
+    <li><strong>prunes its own</strong> — a link into this checkout that no item claims is
+      <code class="code">unlink:</code>, removed; one to a moved item is re-pointed. Anything else is not ours and
+      not reported.</li>
     <li><strong><code class="code">--check</code></strong> changes nothing, reports
       <code class="code">missing:</code> / <code class="code">stale:</code> instead, and exits 1 on
       anything but <code class="code">ok</code>; a plain run exits 1 only on drift.</li>
@@ -104,7 +106,7 @@
   </header>
   <p><code class="code">bun run test</code>
     (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/scripts/test.ts">scripts/test.ts</a>)
-    runs every step at once — fmt, lint, tsc, the unit tests (link, /delete), the mod's
+    runs every step at once — fmt, lint, tsc, the unit tests (link, /end and /delete), the mod's
     validate and suite — then the stele gate.</p>
   <p class="docs-note"><code class="code">ci.yaml</code> runs the same gate, the claude CLI
     installed at a pinned version, on push to main, pull requests and the merge queue; never

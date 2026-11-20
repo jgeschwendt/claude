@@ -5,7 +5,7 @@ paths:
 
 # Documentation
 
-Out of scope: pipeline-owned markdown (`~/.sandman/memories/` banks, their `MEMORY.md`) — dream/reflect-derived files are never hand-edited; route changes through the pipeline (CLAUDE.md § Memory). A memory this session itself wrote via `remember` may be updated in place (bump `updated:`) rather than duplicated.
+Out of scope: pipeline-owned markdown (`~/.sandman/memories/` banks, their `MEMORY.md`) — dream/reflect-derived files are never hand-edited; route changes through the pipeline (`sandman remember`). A memory this session itself wrote via `remember` may be updated in place (bump `updated:`) rather than duplicated.
 
 ## Present tense only
 
@@ -22,7 +22,7 @@ Out of scope: pipeline-owned markdown (`~/.sandman/memories/` banks, their `MEMO
 
 - **World class: as tight as possible, minimal yet complete.** Every sentence earns its place, and the page covers the whole public surface once; the reference stays one link away instead of restated. (since 2026-10-26 · verax docs: "i want these to be world class, as tight as possible, minimal yet complete")
 - **A docs pass tightens as it corrects.** Bringing a page current and making it denser are one job: every currency, migration or rename pass over a page also cuts slop (hedges, restated context, duplicated prose/tables, dead stamps) and reports lines before → after; a pass that only adds is a failed pass. (since 2026-11-01 · docs-currency pass: 'make sure they all tighten the docs too, no more slop')
-- **Docs are a deliverable equal to code, from the first slice.** A new project, a rewrite or a feature ships its page with its d3 charts and in-page figures (the `figure` skill) in the same change as the code; a brief to an implementing agent names the page, its charts and its figures beside the code and tests, never "README and AGENTS only". (since 2026-11-10 · the sandman rewrite's first brief left the page out: "docs with d3 charts and figures are also equally important")
+- **Docs are a deliverable equal to code, from the first slice.** A new project, a rewrite or a feature ships its page with its d3 charts and in-page figures (the `artifacts` skill) in the same change as the code; a brief to an implementing agent names the page, its charts and its figures beside the code and tests, never "README and AGENTS only". (since 2026-11-10 · the sandman rewrite's first brief left the page out: "docs with d3 charts and figures are also equally important")
 - **A docs page is reviewed live, with the hud on it.** Serve the page through `@jlg/hud`'s review server (jgeschwendt/typescript `packages/hud` README § Serve: `bun packages/hud/src/serve.ts <docs dir>`), which injects the comment layer without touching the source; watch `ws://127.0.0.1:<port>/__hud/watch` (one line per comment, the unanswered backlog replayed on every reconnect) with a background command that exits on the first `comment` or `reply` line and reconnects on close, started again after each one is answered — it has no expiry, where a Monitor lapses after 30 minutes and a lapsed watch misses comments ("your monitor has a bug", 2026-11-13); the watch stays up for as long as the server does, quiet hours included; answer each thread with `POST /__hud/reply` and leave resolving to the owner. Never poll the store or edit it by hand. (since 2026-11-11 · sandman rewrite docs: "let get my hud on the docs, i want to comment with feedback"; "monitor my threads too")
 - **The page is where we design: a settled decision lands on it in the same turn.** A design choice agreed in conversation or in a comment thread is drawn and written on the page before the reply that reports it, with what is not built yet marked as such (a dashed "next" mark on a chart, a Next entry) and what runs today still stated; a decision that lives only in a thread is a stale page. (since 2026-11-13 · sandman rewrite: "lest keep the html updated, this is our spec / where we design")
 - **Examples prove themselves.** A code example runs on the page, editable, and the output shown under it is the output of a real run, checked by the test suite — never a hand-written result comment. (since 2026-10-26 · verax docs: "can our example blocks be repls that run and prove the use cases?")
@@ -51,19 +51,8 @@ Why: nothing validates markdown pointers. (since 2026-07-19 · deleting rules/le
 ## Duplicated assertions
 
 - **Changing a fact means reconciling every doc in its cluster that asserts it.** `rg` the claim's key noun across the doc's own cluster — SKILL.md ↔ its references/, prose ↔ its diagrams, the files it links — and fix each assertion in the same turn; two files can contradict without either linking the other.
+- **A skill describes itself in its frontmatter.** Never restate a skill's behavior elsewhere: a second description is a copy that drifts.
 - **A diagram or table mirroring prose is a second copy.** Edit both in the same turn, or delete the redundant one.
 - **A cardinal count introducing a list is a claim the list will outgrow.** On any add/remove, fix the "three behaviors"-style intro count — or drop the number, the more durable fix.
 
 Why: the monitoring-guide incident above was also a sibling contradiction — the two files never linked each other, they just disagreed; readers trusted whichever loaded first.
-
-## Stamps
-
-- **`(since <date> · <source>)`** — origin: when a rule or standing claim was introduced or its meaning last changed, plus the artifact that grounds it (source portability: CLAUDE.md).
-- **`(verified <date>)`** — the last live check of a claim. Verifying an `(unverified …)` claim replaces its marker with this.
-- **`(unverified <date> · <reason>)`** — custody was owed and the claim couldn't be checked; a dated, greppable debt instead of silent trust.
-- **`(measured <date> · <source>)`** — a number this run derived rather than read: a count, a ratio, a benchmark. The source names what was counted, so a later editor can re-derive it. (since 2026-07-30 · /tighten corpus sweep, keyword precedent set across the giga family)
-- **`(fetched <date>)`** — a primary doc retrieved and quoted that day; verifies the quotation, not the behavior it describes. (since 2026-07-30 · /tighten corpus sweep D-7)
-- **`(observed <date>)`** — an incident seen live, once; the observation is its own source — weaker than a re-runnable `verified` probe. (since 2026-07-30 · /tighten corpus sweep D-7)
-- **`(reconciled <date> · <source>)`** — two artifacts conflicted; records the settlement and the side that won. (since 2026-07-30 · /tighten corpus sweep D-7)
-- **Stamp dates are ISO (`2026-07-19`)** — never the `MM/DD/YY` commit-subject format; the two are deliberately distinct.
-- **Stamp what a future editor must re-ground** — rules, standing claims, incident-derived exceptions; skip prose whose truth doesn't age. (since 2026-07-19 · the `(since …)` shape recurred across rules/ and skills/ with no defining doc)

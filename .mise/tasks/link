@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
-#MISE description="Symlink the harness entries into ~/.claude (--check only reports)"
-# Symlink into ~/.claude each entry Claude Code reads through it.
+#MISE description="Symlink each rule, skill, workflow and user file into ~/.claude (--check only reports)"
+# Link into ~/.claude, one by one, each item Claude Code reads: rules/*.md, skills/*/ (not git-ignored) and
+# workflows/*.js into real directories of those names, so another setup's items can sit beside them, and user/* under
+# its basename (user/CLAUDE.md is ~/.claude/CLAUDE.md; the checkout's own CLAUDE.md stays the project's).
 #   ok      already linked here           drift   a real file or foreign link; never overwritten
-#   link    was missing, now linked       unlink  a link here for an unlisted entry, removed
+#   link    was missing or pointed at a   unlink  a link here no item claims, removed
+#           moved item here, now linked
 # --check changes nothing (reports missing: / stale: instead) and exits 1 on anything but ok; a plain
-# run repairs link/unlink and exits 1 only on drift, which it only reports.
+# run repairs link/unlink and exits 1 only on drift, which it only reports. A directory that is drift skips its items.
 set -euo pipefail
+shopt -s nullglob
 
 check=0
 home="${CLAUDE_HOME:-$HOME/.claude}"
@@ -17,42 +21,69 @@ case "${1:-}" in
 *) echo "usage: link [--check]" >&2; exit 2 ;;
 esac
 
-entries=(
-	rules
-	skills
-	workflows
-	CLAUDE.md
-	settings.json
-	settings.local.json
-)
-
+ours() { [[ -L "$1" && "$(readlink "$1")" == "$repo/"* ]]; } # $1=path
+ignored=" $(git -C "$repo" ls-files --others --ignored --exclude-standard --directory -- skills/ | tr '\n' ' ')"
+claimed=" "
+skip=" "
 status=0
-for entry in "${entries[@]}"; do
-	dest="$home/$entry"
-	if [[ -L "$dest" && "$(readlink "$dest")" == "$repo/$entry" ]]; then
-		echo "ok: $entry"
-	elif [[ -e "$dest" || -L "$dest" ]]; then # ※ link-never-overwrites
-		echo "drift: $entry"
-		status=1
-	elif ((check)); then
-		echo "missing: $entry"
+
+for dir in rules skills workflows; do
+	dest="$home/$dir"
+	# 2026-11-20: the old layout linked each directory whole; it becomes a real one, taking along what Claude Code
+	# wrote through the link (skills/synced/, git-ignored).
+	if ((!check)) && ours "$dest"; then
+		rm "$dest" && mkdir "$dest"
+		echo "unlink: $dir"
+		if [[ "$dir" == skills ]]; then
+			for entry in $ignored; do
+				entry="${entry%/}"
+				[[ "$entry" == skills/*/* ]] && continue
+				mv "$repo/$entry" "$dest/"
+				echo "move: $entry"
+			done
+		fi
+	fi
+	if [[ -L "$dest" || -e "$dest" && ! -d "$dest" ]]; then
+		ours "$dest" && echo "stale: $dir" || echo "drift: $dir"
+		skip+="$dir "
 		status=1
 	else
-		ln -s "$repo/$entry" "$dest"
-		echo "link: $entry"
+		((check)) || mkdir -p "$dest"
 	fi
 done
 
-for dest in "$home"/* "$home"/.[!.]*; do
-	[[ -L "$dest" && "$(readlink "$dest")" == "$repo/"* ]] || continue
-	entry="${dest##*/}"
-	[[ " ${entries[*]} " == *" $entry "* ]] && continue
+for src in "$repo"/{rules/*.md,skills/*/,workflows/*.js,user/*}; do
+	rel="${src#"$repo"/}"
+	[[ "$ignored" == *" $rel "* ]] && continue
+	src="${src%/}"
+	rel="${rel#user/}"
+	rel="${rel%/}"
+	claimed+="$rel "
+	[[ "$skip" == *" ${rel%%/*} "* ]] && continue
+	dest="$home/$rel"
+	if ours "$dest" && [[ "$(readlink "$dest")" == "$src" ]]; then
+		echo "ok: $rel"
+	elif ! ours "$dest" && [[ -e "$dest" || -L "$dest" ]]; then # ※ link-never-overwrites
+		echo "drift: $rel"
+		status=1
+	elif ((check)); then
+		ours "$dest" && echo "stale: $rel" || echo "missing: $rel"
+		status=1
+	else
+		ln -sfn "$src" "$dest"
+		echo "link: $rel"
+	fi
+done
+
+for dest in "$home"/{,rules/,skills/,workflows/}*; do
+	rel="${dest#"$home"/}"
+	ours "$dest" && [[ "$claimed" != *" $rel "* && "$skip" != *" ${rel%%/*} "* ]] || continue
 	if ((check)); then
-		echo "stale: $entry"
+		echo "stale: $rel"
 		status=1
 	else
 		rm "$dest"
-		echo "unlink: $entry"
+		echo "unlink: $rel"
 	fi
 done
 

@@ -322,7 +322,8 @@ claude plugin test plugins/subether</pre>
   <figure class="figure"><img class="figure-light" src="figures/tool-call.png" alt="A tool call left to right through tool.call, log and guard (highlighted) to the tool and back; a denied call loops from the guard straight back to the log, the log writes tools/&lt;day&gt;.jsonl, the guard writes a guard event to the trail, and tool.check shadows the step before the tool." /><img class="figure-dark" src="figures/tool-call-dark.png" alt="" aria-hidden="true" loading="lazy" /><figcaption>A tool call: logged first, then guarded; a denied call never reaches the tool. Source: Claude Design canvas <a href="https://claude.ai/artifact/MTz8JkYYiUUbNG7svL9sPS">claude figures</a>, board tool-call.</figcaption></figure>
   <ul class="stack claims" role="list">
     <li><strong>denied</strong> — <code class="code">pkill -f</code>, tree discards, <code class="code">git
-      reset --hard</code>, force pushes, <code class="code">git stash</code>, <code class="code">git
+      reset --hard</code>, force pushes (a lease naming the sha it replaces,
+      <code class="code">--force-with-lease=&lt;ref&gt;:&lt;sha&gt;</code>, passes), <code class="code">git stash</code>, <code class="code">git
       clean</code>, and an Edit/Write to a <code class="code">*.yml</code> path, with
       <code class="code">subether: &lt;house rule&gt;.</code> as the reason; the full table is the
       README's.</li>

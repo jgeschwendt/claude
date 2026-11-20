@@ -1,0 +1,149 @@
+#!/usr/bin/env bun
+// session.ts [--erase] — the last call of /end and /delete: close THIS session from a detached child, so the tool call
+// returns before the CLI dies. `--erase` runs `sandman forget` first, and the child, once the CLI is gone, forgets
+// again (an exit regrows the transcript, verified 2026-11-19 on a `claude stop`) and removes what forget leaves.
+// Exit 0: armed, its one line is what the skill reports on; 1: no safe identity; 2: forget failed. Both close nothing.
+const POLL_MS = 300;
+const SHORT_ID = 8;
+
+const {
+  CLAUDE_CODE_SESSION_ID: sid = '',
+  CLAUDE_CODE_TMPDIR: tmpdir = '/tmp',
+  CLAUDE_JOB_DIR: job,
+  CLAUDE_PID: cli,
+  CLAUDE_TOOL_LOG_DIR: toolLog,
+  HOME: home,
+  XDG_STATE_HOME: state = `${home}/.local/state`,
+} = process.env;
+const pid = Number(cli);
+const short = sid.slice(0, SHORT_ID);
+const isErase = Bun.argv.includes('--erase');
+const run = (...command: string[]): number | null =>
+  Bun.spawnSync(command, { stderr: 'ignore', stdout: 'ignore' }).exitCode;
+const say = (line: string): Promise<number> => Bun.write(Bun.stdout, `${line}\n`);
+const hasSignalled = (name: NodeJS.Signals | 0): boolean => {
+  try {
+    return process.kill(pid, name);
+  } catch {
+    return false;
+  }
+};
+const attempt = async <T>(read: () => Promise<T>, fallback: T): Promise<T> => {
+  try {
+    return await read();
+  } catch {
+    return fallback;
+  }
+};
+const field = (line: string, key: string): unknown => {
+  try {
+    return JSON.parse(line)[key];
+  } catch {
+    return undefined;
+  }
+};
+const exited = async (): Promise<void> => {
+  if (!hasSignalled(0)) {
+    return;
+  }
+  await Bun.sleep(POLL_MS);
+  await exited();
+};
+
+/**
+The CLI pid is a live `claude` and not the daemon or its pty host, matched on the subcommand word alone: a watcher
+armed on the daemon waited for a daemon restart (2026-09-05), and a prompt can hold the word (2026-10-26)
+*/
+const [argv0 = '', sub = ''] = Bun.spawnSync(['ps', '-o', 'args=', '-p', String(pid)])
+  .stdout.toString()
+  .trim()
+  .split(/\s+/u, 2);
+if (
+  !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/u.test(sid) ||
+  !/(?:^|\/)claude$/u.test(argv0) ||
+  ['bg-pty-host', 'daemon'].includes(sub)
+) {
+  // a sandbox that denied `ps` still read as erased (2026-10-26)
+  await say(
+    '✻ cannot identify this session safely: nothing closed. Type /exit (background job: claude stop <id>).',
+  );
+  process.exit(1);
+}
+if (!Bun.argv.includes('--child')) {
+  if (isErase && run('sandman', 'forget', sid) !== 0) {
+    await say(
+      `✻ sandman forget failed: nothing closed or erased. Type /exit, then run sandman forget ${sid}.`,
+    );
+    process.exit(2);
+  }
+  Bun.spawn([process.execPath, import.meta.path, '--child', ...Bun.argv.slice(2)], {
+    detached: true,
+    stdio: ['ignore', 'ignore', 'ignore'],
+  }).unref();
+  await say(isErase ? `▸ erased ${sid}; the exit is watched` : `▸ ending ${short}`);
+  process.exit(0);
+}
+
+// a background job is stopped by its daemon (verified 2026-11-19 · a bg session ran --erase on itself: stopped, removed,
+// nothing named it after); an interactive CLI gets Ctrl-C twice, then TERM (unverified 2026-11-19 · that it exits and
+// SessionEnd archives on these rests on the 2.1.132 and 2.1.323 changelogs, no interactive probe)
+if (job) {
+  run('claude', 'stop', short);
+} else {
+  const INT_GAP_MS = 400;
+  const TERM_GRACE_MS = 2000;
+  hasSignalled('SIGINT');
+  await Bun.sleep(INT_GAP_MS);
+  hasSignalled('SIGINT');
+  await Bun.sleep(TERM_GRACE_MS);
+  if (hasSignalled(0)) {
+    hasSignalled('SIGTERM');
+  }
+}
+if (isErase) {
+  const FLUSH_MS = 1000;
+  await exited();
+  await Bun.sleep(FLUSH_MS);
+  run('sandman', 'forget', sid);
+  if (job) {
+    run('claude', 'rm', short);
+  }
+  const fs = process.getBuiltinModule('node:fs/promises');
+
+  /**
+  `path` without the lines whose `key` is this session, rewritten through a temp file only when one is dropped
+  */
+  const scrub = async (path: string, key: string): Promise<void> => {
+    const text = await attempt(() => Bun.file(path).text(), '');
+    const lines = text.split('\n');
+    const kept = lines.filter((line) => !line.includes(sid) || field(line, key) !== sid);
+    if (kept.length === lines.length) {
+      return;
+    }
+    await Bun.write(`${path}.${sid}`, kept.join('\n'));
+    await fs.rename(`${path}.${sid}`, path);
+  };
+  const claude = `${home}/.claude`;
+  // the override's composition is read from the CLI's strings only (unverified 2026-11-19)
+  const temporary = `${tmpdir}/claude-${process.getuid?.()}`;
+  const logs = toolLog ?? `${state}/subether/tools`;
+  const [keys = [], days = []] = await Promise.all(
+    [temporary, logs].map((directory) => attempt(() => fs.readdir(directory), [])),
+  );
+  const doomed = [
+    ...[
+      `debug/${sid}.txt`,
+      `dev-mods/${sid}`,
+      `file-history/${sid}`,
+      `session-env/${sid}`,
+      `tasks/${sid}`,
+      `uploads/${sid}`,
+    ].map((path) => `${claude}/${path}`),
+    ...keys.map((key) => `${temporary}/${key}/${sid}`),
+  ];
+  await Promise.all([
+    ...doomed.map((path) => fs.rm(path, { force: true, recursive: true })),
+    scrub(`${claude}/history.jsonl`, 'sessionId'),
+    ...days.map((day) => scrub(`${logs}/${day}`, 'session')),
+  ]);
+}

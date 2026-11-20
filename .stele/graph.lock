@@ -3,7 +3,7 @@
   "landmarks": {
     "link-never-overwrites": {
       "file": ".mise/tasks/link",
-      "line": 34,
+      "line": 66,
       "node": "/"
     }
   },
@@ -16,11 +16,11 @@
           "enforced_by": null,
           "id": "link-never-overwrites",
           "kind": "invariant",
-          "resolved": ".mise/tasks/link:34",
-          "text": "link never overwrites — an entry in ~/.claude that is a real file or a foreign link is reported `drift` and left alone; only missing entries are linked",
+          "resolved": ".mise/tasks/link:66",
+          "text": "link never overwrites — items link one by one into real ~/.claude/rules, skills and workflows directories (user files at the top); an item path that is a real file or directory or a foreign link is reported `drift` and left alone; only a missing item is linked, and only a link already into this checkout is re-pointed",
           "verified": {
             "digest": null,
-            "sha": "8ded7ec6b3666bd3fa887a894a1b5a733825f2a5"
+            "sha": "ec3084733cd922b7977f3ebd53517414b10d7d7d"
           }
         }
       ],
@@ -41,7 +41,7 @@
       },
       "id": "/",
       "kind": "system",
-      "purpose": "Claude Code harness — global config, rules, skills and the subether mod; `mise run link` symlinks each entry into ~/.claude."
+      "purpose": "Claude Code harness — global config, rules, skills and the subether mod; `mise run link` symlinks each rule, skill, workflow and user file into ~/.claude."
     },
     "docs": {
       "budget": null,

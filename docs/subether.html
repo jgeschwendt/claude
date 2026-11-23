@@ -216,19 +216,32 @@ claude plugin test plugins/subether</pre>
       <tr><th>event</th><th>matcher</th><th>does</th><th>status</th></tr>
     </thead>
     <tbody>
+      <tr><td><code class="code">*</code></td><td>—</td><td><code class="code">census emit</code> <code class="code">sense.new</code>, once a session, for each event name or field the senses manifest (<code class="code">hooks/senses.ts</code>) does not know; outermost, every event passed on as it came</td><td>live</td></tr>
+      <tr><td><code class="code">classic.PermissionRequest</code></td><td>—</td><td><code class="code">census emit</code> <code class="code">tool.wait</code> on the call in flight: its permission went to the person</td><td>live</td></tr>
+      <tr><td><code class="code">classic.Stop</code></td><td>—</td><td><code class="code">census emit</code> the end-of-turn snapshot: background shells, monitors, workflows and scheduled wakeups still in flight</td><td>live</td></tr>
+      <tr><td><code class="code">agent.report</code></td><td>—</td><td><code class="code">census emit</code> the agent's end with its status; the report passes on unchanged</td><td>live</td></tr>
+      <tr><td><code class="code">agent.spawn</code></td><td><code class="code">{}</code></td><td><code class="code">census emit</code> each spawn the engine started, under the id and model it answered</td><td>live</td></tr>
       <tr><td><code class="code">agent.spawn</code></td><td>—</td><td>pin a spawn with no <code class="code">model</code>, not a fork, under a premium parent (<code class="code">fable</code>/<code class="code">mythos</code>) to <code class="code">opus</code>, one log line</td><td>live</td></tr>
       <tr><td><code class="code">command.run</code></td><td><code class="code">subether</code></td><td>open the recall pane</td><td>live</td></tr>
-      <tr><td rowspan="3"><code class="code">prompt.submit</code></td><td rowspan="2">—</td><td>first prompt with an ask under each session id: the <code class="code">sandman recall</code> seed, which writes the start mark, as one capped <code class="code">context</code> block</td><td>live</td></tr>
+      <tr><td rowspan="4"><code class="code">prompt.submit</code></td><td><code class="code">{}</code></td><td><code class="code">census emit</code> each prompt that is not meta, by its head and origin</td><td>live</td></tr>
+      <tr><td rowspan="2">—</td><td>first prompt with an ask under each session id: the <code class="code">sandman recall</code> seed, which writes the start mark, as one capped <code class="code">context</code> block</td><td>live</td></tr>
       <tr><td>the other first-prompt source, <code class="code">sandman report --hook</code></td><td>chunk 7</td></tr>
       <tr><td><code class="code">composer</code></td><td>a <code class="code">prompt</code> line in the <a class="link" href="#log">tool log</a>, unjudged and unawaited</td><td>live</td></tr>
+      <tr><td><code class="code">session.compact</code></td><td>—</td><td><code class="code">census emit</code> each compaction</td><td>live</td></tr>
+      <tr><td><code class="code">session.end</code></td><td><code class="code">{}</code></td><td><code class="code">census emit</code> the end under the ending id, ahead of the take</td><td>live</td></tr>
       <tr><td><code class="code">session.end</code></td><td>—</td><td><code class="code">sandman take</code> on every reason under the 1.5 s bound (the binary decides and records the end in sandman's ledger)</td><td>live</td></tr>
+      <tr><td><code class="code">session.measure</code></td><td><code class="code">{}</code></td><td><code class="code">census emit</code> each usage reading that changed: context tokens, window, percent, cost</td><td>live</td></tr>
       <tr><td><code class="code">session.measure</code></td><td>—</td><td>the gauge reading; the five-hour window → <code class="code">window.json</code></td><td>live</td></tr>
-      <tr><td rowspan="2"><code class="code">session.start</code></td><td>—</td><td>the gauge's first reading and 15 s poll; later the band's commands and timer</td><td>live · chunk 8</td></tr>
+      <tr><td rowspan="3"><code class="code">session.start</code></td><td><code class="code">{}</code></td><td><code class="code">census emit</code> the start: cwd, model, surface, whether a person is at it</td><td>live</td></tr>
+      <tr><td>—</td><td>the gauge's first reading and 15 s poll; later the band's commands and timer</td><td>live · chunk 8</td></tr>
       <tr><td><code class="code">isInteractive</code></td><td>open the pane unasked, register <code class="code">/subether</code></td><td>live</td></tr>
-      <tr><td rowspan="4"><code class="code">tool.call</code></td><td>—</td><td>the daily tool log; registered first, so outermost</td><td>live</td></tr>
+      <tr><td rowspan="5"><code class="code">tool.call</code></td><td><code class="code">{}</code></td><td><code class="code">census emit</code> each call's start and end by target and outcome, unawaited; outermost</td><td>live</td></tr>
+      <tr><td>—</td><td>the daily tool log; outermost but for the census feed</td><td>live</td></tr>
       <tr><td><code class="code">Bash</code></td><td>the Bash guard</td><td>live</td></tr>
       <tr><td><code class="code">Edit</code>, <code class="code">Write</code></td><td>deny a <code class="code">.yml</code> path</td><td>live</td></tr>
       <tr><td><code class="code">/^(?:Bash|mcp__sandman__recall)$/u</code></td><td>keep each recall the agent pulls for the pane</td><td>live</td></tr>
+      <tr><td><code class="code">turn.complete</code></td><td>—</td><td><code class="code">census emit</code> each loop's turn ending; a workflow agent's is also its end</td><td>live</td></tr>
+      <tr><td><code class="code">turn.start</code></td><td>—</td><td><code class="code">census emit</code> each loop's turn starting</td><td>live</td></tr>
       <tr><td><code class="code">turn.step</code></td><td>—</td><td>the gauge's effort flag</td><td>live</td></tr>
       <tr><td rowspan="3"><code class="code">ui.render</code></td><td><code class="code">PromptHint</code></td><td>the gauge row</td><td>live</td></tr>
       <tr><td><code class="code">Pane</code></td><td>the recall pane's body</td><td>live</td></tr>

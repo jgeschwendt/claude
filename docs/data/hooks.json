@@ -7,20 +7,82 @@
     { "doc": "the session's recalls: the first prompt's seed, failures too, then each pull the agent ran", "file": "context.ts", "name": "recalls", "resetBy": "/clear · /resume · /branch" },
     { "doc": "the gauge's token trend for its ETA, the newest 40", "file": "gauge.tsx", "name": "samples", "resetBy": "/clear · /resume · /branch" },
     { "doc": "planned · chunk 8: the sandman shift the band shows; no atom yet", "file": null, "name": "shift", "resetBy": "/clear · /resume · /branch" },
-    { "doc": "the pane's rows pressed away from their default, by key; the newest recall open, the rest shut", "file": "pane.tsx", "name": "toggled", "resetBy": "/clear · /resume · /branch" }
+    { "doc": "the pane's rows pressed away from their default, by key; the newest recall open, the rest shut", "file": "pane.tsx", "name": "toggled", "resetBy": "/clear · /resume · /branch" },
+    { "doc": "the census feed's running workflow agents, by id", "file": "census.ts", "name": "workflows", "resetBy": "/clear · /resume · /branch" }
   ],
   "events": [
+    { "doc": "every event but a telemetry one, as raised", "kind": "lifecycle", "name": "*" },
+    { "doc": "an agent's report is about to reach its parent", "kind": "agent", "name": "agent.report" },
     { "doc": "a subagent is about to spawn", "kind": "agent", "name": "agent.spawn" },
-    { "doc": "a slash command the mod registered runs", "kind": "prompt", "name": "command.run" },
+    { "doc": "the classic ConfigChange hook: a settings file or the skills changed under the session", "kind": "lifecycle", "name": "classic.ConfigChange" },
+    { "doc": "the classic CwdChanged hook: the working directory moved", "kind": "lifecycle", "name": "classic.CwdChanged" },
+    { "doc": "the classic DirectoryAdded hook: a directory joined the session", "kind": "lifecycle", "name": "classic.DirectoryAdded" },
+    { "doc": "the classic Elicitation hook: an MCP server asks the person", "kind": "tool", "name": "classic.Elicitation" },
+    { "doc": "the classic ElicitationResult hook: the person answered an MCP server", "kind": "tool", "name": "classic.ElicitationResult" },
+    { "doc": "the classic InstructionsLoaded hook: a memory or rules file was read in", "kind": "lifecycle", "name": "classic.InstructionsLoaded" },
+    { "doc": "the classic Notification hook: the engine calls for the person", "kind": "lifecycle", "name": "classic.Notification" },
+    { "doc": "the classic PermissionDenied hook: the mode's classifier refused a call", "kind": "tool", "name": "classic.PermissionDenied" },
+    { "doc": "the classic PermissionRequest hook: a call's permission goes to the person", "kind": "tool", "name": "classic.PermissionRequest" },
+    { "doc": "the classic PostModelSwitch hook: the session's model changed", "kind": "lifecycle", "name": "classic.PostModelSwitch" },
+    { "doc": "the classic SessionStart hook: a start, resume, fork, /clear or compaction", "kind": "lifecycle", "name": "classic.SessionStart" },
+    { "doc": "the classic Stop hook: a turn ended, with the background work still in flight", "kind": "turn", "name": "classic.Stop" },
+    { "doc": "the classic StopFailure hook: an API error ended a turn", "kind": "turn", "name": "classic.StopFailure" },
+    { "doc": "the classic TaskCompleted hook: a team task was completed", "kind": "agent", "name": "classic.TaskCompleted" },
+    { "doc": "the classic TaskCreated hook: a team task was created", "kind": "agent", "name": "classic.TaskCreated" },
+    { "doc": "the classic TeammateIdle hook: a teammate went quiet", "kind": "agent", "name": "classic.TeammateIdle" },
+    { "doc": "a slash command runs", "kind": "prompt", "name": "command.run" },
+    { "doc": "the person edits the prompt box", "kind": "prompt", "name": "prompt.edit" },
+    { "doc": "a prompt names a path after @, before it is read", "kind": "prompt", "name": "prompt.mention" },
     { "doc": "a prompt is submitted, before the model sees it", "kind": "prompt", "name": "prompt.submit" },
+    { "doc": "a remote client joins the session", "kind": "lifecycle", "name": "session.attach" },
+    { "doc": "the conversation is compacted", "kind": "lifecycle", "name": "session.compact" },
+    { "doc": "a remote client leaves the session", "kind": "lifecycle", "name": "session.detach" },
     { "doc": "the session ends, under the end budget", "kind": "lifecycle", "name": "session.end" },
     { "doc": "the engine reports a usage reading", "kind": "lifecycle", "name": "session.measure" },
+    { "doc": "a delivery reaches the session, before it is queued", "kind": "agent", "name": "session.receive" },
+    { "doc": "a message leaves for another agent or session", "kind": "agent", "name": "session.send" },
     { "doc": "the session starts", "kind": "lifecycle", "name": "session.start" },
+    { "doc": "the person presses Stop", "kind": "turn", "name": "session.stop" },
+    { "doc": "a skill's prompt is expanded for the model", "kind": "prompt", "name": "skill.prompt" },
     { "doc": "a tool call, built-in or MCP, main loop or subagent", "kind": "tool", "name": "tool.call" },
+    { "doc": "a turn ends, the main loop's or an agent's", "kind": "turn", "name": "turn.complete" },
+    { "doc": "a turn starts, the main loop's or an agent's", "kind": "turn", "name": "turn.start" },
     { "doc": "one model request inside a turn, streamed", "kind": "turn", "name": "turn.step" },
-    { "doc": "a part of the interface is drawn", "kind": "render", "name": "ui.render" }
+    { "doc": "a part of the interface is drawn", "kind": "render", "name": "ui.render" },
+    { "doc": "a working copy is isolated for an agent or the session", "kind": "lifecycle", "name": "vcs.isolate" },
+    { "doc": "an isolated copy is given back", "kind": "lifecycle", "name": "vcs.release" }
   ],
   "hooks": [
+    {
+      "catch": "none", "chunk": 9, "does": "emit sense.new, once a session, for each event name or field the senses manifest (hooks/senses.ts) does not know; outermost, e passed on as it came",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "*", "file": "census.ts", "fn": "sensed", "id": "census.sensed", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit a permission request that reaches the person as tool.wait on the call in flight",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "classic.PermissionRequest", "file": "census.ts", "fn": "asked", "id": "census.asked", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit each end of turn's snapshot of background shells, monitors and wakeups as tasks, with the turn's effort and permission mode and the instruction files loaded since the last",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "classic.Stop", "file": "census.ts", "fn": "stopped", "id": "census.stopped", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit an agent's report as its agent.end, the report passed on",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "agent.report", "file": "census.ts", "fn": "reported", "id": "census.reported", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit each spawn the engine started as agent.spawn, under the id and model it answered",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "agent.spawn", "file": "census.ts", "fn": "spawned", "id": "census.spawned", "matcher": {},
+      "reads": [], "status": "live", "writes": ["workflows"]
+    },
     {
       "catch": "pass", "chunk": 5, "does": "pin a spawn with no model, not a fork, under a premium parent to opus",
       "effects": [{ "kind": "reply", "target": "spawn model" }, { "kind": "ui", "target": "log line" }],
@@ -31,6 +93,12 @@
       "catch": "none", "chunk": 3, "does": "/subether opens the recall pane asked",
       "effects": [{ "kind": "ui", "target": "pane" }],
       "event": "command.run", "file": "pane.tsx", "fn": "command", "id": "pane.command", "matcher": { "command": "subether" },
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit each prompt that is not meta, by its head, origin, slash command, attachment count, the turn it was typed over and its wait",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "prompt.submit", "file": "census.ts", "fn": "prompted", "id": "census.prompted", "matcher": {},
       "reads": [], "status": "live", "writes": []
     },
     {
@@ -50,9 +118,27 @@
       "reads": ["opened"], "status": "live", "writes": ["opened"]
     },
     {
+      "catch": "pass", "chunk": 9, "does": "emit each compaction, then its end with the tokens before and after or why it was skipped",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "session.compact", "file": "census.ts", "fn": "compacted", "id": "census.compacted", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit session.end under the ending id, ahead of the take",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "session.end", "file": "census.ts", "fn": "ended", "id": "census.ended", "matcher": {},
+      "reads": [], "status": "live", "writes": []
+    },
+    {
       "catch": "pass", "chunk": 5, "does": "sandman take on every reason under the end bound",
       "effects": [{ "kind": "process", "target": "sandman take" }, { "kind": "ui", "target": "log line" }],
       "event": "session.end", "file": "take.ts", "fn": "take", "id": "take.take", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit each usage reading that changed: context tokens, window, percent, cost and rate-limit windows",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "session.measure", "file": "census.ts", "fn": "gauged", "id": "census.gauged", "matcher": {},
       "reads": [], "status": "live", "writes": []
     },
     {
@@ -60,6 +146,12 @@
       "effects": [{ "kind": "file", "target": "window.json" }, { "kind": "ui", "target": "log line" }],
       "event": "session.measure", "file": "gauge.tsx", "fn": "measure", "id": "gauge.measure", "matcher": null,
       "reads": ["gauge", "samples"], "status": "live", "writes": ["gauge", "samples"]
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit session.start with the session's cwd, model, surface, whether a person is at it, its repository and working copy, entrypoint, kind, version, platform, surfaces and transcript",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "session.start", "file": "census.ts", "fn": "started", "id": "census.started", "matcher": {},
+      "reads": [], "status": "live", "writes": []
     },
     {
       "catch": "none", "chunk": 2, "does": "the gauge's first reading and a 15 s usage poll in interactive sessions",
@@ -71,6 +163,12 @@
       "catch": "none", "chunk": 3, "does": "open the pane unasked, register /subether",
       "effects": [{ "kind": "ui", "target": "/subether" }, { "kind": "ui", "target": "pane" }],
       "event": "session.start", "file": "pane.tsx", "fn": "opening", "id": "pane.opening", "matcher": { "isInteractive": true },
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit each tool call's start and end by target and outcome, what the model read counted, read-only and an error's or denial's head, unawaited; outermost",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "tool.call", "file": "census.ts", "fn": "called", "id": "census.called", "matcher": {},
       "reads": [], "status": "live", "writes": []
     },
     {
@@ -98,6 +196,18 @@
       "reads": [], "status": "live", "writes": ["recalls"]
     },
     {
+      "catch": "pass", "chunk": 9, "does": "emit each loop's turn.complete with its length, usage and a refusal's category; a workflow agent's is also its agent.end",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "turn.complete", "file": "census.ts", "fn": "turnEnded", "id": "census.turnEnded", "matcher": null,
+      "reads": ["workflows"], "status": "live", "writes": ["workflows"]
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit each loop's turn.start",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "turn.start", "file": "census.ts", "fn": "turnStarted", "id": "census.turnStarted", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
       "catch": "none", "chunk": 2, "does": "keep the main loop's effort for the gauge's flag",
       "effects": [],
       "event": "turn.step", "file": "gauge.tsx", "fn": "step", "id": "gauge.step", "matcher": null,
@@ -114,6 +224,162 @@
       "effects": [{ "kind": "ui", "target": "pane" }],
       "event": "ui.render", "file": "pane.tsx", "fn": "pane", "id": "pane.pane", "matcher": { "component": "Pane" },
       "reads": ["recalls", "toggled"], "status": "live", "writes": ["toggled"]
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit a settings or skills file changing under the session as config",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "classic.ConfigChange", "file": "census.ts", "fn": "configured", "id": "census.configured", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit each working directory change as cwd, from and to",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "classic.CwdChanged", "file": "census.ts", "fn": "moved", "id": "census.moved", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit each /add-dir as directory",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "classic.DirectoryAdded", "file": "census.ts", "fn": "added", "id": "census.added", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit an MCP server's question to the person as elicit, never the form",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "classic.Elicitation", "file": "census.ts", "fn": "elicited", "id": "census.elicited", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit the person's answer to an MCP server's question as elicit with its action",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "classic.ElicitationResult", "file": "census.ts", "fn": "elicited", "id": "census.elicited.result", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "keep each memory or rules file loaded for the next end of turn's tasks",
+      "effects": [],
+      "event": "classic.InstructionsLoaded", "file": "census.ts", "fn": "loaded", "id": "census.loaded", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit each engine notification as notify with its head",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "classic.Notification", "file": "census.ts", "fn": "notified", "id": "census.notified", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit each call the mode's classifier refused as tool.deny with the reason's head",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "classic.PermissionDenied", "file": "census.ts", "fn": "denied", "id": "census.denied", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit each model switch as model, from and to, what was asked and by what",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "classic.PostModelSwitch", "file": "census.ts", "fn": "switched", "id": "census.switched", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit each start, resume, fork, /clear and compaction as session.open: source, title, mode, model, a resume's idle seconds and tokens, and at every opening but a compaction senses: the engine's version beside the one the manifest was surveyed at",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "classic.SessionStart", "file": "census.ts", "fn": "entered", "id": "census.entered", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit each API error ending a turn as turn.fail with its class and the details' head",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "classic.StopFailure", "file": "census.ts", "fn": "failed", "id": "census.failed", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit a team task completed as todo",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "classic.TaskCompleted", "file": "census.ts", "fn": "tasked", "id": "census.tasked.completed", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit a team task created as todo",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "classic.TaskCreated", "file": "census.ts", "fn": "tasked", "id": "census.tasked.created", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit a teammate gone quiet as teammate.idle",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "classic.TeammateIdle", "file": "census.ts", "fn": "idled", "id": "census.idled", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit each slash command as command by name and origin, never its arguments; outermost",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "command.run", "file": "census.ts", "fn": "commanded", "id": "census.commanded", "matcher": {},
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit a typing burst in the prompt box as typing, at most one per 5 s, never the text",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "prompt.edit", "file": "census.ts", "fn": "typed", "id": "census.typed", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit each @ path a prompt names as mention once read: how it attached, or the denial",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "prompt.mention", "file": "census.ts", "fn": "mentioned", "id": "census.mentioned", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit a remote client joining as client, with where and how large it draws",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "session.attach", "file": "census.ts", "fn": "attached", "id": "census.attached", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit a remote client leaving as client with its reason",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "session.detach", "file": "census.ts", "fn": "attached", "id": "census.attached.detach", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit each delivery as message.receive: origin, size, wake, never its text",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "session.receive", "file": "census.ts", "fn": "received", "id": "census.received", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit each message sent as message.send: to whom, its head, who sent it, delivered",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "session.send", "file": "census.ts", "fn": "sent", "id": "census.sent", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit the person's Stop as stop, whether a turn was running",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "session.stop", "file": "census.ts", "fn": "interrupted", "id": "census.interrupted", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit each skill expanded for the model as skill, with whose it is",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "skill.prompt", "file": "census.ts", "fn": "skilled", "id": "census.skilled", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit each model request as step once its stream ends, every chunk passed on: model, effort, thinking, tools, stop reason, usage",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "turn.step", "file": "census.ts", "fn": "stepped", "id": "census.stepped", "matcher": {},
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit each copy isolated for an agent or the session as worktree once answered",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "vcs.isolate", "file": "census.ts", "fn": "isolated", "id": "census.isolated", "matcher": null,
+      "reads": [], "status": "live", "writes": []
+    },
+    {
+      "catch": "pass", "chunk": 9, "does": "emit each copy given back as worktree.end once answered: released or kept",
+      "effects": [{ "kind": "process", "target": "census emit" }, { "kind": "ui", "target": "log line" }],
+      "event": "vcs.release", "file": "census.ts", "fn": "released", "id": "census.released", "matcher": null,
+      "reads": [], "status": "live", "writes": []
     }
   ],
   "kinds": [

@@ -47,6 +47,7 @@
     open.</p>
   <nav class="row docs-toc" aria-label="sections">
     <a class="pill" href="#link">link</a>
+    <a class="pill" href="#doctor">doctor</a>
     <a class="pill" href="#subether">subether</a>
     <a class="pill" href="#gate">gate</a>
     <a class="pill" href="#plan">plan</a>
@@ -79,6 +80,29 @@
   </ul>
 </section>
 
+<section class="docs-section" id="doctor" data-component="doctor">
+  <header>
+    <h2 class="h2">Doctor</h2>
+    <p class="docs-note">Read-only and deterministic, no model calls; the weekly routine runs it and parses
+      its lines.</p>
+  </header>
+  <p><code class="code">mise run doctor</code> (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/.mise/tasks/doctor.ts">.mise/tasks/doctor.ts</a>)
+    checks the live setup: <code class="code">settings.json</code> and <code class="code">~/.claude.json</code>
+    parse, <code class="code">link --check</code> is clean, the install is native and current, each MCP
+    server's command resolves, the always-loaded memory (<code class="code">CLAUDE.md</code> plus every rule
+    without <code class="code">paths:</code>) stays under 24000 chars, each skill's frontmatter names
+    <code class="code">name</code> and <code class="code">description</code>, and no hook's median run is slow
+    over the last 30 days of transcripts.</p>
+  <ul class="stack claims" role="list">
+    <li><strong>one line per finding</strong> — <code class="code">ok:</code>, <code class="code">broken:</code>,
+      <code class="code">unused:</code> (an MCP server, plugin or skill with no use in its window, sorted),
+      <code class="code">note:</code>; then <code class="code">doctor: N broken, M unused</code>. Exit 1 only on
+      broken.</li>
+    <li><strong>prints no secrets</strong> — a file that fails to parse is named with jq's position alone, and
+      the checks reading it are skipped; an MCP server's env and headers are never read.</li>
+  </ul>
+</section>
+
 <section class="docs-section" id="subether" data-component="subether">
   <header>
     <h2 class="h2">The subether mod</h2>
@@ -106,7 +130,7 @@
   </header>
   <p><code class="code">bun run test</code>
     (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/scripts/test.ts">scripts/test.ts</a>)
-    runs every step at once — fmt, lint, tsc, the unit tests (link, /end and /delete), the mod's
+    runs every step at once — fmt, lint, tsc, the unit tests (link, doctor, /end and /delete), the mod's
     validate and suite — then the stele gate.</p>
   <p class="docs-note"><code class="code">ci.yaml</code> runs the same gate, the claude CLI
     installed at a pinned version, on push to main, pull requests and the merge queue; never

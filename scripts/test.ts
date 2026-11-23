@@ -5,6 +5,12 @@
 // `.claude-plugin/types/` when an interactive session loads it (no command writes them), so a checkout no session has
 // loaded, CI's among them, skips that one step and says so. validate is not `--strict`: its warnings (no icon) do
 // not fail the gate.
+// a gate inside a gate is a step that resolved to the `test` script: it froze the machine twice
+if (Bun.env.GATE) {
+  console.error('gate: refusing to run inside itself: `bun --cwd <dir> test` is `bun run test`');
+  process.exit(1);
+}
+
 const STEPS: Record<string, string[]> = {
   'docs': ['bun', 'scripts/charts.ts'],
   'fmt': ['bun', 'fmt', '--check'],
@@ -12,12 +18,12 @@ const STEPS: Record<string, string[]> = {
   'test': ['claude', 'plugin', 'test', 'plugins/subether'],
   'tsc': ['bunx', 'tsc', '-p', '.'],
   'tsc:mod': ['bunx', 'tsc', '-p', 'plugins/subether'],
-  'unit': ['bun', 'test', './.mise/tasks', './skills'],
+  'unit': ['bun', 'test', './.mise/tasks', './plugins/subether/senses', './skills'],
   'validate': ['claude', 'plugin', 'validate', 'plugins/subether'],
 };
 
 const isGreen = async ([name, argv]: [string, string[]]): Promise<boolean> => {
-  const step = Bun.spawn(argv, { stderr: 'pipe', stdout: 'pipe' });
+  const step = Bun.spawn(argv, { env: { ...Bun.env, GATE: '1' }, stderr: 'pipe', stdout: 'pipe' });
   const [stdout, stderr, code] = await Promise.all([
     step.stdout.text(),
     step.stderr.text(),

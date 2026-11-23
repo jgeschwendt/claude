@@ -1,7 +1,9 @@
 #!/usr/bin/env bun
 // session.ts [--erase] — the last call of /end and /delete: close THIS session from a detached child, so the tool call
-// returns before the CLI dies. `--erase` runs `sandman forget` first, and the child, once the CLI is gone, forgets
-// again (an exit regrows the transcript, verified 2026-11-19 on a `claude stop`) and removes what forget leaves.
+// returns before the CLI dies. A background job is removed from the sessions list, which stops it. `--erase` runs
+// `sandman forget` first, and the child, once the CLI is gone, forgets again (an exit regrows the transcript, verified
+// 2026-11-19 on a `claude stop`) and removes what forget leaves, unless the CLI outlives 60 s: a live session is
+// never forgotten.
 // Exit 0: armed, its one line is what the skill reports on; 1: no safe identity; 2: forget failed. Both close nothing.
 const POLL_MS = 300;
 const SHORT_ID = 8;
@@ -12,6 +14,7 @@ const {
   CLAUDE_JOB_DIR: job,
   CLAUDE_PID: cli,
   CLAUDE_TOOL_LOG_DIR: toolLog,
+  END_EXIT_LIMIT_MS: limit = '60000',
   HOME: home,
   XDG_STATE_HOME: state = `${home}/.local/state`,
 } = process.env;
@@ -42,12 +45,16 @@ const field = (line: string, key: string): unknown => {
     return undefined;
   }
 };
-const exited = async (): Promise<void> => {
-  if (!hasSignalled(0)) {
-    return;
+/**
+Whether the CLI exits by `deadline`, polling
+*/
+const hasExited = async (deadline: number): Promise<boolean> => {
+  const isGone = !hasSignalled(0);
+  if (isGone || Date.now() > deadline) {
+    return isGone;
   }
   await Bun.sleep(POLL_MS);
-  await exited();
+  return hasExited(deadline);
 };
 
 /**
@@ -84,11 +91,11 @@ if (!Bun.argv.includes('--child')) {
   process.exit(0);
 }
 
-// a background job is stopped by its daemon (verified 2026-11-19 · a bg session ran --erase on itself: stopped, removed,
-// nothing named it after); an interactive CLI gets Ctrl-C twice, then TERM (unverified 2026-11-19 · that it exits and
-// SessionEnd archives on these rests on the 2.1.132 and 2.1.323 changelogs, no interactive probe)
+// a background job is removed, which stops it (verified 2026-11-23 · claude rm on a running background session stopped
+// it, removed it and the transcript was archived at once); an interactive CLI gets Ctrl-C twice, then TERM (verified
+// 2026-11-23 · a probe session in a held pty exited on the interrupts and its transcript was archived a second later)
 if (job) {
-  run('claude', 'stop', short);
+  run('claude', 'rm', short);
 } else {
   const INT_GAP_MS = 400;
   const TERM_GRACE_MS = 2000;
@@ -100,14 +107,10 @@ if (job) {
     hasSignalled('SIGTERM');
   }
 }
-if (isErase) {
+if (isErase && (await hasExited(Date.now() + Number(limit)))) {
   const FLUSH_MS = 1000;
-  await exited();
   await Bun.sleep(FLUSH_MS);
   run('sandman', 'forget', sid);
-  if (job) {
-    run('claude', 'rm', short);
-  }
   const fs = process.getBuiltinModule('node:fs/promises');
 
   /**

@@ -13,7 +13,7 @@
       "Bash(~/.local/bin/stele:*)",
       "Bash(gh pr merge:*)",
       "Bash(git push --force-with-lease*)",
-      "Bash(git -C * push --force-with-lease*)"
+      "Bash(git -C ~/.grove/code/* push --force-with-lease*)"
     ],
     "defaultMode": "auto"
   },
@@ -23,7 +23,9 @@
     "bgIsolation": "none"
   },
   "enabledPlugins": {
-    "rust-analyzer-lsp@claude-plugins-official": true,
+    "cowork-plugin-management@synced": false,
+    "engineering@synced": false,
+    "productivity@synced": false,
     "subether@synced": false,
     "typesafe@typesafe-ai": true,
     "typescript-lsp@claude-plugins-official": true,
@@ -58,7 +60,12 @@
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
-  "autoMode": {},
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "git push --force-with-lease to my non-default branches under ~/.grove/code is routine"
+    ]
+  },
   "voiceEnabled": true,
   "defaultToAgentsView": false,
   "feedbackSurveyState": {

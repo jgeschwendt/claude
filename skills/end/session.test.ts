@@ -131,6 +131,34 @@ macos('ends an interactive session by its pid alone', async () => {
   bystander.kill();
 });
 
+// /end on a background job removes it and does nothing more; an erase whose CLI outlives the limit forgets only
+// before the close, so its child gives up and a later exit is not forgotten.
+macos(
+  'removes a background job, and an erase gives up on a CLI that never exits',
+  async () => {
+    const home = await rig();
+    const cli = Bun.spawn(['sleep', '60']);
+    const job = { CLAUDE_JOB_DIR: `${home}/.claude/jobs/x`, END_EXIT_LIMIT_MS: String(POLL_MS) };
+    const runs = [
+      end({ cli, extra: job, home, sid: BG }),
+      end({ argv: ['--erase'], cli, extra: job, home, sid: KEEP }),
+    ];
+    await Bun.sleep(QUIET_MS);
+    const running = state(cli);
+    cli.kill();
+    await Bun.sleep(2 * QUIET_MS);
+    expect([runs, running, await calls(home)]).toEqual([
+      [
+        [0, '▸ ending aaaaaaaa\n'],
+        [0, `▸ erased ${KEEP}; the exit is watched\n`],
+      ],
+      'running',
+      ['claude rm aaaaaaaa', 'claude rm cccccccc', `sandman forget ${KEEP}`],
+    ]);
+  },
+  TIMEOUT_MS,
+);
+
 // A failed forget closes nothing.
 macos('a failed erase closes nothing', async () => {
   const home = await rig();
@@ -142,8 +170,8 @@ macos('a failed erase closes nothing', async () => {
 });
 
 // Both erase paths forget before and after the exit and remove exactly their own survivors: a background job is
-// stopped and removed from the list, an interactive CLI interrupted; KEEP's files and lines, a line merely naming an
-// erased sid and an unparsable one stay.
+// removed from the list, an interactive CLI interrupted; KEEP's files and lines, a line merely naming an erased sid and
+// an unparsable one stay.
 macos(
   'erases a background and an interactive session, nothing else',
   async () => {
@@ -172,14 +200,10 @@ macos(
     ];
     await until(async () => {
       const made = await calls(home);
-      return made.includes('claude stop aaaaaaaa');
+      return made.includes('claude rm aaaaaaaa');
     });
     bg.kill();
-    const want = [
-      'claude rm aaaaaaaa',
-      'claude stop aaaaaaaa',
-      ...[BG, BG, FG, FG].map((sid) => `sandman forget ${sid}`),
-    ];
+    const want = ['claude rm aaaaaaaa', ...[BG, BG, FG, FG].map((sid) => `sandman forget ${sid}`)];
     await until(async () => {
       const made = await calls(home);
       return made.length === want.length;

@@ -180,4 +180,4 @@ const prompt: MatchedHook<'prompt.submit', { origin: { kind: 'composer' } }> = a
   return result;
 };
 
-export { log, prompt };
+export { log, outcomeOf, prompt };

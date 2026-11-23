@@ -17,6 +17,8 @@ declare module 'claude-code' {
       shift: Shift | null;
       /** the pane's rows pressed away from their default (the newest recall open, the rest shut), by key */
       toggled: string[];
+      /** the census feed's running workflow agents, by id: no `agent.report` ends them, their own `turn.complete` does */
+      workflows: string[];
     };
   }
 }

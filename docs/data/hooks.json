@@ -84,9 +84,9 @@
       "reads": [], "status": "live", "writes": ["workflows"]
     },
     {
-      "catch": "pass", "chunk": 5, "does": "pin a spawn with no model, not a fork, under a premium parent to opus",
-      "effects": [{ "kind": "reply", "target": "spawn model" }, { "kind": "ui", "target": "log line" }],
-      "event": "agent.spawn", "file": "pin.ts", "fn": "pin", "id": "pin.pin", "matcher": null,
+      "catch": "pass", "chunk": 10, "does": "append the house rules to the prompt of a new agent that is not a fork",
+      "effects": [{ "kind": "reply", "target": "spawn prompt" }],
+      "event": "agent.spawn", "file": "brief.ts", "fn": "brief", "id": "brief.brief", "matcher": { "fork": false },
       "reads": [], "status": "live", "writes": []
     },
     {

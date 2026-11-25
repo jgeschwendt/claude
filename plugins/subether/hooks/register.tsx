@@ -1,6 +1,7 @@
 // subether: the first prompt's recall seed (the session's start mark too) and the recall pane, guards and the tool log,
-// the gauge and window clock, the subagent pin, the session-end take and the census feed; the shift band is to come.
+// the gauge and window clock, the session-end take and the census feed; the shift band is to come.
 import type { Register } from 'claude-code';
+import { brief } from './brief';
 import {
   added,
   asked,
@@ -43,7 +44,6 @@ import { context, pull } from './context';
 import { hint, measure, start, step } from './gauge';
 import { bash, bashFailed, yml, ymlFailed } from './guard';
 import { command, opening, pane } from './pane';
-import { pin } from './pin';
 import { take } from './take';
 import { log, prompt } from './toollog';
 
@@ -54,11 +54,10 @@ export const register: Register = (on) => {
   // the census feed (census.ts): each hook emits its event and answers what `next` answered. An agent's report →
   // `agent.end`
   on('agent.report', reported).catch(async ($, e, next) => await next(e));
-  // each spawn the engine started → `agent.spawn`. `{}` matches every spawn: a registration of its own beside the pin's
-  // unmatched one, and outermost, so it sees the model the pin settled
+  // each spawn the engine started → `agent.spawn`, outermost, so it sees the model the engine settled
   on('agent.spawn', {}, spawned).catch(async ($, e, next) => await next(e));
-  // a spawn with no model, not a fork, under a premium parent runs on opus; a failed pin passes the spawn on
-  on('agent.spawn', pin).catch(async ($, e, next) => await next(e));
+  // a new agent that is not a fork gets the house rules appended to its prompt; a failed brief passes the spawn on
+  on('agent.spawn', { fork: false }, brief).catch(async ($, e, next) => await next(e));
   // census, each classic hook observed: a settings or skills file changing → `config`
   on('classic.ConfigChange', configured).catch(async ($, e, next) => await next(e));
   // a working directory change → `cwd`

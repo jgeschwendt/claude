@@ -124,7 +124,7 @@ svg.is-focus .chart-row:not(.is-lit) { opacity: 0.35; }
   <p class="eyebrow">the harness's Claude Code mod</p>
   <p class="lead docs-lead"><code class="code">subether</code> is the from-scratch successor of
     <code class="code">perpetual</code>, built on native mod events: the gauge row under the prompt,
-    the recall seed and its pane, the Bash and <code class="code">.yml</code> guards, the daily tool log, the subagent pin and the session-end take are live; the
+    the recall seed and its pane, the Bash and <code class="code">.yml</code> guards, the daily tool log and the session-end take are live; the
     shift band is to come. Its contract is
     <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/plugins/subether/README.md">plugins/subether/README.md</a>;
     this page is the design and what is open.</p>
@@ -221,7 +221,6 @@ claude plugin test plugins/subether</pre>
       <tr><td><code class="code">classic.Stop</code></td><td>—</td><td><code class="code">census emit</code> the end-of-turn snapshot: background shells, monitors, workflows and scheduled wakeups still in flight</td><td>live</td></tr>
       <tr><td><code class="code">agent.report</code></td><td>—</td><td><code class="code">census emit</code> the agent's end with its status; the report passes on unchanged</td><td>live</td></tr>
       <tr><td><code class="code">agent.spawn</code></td><td><code class="code">{}</code></td><td><code class="code">census emit</code> each spawn the engine started, under the id and model it answered</td><td>live</td></tr>
-      <tr><td><code class="code">agent.spawn</code></td><td>—</td><td>pin a spawn with no <code class="code">model</code>, not a fork, under a premium parent (<code class="code">fable</code>/<code class="code">mythos</code>) to <code class="code">opus</code>, one log line</td><td>live</td></tr>
       <tr><td><code class="code">command.run</code></td><td><code class="code">subether</code></td><td>open the recall pane</td><td>live</td></tr>
       <tr><td rowspan="4"><code class="code">prompt.submit</code></td><td><code class="code">{}</code></td><td><code class="code">census emit</code> each prompt that is not meta, by its head and origin</td><td>live</td></tr>
       <tr><td rowspan="2">—</td><td>first prompt with an ask under each session id: the <code class="code">sandman recall</code> seed, which writes the start mark, as one capped <code class="code">context</code> block</td><td>live</td></tr>
@@ -467,8 +466,7 @@ claude plugin test plugins/subether</pre>
       default.</li>
     <li>✔ 2026-11-06 <strong>Guard and tool log</strong> (owner: "lets do the next bit the tool calls
       … i also want every tool call logged to a file, one log per day").</li>
-    <li><strong>Sandman</strong>: ✔ 2026-11-06 the
-      <code class="code">agent.spawn</code> pin under a premium parent and <code class="code">session.end</code> →
+    <li><strong>Sandman</strong>: ✔ 2026-11-06 <code class="code">session.end</code> →
       <code class="code">sandman take</code>; ✔ 2026-11-13 the recall seed, which writes the start mark,
       and the pane rebuilt around it; still to come: the context cap's
       <code class="code">guard</code> mark.</li>

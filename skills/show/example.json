@@ -1,0 +1,118 @@
+{
+  "cards": [
+    {
+      "component": "teach",
+      "cost": "39 renames in routines; the old value stays reachable, so the wrong one can be used by mistake.",
+      "id": "shadow_reuse",
+      "meta": "clippy · restriction · 39 hits",
+      "options": [
+        { "label": "allow in canon", "lean": true, "value": "allow" },
+        { "label": "keep, fix in code", "value": "fix" }
+      ],
+      "pair": [
+        "let line = line.strip_suffix('\\r').unwrap_or(line);",
+        "let trimmed = line.strip_suffix('\\r').unwrap_or(line);"
+      ],
+      "text": "Shadowing is declaring a new variable with the name of an old one. This rule flags the common case where the new value is derived from the old.",
+      "title": "shadow_reuse"
+    },
+    {
+      "component": "decision",
+      "id": "land",
+      "options": [
+        { "label": "land as it is", "lean": true, "value": "land" },
+        { "label": "hold, I want to look", "value": "hold" }
+      ],
+      "text": "The branch is green. Land it now, or hold it for a look first?",
+      "title": "jlg.io harness"
+    },
+    {
+      "component": "decision",
+      "id": "allow",
+      "options": [
+        {
+          "hint": "192 hits, all numeric suffixes",
+          "label": "default_numeric_fallback",
+          "lean": true,
+          "shape": "M5 50 L50 10 L95 50 L50 90 Z",
+          "value": "numeric"
+        },
+        {
+          "hint": "46 hits on private helpers",
+          "label": "missing_docs_in_private_items",
+          "value": "docs"
+        },
+        {
+          "hint": "44 hits, all in test fixtures",
+          "label": "non_ascii_literal",
+          "lean": true,
+          "value": "ascii"
+        }
+      ],
+      "pick": "many",
+      "text": "Which rules go into canon as allowed? Pick any.",
+      "title": "Allow in canon"
+    },
+    {
+      "code": "#[expect(\n    clippy::single_call_fn,\n    reason = \"a named step of the tick\"\n)]\nfn rotate(states: &Path) {",
+      "component": "code",
+      "id": "attribute",
+      "text": "The attribute each single-call function carries today.",
+      "title": "The ceremony"
+    },
+    {
+      "component": "list",
+      "id": "next",
+      "items": [
+        "switch the allowed rules off in lints.toml",
+        "strip the 192 suffixes",
+        "rerun every gate"
+      ],
+      "title": "Next, once you answer"
+    },
+    {
+      "component": "note",
+      "id": "else",
+      "text": "Anything else on your mind about canon?",
+      "title": "Anything else?"
+    }
+  ],
+  "overview": [
+    {
+      "component": "chart",
+      "kind": "split",
+      "rows": [
+        { "label": "allowed in canon", "value": 12 },
+        { "label": "fixed in code", "value": 7 },
+        { "label": "still open", "value": 3 }
+      ],
+      "title": "Lint outcomes so far"
+    },
+    {
+      "component": "chart",
+      "kind": "bar",
+      "rows": [
+        { "label": "default_numeric_fallback", "value": 192 },
+        { "label": "missing_docs_in_private_items", "value": 46 },
+        { "label": "non_ascii_literal", "value": 44 }
+      ],
+      "text": "Hits in routines for the three largest rules.",
+      "title": "Where the hits are"
+    },
+    {
+      "component": "figure",
+      "svg": "<svg viewBox='0 0 400 80' role='img'><rect x='10' y='20' width='110' height='40'/><text x='30' y='45'>allow</text><path d='M120 40 H280'/><rect x='280' y='20' width='110' height='40'/><text x='305' y='45'>canon</text></svg>",
+      "text": "An allowed rule lands in canon.",
+      "title": "Where an allow goes"
+    },
+    {
+      "component": "steps",
+      "items": ["lint a rule", "allow it in canon or fix the code", "rerun every gate"],
+      "loop": true,
+      "text": "Each rule goes round once.",
+      "title": "How a rule is settled"
+    }
+  ],
+  "text": "Each card is its own question: send any card, as often as you like.",
+  "title": "Lints canon"
+}

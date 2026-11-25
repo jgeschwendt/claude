@@ -1,0 +1,3 @@
+# the show step of the gate (scripts/test.ts) runs here with --coverage: below every line and function, it fails
+[test]
+coverageThreshold = 1

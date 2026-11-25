@@ -16,7 +16,7 @@ Why: compliance evaporates at session end—only encoded rules persist.
 ## Lingo
 
 - "Another pass": a heavier instrument than before, dedup and drop as you go; one that only adds fails. Never argue it's done—he tracks diminishing returns.
-- "Show me": a hud-served HTML decision form, fast—the proposal in d3 charts and visuals, tap-sized options with your lean marked, the answer posted back so you keep moving. Touch is the medium: never terminal prose, never files opened in an editor. (since 2026-11-22 · "show me means open a html form with a proposal i can easily understand and decide on")
+- "Show me": open the folder/file in his ide, start a dev server, use /show form, opened in his browser by you.
 
 ## Operation
 
@@ -30,12 +30,14 @@ On the top model tier, tokens buy judgment, not volume: plan, direct, judge, rev
 
 - Alpha-sort arbitrary order—declarations, lists like this—unless order encodes meaning.
 - Code golf, source and tests—100 % end-to-end coverage is table stakes; a refactor cuts both to the fewest statements, functions and branches keeping every feature; nothing lowering coverage merges.
-- Complicated goes in a form—findings, tables, a choice of options reach him as a hud-served HTML form ("Show me"), asked or not; the terminal carries one line and the link. (since 2026-11-23 · "dont show me complicated things in the terminal, use the html form to communicate with me")
-- Diagnose read-only: no `git stash`/`reset`/`clean`/`checkout --`/`restore` or destructive flags; re-edit your botched edit—`git checkout -- <path>` discards _every_ uncommitted change to the path. Kill by PID (`lsof -ti :<port>` or `pgrep -x <name>`, inspect, `kill <pid>`), never `pkill -f`.
+- Complicated goes in a form—findings, tables, a choice of options reach him as a hud-served HTML form ("Show me"), built with the `show` skill, never a hand-rolled page and server, asked or not; the terminal carries one line and the link.
+- Diagnose read-only: no `git stash`/`reset`/`clean`/`checkout --`/`restore` or destructive flags; re-edit your botched edit—`git checkout -- <path>` discards _every_ uncommitted change to the path. Stop a process with `mise run stop <pid|:port>` (global task: shows it, SIGTERMs, confirms; a name goes through `pgrep -x <name>` first), never `pkill -f`.
 - Document nothing auto-discoverable.
+- Edit files with Edit/Write, never a `python3 - <<EOF` or `sed -i` read-replace-write: a heredoc edit skips the diff he reviews and the tool log's record of what changed; several replacements are several Edit calls in one turn. A heredoc is for computing, never for writing a tracked file.
 - Harness: `jgeschwendt/claude` at `~/.grove/code/jgeschwendt/claude/main`—work there per its `AGENTS.md`; `~/.claude` is runtime state and symlinks into it, not a repo.
-- Merge without asking—a reviewed, green PR of yours lands at once (`floodgate add` on a private repo, `gh pr merge` by the ruleset's method on a public one); wait on him only when the change is risky or he might hold a differing opinion. (since 2026-11-23 · "stop waiting for my approval on merging prs, this halts work")
+- Merge without asking—a reviewed, green PR of yours lands at once (`floodgate add` on a private repo, `gh pr merge` by the ruleset's method on a public one); wait on him only when the change is risky or he might hold a differing opinion.
 - Name nothing that rots—a model or tier name, a version, "current" or "latest" marks a moment and is wrong by the next release. State the role (the top tier, the tier below); literals only in code or config that runs them.
+- Never bare `sleep` to wait: a background command that exits on the condition, or Monitor; the harness blocks a foreground sleep.
 - Open-ended aesthetic ask: get his word on a concrete sample first; commit-and-build is for technical calls.
 - Prose to him: answer or action first, fewest tokens, no basics, preamble or hedging. Code has its own rules.
 - Scripts for one module or skill go in its directory, never top-level `shell/` or `scripts/`.
@@ -53,8 +55,11 @@ On the top model tier, tokens buy judgment, not volume: plan, direct, judge, rev
 
 ## Tools
 
-Name each repo-relative tool's target—`git -C <repo>`, `mise x -C <repo>`, `cd <repo> && stele …`—never ambient cwd; it resets under you and rarely errors if wrong: a nested checkout is a real repo accepting the write. `mise x -C <dir>` also chdirs into `<dir>`, so run only commands for that tree through it.
+Name each repo-relative tool's target—`git -C <repo>`, `mise x -C <repo>`, `cd <repo> && stele …`—never ambient cwd, and never a leading `cd` where the tool takes `-C`; it resets under you and rarely errors if wrong: a nested checkout is a real repo accepting the write. `mise x -C <dir>` also chdirs into `<dir>`, so run only commands for that tree through it.
 
 - `agent-browser` for autonomous web tasks unless project tools conflict. Co-browsing ("open this so we can work together") means his real Chrome via claude-in-chrome, never an automation window; if the extension won't connect, `osascript -e 'open location "<url>"'` shows him the page meanwhile.
+- Claude Code issues are read with `gh issue view`/`gh search issues` on `anthropics/claude-code`; `claudeissues.com` does not resolve.
+- `mise run fetch-pdf <url|file> [-l <last page>] [-o <file>]` for a PDF's text (poppler, installed by mise), never `mkdir`+`curl`+`pdftotext` by hand; `mise run git-where <repo>` for a repo's branch, uncommitted files and last commits, never `git log` then `git status`.
+- `mise run -C <repo> check` is the gate, in one word, in every repo that defines it—never `cargo fmt`/`clippy`/`test` or `stele check && stele emit --check` spelled out by hand; a repo without one gets it before its next gate.
 - `ripgrep` over `grep`.
 - `sudo` never rides `!`-prefixed commands—no TTY for the password; hand him the line to run in a real terminal.

@@ -2,22 +2,29 @@
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "cleanupPeriodDays": 365,
   "env": {
-    "CLAUDE_CODE_PLUGIN_DIRS": "~/.grove/code/jgeschwendt/claude/main/plugins/subether"
+    "CLAUDE_CODE_PLUGIN_DIRS": "~/.grove/code/jgeschwendt/claude/main/plugins/subether",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "opus"
   },
   "attribution": {
     "sessionUrl": false
   },
   "permissions": {
     "allow": [
-      "Bash(~/.local/bin/sandman:*)",
-      "Bash(~/.local/bin/stele:*)",
+      "Bash(cmake --build *)",
+      "Bash(gh pr edit:*)",
       "Bash(gh pr merge:*)",
+      "Bash(git -C ~/.grove/code/* commit *)",
+      "Bash(git -C ~/.grove/code/* push --force-with-lease*)",
       "Bash(git push --force-with-lease*)",
-      "Bash(git -C ~/.grove/code/* push --force-with-lease*)"
+      "Bash(mise run -C * check)",
+      "Bash(mise run stop *)",
+      "Bash(swift build *)",
+      "Bash(xattr -l *)",
+      "Bash(~/.local/bin/sandman:*)",
+      "Bash(~/.local/bin/stele:*)"
     ],
     "defaultMode": "auto"
   },
-  "model": "fable",
   "worktree": {
     "baseRef": "fresh",
     "bgIsolation": "none"
@@ -63,7 +70,9 @@
   "autoMode": {
     "allow": [
       "$defaults",
-      "git push --force-with-lease to my non-default branches under ~/.grove/code is routine"
+      "editing ~/.grove/code/jgeschwendt/main/ is allowed",
+      "git push --force-with-lease to my non-default branches under ~/.grove/code is routine",
+      "stopping a process this session started, by its pid or with `mise run stop`, is routine"
     ]
   },
   "voiceEnabled": true,

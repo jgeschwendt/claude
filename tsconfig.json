@@ -7,6 +7,6 @@
     "noEmit": true,
     "types": ["bun"]
   },
-  "exclude": ["node_modules", "plugins"],
+  "exclude": ["node_modules", "plugins", "skills/show"],
   "include": [".mise/tasks", "oxfmt.config.ts", "oxlint.config.ts", "scripts", "skills"]
 }

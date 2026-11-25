@@ -33,7 +33,7 @@ jobs:
       # The gate's validate and test steps run the claude CLI; neither needs auth. The installer takes
       # the version to install, pinned here; it lands in ~/.local/bin.
       - run: |
-          curl -fsSL https://claude.ai/install.sh | bash -s 2.1.318
+          curl -fsSL https://claude.ai/install.sh | bash -s 2.1.332
           echo ~/.local/bin >> "$GITHUB_PATH"
       - run: mise x -- bun install --frozen-lockfile
       - run: mise x -- bun run test

@@ -1,0 +1,9 @@
+#!/usr/bin/env bun
+// show <verb> …: the CLI an agent uses; `show` alone lists the verbs
+import { run } from './cli.ts';
+
+const [code, text] = await run(Bun.argv.slice(2));
+if (text) {
+  await Bun.write(code ? Bun.stderr : Bun.stdout, `${text}\n`);
+}
+process.exitCode = code;

@@ -48,6 +48,7 @@
   <nav class="row docs-toc" aria-label="sections">
     <a class="pill" href="#link">link</a>
     <a class="pill" href="#doctor">doctor</a>
+    <a class="pill" href="#show">show</a>
     <a class="pill" href="#subether">subether</a>
     <a class="pill" href="#gate">gate</a>
     <a class="pill" href="#plan">plan</a>
@@ -103,6 +104,62 @@
   </ul>
 </section>
 
+<section class="docs-section" id="show" data-component="show">
+  <header>
+    <h2 class="h2">Show</h2>
+    <p class="docs-note">How an agent puts a decision in front of the owner and talks with him through it:
+      <code class="code">skills/show/</code>, its contract the skill's
+      <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/skills/show/SKILL.md">SKILL.md</a>.</p>
+  </header>
+  <figure class="show-flow">
+    <svg role="img" aria-label="The show loop: the agent opens a form; the owner's Sends reach the daemon; show wait hands each to the agent, whose replies, status and resolutions reach the page over its socket." viewBox="0 0 720 250">
+      <defs>
+        <marker id="show-arrow" markerHeight="8" markerUnits="userSpaceOnUse" markerWidth="8" orient="auto" refX="7" refY="4">
+          <path d="M0,0 L8,4 L0,8 z" />
+        </marker>
+      </defs>
+      <text class="show-side" x="10" y="14">the agent · CLI</text>
+      <text class="show-side" x="530" y="14">the owner · browser</text>
+      <g class="show-box"><rect height="58" width="200" x="10" y="24" /><text x="24" y="48">① show open</text><text class="sub" x="24" y="68">validate, register, print the url</text></g>
+      <g class="show-box"><rect height="58" width="200" x="10" y="100" /><text x="24" y="124">③ show wait</text><text class="sub" x="24" y="144">blocks, prints one event</text></g>
+      <g class="show-box"><rect height="58" width="200" x="10" y="176" /><text x="24" y="200">④ reply · status · resolve</text><text class="sub" x="24" y="220">answers on the card</text></g>
+      <g class="show-box show-core"><rect height="210" width="230" x="255" y="24" /><text x="269" y="50">show daemon</text><text class="sub" x="269" y="74">form.json, answers.jsonl,</text><text class="sub" x="269" y="92">status.json per form on disk</text><text class="sub" x="269" y="118">hud threads in one store</text><text class="sub" x="269" y="144">unix socket for the CLI,</text><text class="sub" x="269" y="162">127.0.0.1:7469 for pages</text></g>
+      <g class="show-box"><rect height="80" width="190" x="530" y="24" /><text x="544" y="48">② /&lt;slug&gt;</text><text class="sub" x="544" y="68">tap a choice, write,</text><text class="sub" x="544" y="86">Send any card, any time</text></g>
+      <g class="show-box"><rect height="80" width="190" x="530" y="154" /><text x="544" y="178">⑤ the page updates</text><text class="sub" x="544" y="198">over its WebSocket,</text><text class="sub" x="544" y="216">no reload</text></g>
+      <path class="show-arrow" d="M210,53 H253" />
+      <path class="show-arrow" d="M255,129 H212" />
+      <path class="show-arrow" d="M210,205 H253" />
+      <path class="show-arrow" d="M530,64 H487" />
+      <path class="show-arrow" d="M485,194 H528" />
+    </svg>
+    <figcaption>Each Send, and each comment the owner leaves through hud, is one event
+      <code class="code">show wait</code> prints; the agent answers it on the card, as many rounds as it
+      takes.</figcaption>
+  </figure>
+  <p class="docs-note">The catalog (<code class="code">skills/show/catalog.tsx</code>): every card also takes
+    <code class="code">id</code>, <code class="code">title</code>, <code class="code">meta?</code>, and gets
+    options, a message box, its own Send and a thread.</p>
+  <table class="table">
+    <thead><tr><th>component</th><th>fields</th></tr></thead>
+    <tbody>
+      <tr><td><code class="code">chart</code></td><td><code class="code">kind</code> bar | split, <code class="code">rows</code> [{label, value}], <code class="code">options?</code>, <code class="code">text?</code></td></tr>
+      <tr><td><code class="code">code</code></td><td><code class="code">code</code>, <code class="code">options?</code>, <code class="code">text?</code></td></tr>
+      <tr><td><code class="code">decision</code></td><td><code class="code">options</code> (exactly one lean ★), <code class="code">text</code></td></tr>
+      <tr><td><code class="code">list</code></td><td><code class="code">items</code>, <code class="code">options?</code>, <code class="code">text?</code></td></tr>
+      <tr><td><code class="code">note</code></td><td><code class="code">text</code>, <code class="code">options?</code></td></tr>
+      <tr><td><code class="code">teach</code></td><td><code class="code">text</code>, <code class="code">pair</code> [today, alternative], <code class="code">cost</code>, <code class="code">options</code></td></tr>
+    </tbody>
+  </table>
+  <ul class="stack claims" role="list">
+    <li><strong>no browser streams</strong> — live changes ride WebSockets, hud's and show's; never an
+      EventSource or a streamed fetch, which Chromium caps at six per host:port across every tab. A test fails on
+      either in the client.</li>
+    <li><strong>disk is the truth</strong> — <code class="code">${XDG_STATE_HOME:-~/.local/state}/show/</code>; a
+      kill loses nothing a restart cannot re-read. One instance by flock, every stop signal drains, launchd
+      (<code class="code">io.jlg.show</code>) keeps it up once <code class="code">show setup</code> has run.</li>
+  </ul>
+</section>
+
 <section class="docs-section" id="subether" data-component="subether">
   <header>
     <h2 class="h2">The subether mod</h2>
@@ -130,8 +187,8 @@
   </header>
   <p><code class="code">bun run test</code>
     (<a class="link" href="https://github.com/jgeschwendt/claude/blob/main/scripts/test.ts">scripts/test.ts</a>)
-    runs every step at once — fmt, lint, tsc, the unit tests (link, doctor, /end and /delete), the mod's
-    validate and suite — then the stele gate.</p>
+    runs every step at once — fmt, lint, tsc, the unit tests (link, doctor, /end and /delete), show's tests
+    held at 100 % line and function coverage, the mod's validate and suite — then the stele gate.</p>
   <p class="docs-note"><code class="code">ci.yaml</code> runs the same gate, the claude CLI
     installed at a pinned version, on push to main, pull requests and the merge queue; never
     <code class="code">stele build</code>, the lock's sole writer.</p>
@@ -160,6 +217,17 @@
 </nav>
 
 </main>
+<style>
+.show-flow svg { display: block; max-width: 720px; min-width: 640px; width: 100%; }
+.show-flow { margin: 0; overflow-x: auto; }
+.show-box rect { fill: var(--ui-surface); rx: 10; stroke: var(--ui-border); }
+.show-box text { fill: var(--ui-fg); font: 13px var(--ui-font-mono); }
+.show-box text.sub { fill: var(--ui-fg-muted); font: 12px var(--ui-font-sans); }
+.show-side { fill: var(--ui-fg-muted); font: 12px var(--ui-font-sans); }
+.show-core rect { fill: var(--ui-surface-raised); stroke: var(--ui-accent); stroke-width: 2; }
+.show-arrow { fill: none; marker-end: url(#show-arrow); stroke: var(--ui-fg-muted); stroke-width: 1.5; }
+#show-arrow path { fill: var(--ui-fg-muted); }
+</style>
 <script>
 /* The theme contract, verbatim from jgeschwendt/ui docs.js — same localStorage
    key, so a theme chosen on the ui pages is the theme this one opens in. */

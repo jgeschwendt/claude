@@ -21,7 +21,7 @@ A typed fixture from JSON, the event's engine-set fields left out
 */
 const fixture: <T>(json: string) => T = JSON.parse;
 /**
-an Explore spawn under a parent the pin leaves alone, `fields` (`,"key":value…`) overriding
+an Explore spawn, `fields` (`,"key":value…`) overriding
 */
 const spawn = (fields = ''): AgentSpawnInput =>
   fixture(
@@ -155,15 +155,11 @@ test('a spawn is emitted under the id and model the engine answered', async ($, 
   expect(emits).toEqual([SPAWNED]);
 });
 
-test('the pin still decides, and the event carries its model, parent, name and teammate', async ($, on) => {
-  const { emits, logs } = engine(on);
-  const fields =
-    ',"isTeammate":true,"name":"n","parentAgentId":"a0","parentModel":"claude-fable-5"';
+test('the event carries its model, parent, name and teammate', async ($, on) => {
+  const { emits } = engine(on);
+  const fields = ',"isTeammate":true,"model":"opus","name":"n","parentAgentId":"a0"';
   expect(await $.agent.spawn(spawn(fields))).toEqual({ agentId: 'a1', model: 'opus' });
-  expect([emits, logs]).toEqual([
-    [{ ...SPAWNED, model: 'opus', name: 'n', parent: 'a0', teammate: true }],
-    ['pinned d to opus'],
-  ]);
+  expect(emits).toEqual([{ ...SPAWNED, model: 'opus', name: 'n', parent: 'a0', teammate: true }]);
 });
 
 test('a denied spawn emits nothing', async ($, on) => {

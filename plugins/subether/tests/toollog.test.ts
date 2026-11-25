@@ -13,6 +13,7 @@ const AT = '2026-11-07T03:30:00.250Z';
 const NOW = Temporal.Instant.from(AT).epochMilliseconds;
 const CUT = 2000;
 const EXTRA = 5;
+const HEAD = 300;
 const LINE = 120;
 const LONG = 400;
 const SCRIPT = 'mkdir -p "$(dirname "$1")" && cat >> "$1"';
@@ -124,15 +125,19 @@ test('a call appends one line, keys in wire order, to the local day’s file', a
   ]);
 });
 
-test('an errored call is an error, its size what the model read', async ($, on) => {
-  const { appends, time } = engine(on, {
-    answer: { isError: true, result: 'boom', text: 'boom!' },
-  });
+test('an errored call is an error, its size what the model read, its head the first 300 characters', async ($, on) => {
+  const text =
+    'Permission for this action was denied by the Claude Code auto mode classifier. Reason: '.padEnd(
+      HEAD + EXTRA,
+      'z',
+    );
+  const { appends, time } = engine(on, { answer: { isError: true, result: 'boom', text } });
   await call($, time, { file_path: '/w/a.md', tool: 'Read' });
   expect(lines(appends)).toEqual([
     expect.objectContaining({
-      chars: 'boom!'.length,
+      chars: text.length,
       error: true,
+      head: text.slice(0, HEAD),
       outcome: 'error',
       readOnly: false,
     }),
@@ -148,6 +153,7 @@ test('a denied call is logged with its deny, the guard beneath this hook', async
   expect(line).toMatchObject({
     chars: 0,
     deny: expect.stringMatching(/^subether: never `git stash`/u),
+    head: expect.stringMatching(/^subether: never `git stash`/u),
     input: { command: 'git stash' },
     ms: 0,
     outcome: 'denied',
@@ -164,6 +170,7 @@ test('a denied call is logged with its deny, the guard beneath this hook', async
     'outcome',
     'deny',
     'error',
+    'head',
     'readOnly',
     'chars',
     'input',

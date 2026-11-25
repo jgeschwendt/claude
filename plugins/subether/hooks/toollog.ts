@@ -23,6 +23,10 @@ how much of each string argument a line keeps
 */
 const CUT = 2000;
 /**
+how much of a failed call's result text its line carries
+*/
+const HEAD = 300;
+/**
 how much of the prompt, newlines as spaces, its line carries
 */
 const LINE = 120;
@@ -93,7 +97,7 @@ const outcomeOf = (result: ToolCallResult): 'denied' | 'error' | 'ok' => {
 
 /**
 The call's line, keys in the wire order: kind (`call`), at, session, agent, cwd, tool, id, ms, outcome, deny (a denial only), error,
-readOnly, chars (what the model read, counted), bash (a Bash record only), input
+head (a failure only), readOnly, chars (what the model read, counted), bash (a Bash record only), input
 */
 const lineOf = async (
   $: EngineInterface,
@@ -101,6 +105,7 @@ const lineOf = async (
   call: { at: number; ms: number; result: ToolCallResult },
 ): Promise<string> => {
   const { result } = call;
+  const outcome = outcomeOf(result);
   const [session, cwd] = await Promise.all([$.session.id(), $.session.cwd()]);
   // each value as JSON, absent ones left out
   const pairs: [string, string | undefined][] = [
@@ -112,9 +117,14 @@ const lineOf = async (
     ['tool', JSON.stringify(e.tool)],
     ['id', nullable(e.tool_use_id)],
     ['ms', String(call.ms)],
-    ['outcome', JSON.stringify(outcomeOf(result))],
+    ['outcome', JSON.stringify(outcome)],
     ['deny', result.deny === undefined ? undefined : JSON.stringify(result.deny)],
     ['error', String(result.isError === true)],
+    // what the model read, else the denial; JSON.stringify of undefined drops the key
+    [
+      'head',
+      outcome === 'ok' ? undefined : JSON.stringify((result.text ?? result.deny)?.slice(0, HEAD)),
+    ],
     ['readOnly', String(result.isReadOnly === true)],
     ['chars', String(result.text?.length ?? 0)],
     ['bash', bashOf(e.tool, result)],

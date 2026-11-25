@@ -110,13 +110,13 @@ function Time({ at }: Readonly<{ at: string }>): ReactNode {
 }
 
 /**
-a button that sends the whole card, picks, option comments and message: Send under the options, Ask by the message
+the Ask button by the message: sends the whole card, picks, option comments and message
 */
-function Send({ label }: Readonly<{ label: string }>): ReactNode {
+function Send(): ReactNode {
   const { pending } = useFormStatus();
   return (
     <button disabled={pending} name="verb" type="submit" value="answer">
-      {pending ? 'Sending…' : label}
+      {pending ? 'Sending…' : 'Ask'}
     </button>
   );
 }
@@ -206,19 +206,24 @@ function CardView({
   const answer = events.findLast((event) => event.kind === 'answer' && event.card === card.id);
   const isMany = card.pick === 'many';
   const [chosen, setChosen] = useState(lastPicks(card, events));
+  // the option whose ✎ comment is open
+  const [open, setOpen] = useState('');
   const [problem, action] = useActionState(async (_previous: string, data: FormData) => {
+    // an option's own ↵ sends just that option and its comment
+    const only = data.get('only');
     const said = {
-      choices: data.getAll('choice'),
+      choices: only ? [only] : data.getAll('choice'),
       message: String(data.get('message')).trim(),
       // each option's own comment, only the ones he wrote
       notes: Object.fromEntries(
         (card.options ?? [])
+          .filter(({ value }) => !only || value === only)
           .map(({ value }) => [value, String(data.get(`note-${value}`)).trim()])
           .filter(([, text]) => text),
       ),
     };
-    // the button pressed names the verb
-    const verb = String(data.get('verb'));
+    // the button pressed names the verb; an option's ↵ is an answer
+    const verb = only ? 'answer' : String(data.get('verb'));
     const response = await post(verb, { card: card.id, ...said });
     const reply = await response.json();
     if (!response.ok) {
@@ -252,7 +257,7 @@ function CardView({
         {card.options ? (
           <fieldset>
             {card.options.map(({ hint, label, lean, shape, value }) => (
-              <div className="pick" key={value}>
+              <div className={open === value ? 'pick open' : 'pick'} key={value}>
                 <label className="option">
                   <input
                     checked={chosen.includes(value)}
@@ -277,7 +282,27 @@ function CardView({
                     {hint ? <small>{hint}</small> : undefined}
                   </span>
                 </label>
-                {/* the label focuses the input, and a focused or filled input shows: no script */}
+                <input
+                  aria-label={`Comment on ${label}`}
+                  id={`note-${card.id}-${value}`}
+                  name={`note-${value}`}
+                  onFocus={() => setOpen(value)}
+                  // Enter would press the form's first button: press this option's own
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter') {
+                      return;
+                    }
+                    event.preventDefault();
+                    event.currentTarget.form?.requestSubmit(
+                      event.currentTarget.nextElementSibling as HTMLButtonElement,
+                    );
+                  }}
+                  placeholder={`About ${label}`}
+                />
+                <button aria-label={`Send ${label}`} name="only" type="submit" value={value}>
+                  {'↵'}
+                </button>
+                {/* the label focuses the input, which opens it: the ✎ gives way to the ↵ */}
                 <label
                   aria-label={`Comment on ${label}`}
                   className="aside"
@@ -285,15 +310,8 @@ function CardView({
                 >
                   {'✎'}
                 </label>
-                <input
-                  aria-label={`Comment on ${label}`}
-                  id={`note-${card.id}-${value}`}
-                  name={`note-${value}`}
-                  placeholder={`About ${label}`}
-                />
               </div>
             ))}
-            <Send label="Send" />
           </fieldset>
         ) : undefined}
         <textarea
@@ -303,7 +321,7 @@ function CardView({
           rows={2}
         />
         <div className="row">
-          <Send label="Ask" />
+          <Send />
           <button className="settle" formNoValidate name="verb" type="submit" value="resolve">
             {'Resolve'}
           </button>

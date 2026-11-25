@@ -110,9 +110,6 @@ fieldset {
   margin: 12px 0;
   padding: 0;
 }
-fieldset > button {
-  justify-self: start;
-}
 .option {
   align-items: center;
   border: 1px solid var(--line);
@@ -334,9 +331,12 @@ hud {
   display: none;
 }
 .pick {
-  display: grid;
-  gap: 0 8px;
-  grid-template-columns: 1fr 44px;
+  display: flex;
+  gap: 8px;
+}
+.pick > .option {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .option small {
   display: block;
@@ -364,19 +364,34 @@ hud {
   justify-content: center;
   min-height: 44px;
 }
+.aside,
+.pick > button {
+  flex: none;
+  padding: 0;
+  width: 44px;
+}
+.pick > button,
+.pick.open .aside {
+  display: none;
+}
+.pick.open > button {
+  display: block;
+}
 .pick > input {
   background: var(--glass);
   border: 0;
-  border-radius: 10px;
+  border-radius: 12px;
   color: #fff;
+  flex: 0 0 0;
   font: inherit;
-  grid-column: 1 / -1;
-  height: 0;
-  padding: 0 12px;
+  margin: -4px;
+  min-width: 0;
+  padding: 0;
 }
-.pick > input:focus,
+.pick.open > input,
 .pick > input:not(:placeholder-shown) {
   border: 1px solid var(--line);
-  height: 44px;
-  margin-top: 6px;
+  flex: 4 1 0;
+  margin: 0;
+  padding: 0 12px;
 }

@@ -122,9 +122,9 @@ test('hydrates, sends, says it on hud and follows both sockets', async () => {
   );
   expect(card('allow').querySelectorAll('svg')).toHaveLength(1);
 
-  // Send sits under a card's options, Ask by its message box; a card without options has only Ask
+  // each option has its own ↵, Ask sits by the message box; a card without options has only Ask
   expect([labels('land'), labels('else')]).toEqual([
-    ['Send', 'Ask', 'Resolve'],
+    ['↵', '↵', 'Ask', 'Resolve'],
     ['Ask', 'Resolve'],
   ]);
 
@@ -210,6 +210,24 @@ test('hydrates, sends, says it on hud and follows both sockets', async () => {
         'default_numeric_fallback — non_ascii_literal — missing_docs_in_private_items: later',
       ),
   );
+
+  // an option's ✎ opens its comment inline; Enter in it, or its ↵, sends just that option
+  find<HTMLInputElement>(card('allow'), '[name=note-ascii]').focus();
+  await until(() => card('allow').querySelector(':scope .pick.open [name=note-ascii]'));
+  const note = find<HTMLInputElement>(card('allow'), '[name=note-ascii]');
+  note.value = 'only this';
+  note.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'a' }));
+  note.dispatchEvent(
+    new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Enter' }),
+  );
+  expect(await waited()).toMatchObject({
+    choices: ['ascii'],
+    kind: 'answer',
+    notes: { ascii: 'only this' },
+  });
+  find<HTMLInputElement>(card('allow'), '[name=note-docs]').value = 'later';
+  find<HTMLButtonElement>(card('allow'), 'button[name=only][value=docs]').click();
+  expect(await waited()).toMatchObject({ choices: ['docs'], notes: { docs: 'later' } });
 
   // the daemon refuses: the card says why
   send('else', ' ');

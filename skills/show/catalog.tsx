@@ -15,7 +15,7 @@ type Base = {
 };
 type Display =
   | { component: 'chart'; kind: 'bar' | 'split'; rows: Row[] }
-  | { component: 'code'; code: string }
+  | { component: 'code'; code: string; html?: string[]; lang?: string }
   | { component: 'figure'; svg: string }
   | { component: 'list'; items: string[] }
   | { component: 'note'; text: string }
@@ -24,7 +24,15 @@ type Card = Base &
   (
     | Display
     | { component: 'decision'; options: Option[]; text: string }
-    | { component: 'teach'; cost: string; options: Option[]; pair: [string, string]; text: string }
+    | {
+        component: 'teach';
+        cost: string;
+        html?: string[];
+        lang?: string;
+        options: Option[];
+        pair: [string, string];
+        text: string;
+      }
   );
 /**
 a display at the top of the form: a finding he reads, never answers
@@ -37,6 +45,7 @@ type Kind =
   | 'cards'
   | 'id'
   | 'kind'
+  | 'lang'
   | 'loop'
   | 'options'
   | 'pair'
@@ -72,6 +81,11 @@ const isOptions = listOf(
 );
 
 /**
+the language ids `lang` accepts; the server fills it from shiki (lit.ts), so the client bundle carries none
+*/
+const LANGUAGES = new Set<string>();
+
+/**
 what each field kind accepts, as the message says it and as the test checks it
 */
 const KINDS: Record<Kind, [string, (value: unknown, owner: Record<string, unknown>) => boolean]> = {
@@ -82,6 +96,7 @@ const KINDS: Record<Kind, [string, (value: unknown, owner: Record<string, unknow
     (id) => typeof id === 'string' && /^[a-z][\w-]*$/iu.test(id),
   ],
   kind: ['"bar" or "split"', (kind) => kind === 'bar' || kind === 'split'],
+  lang: ['a shiki language id, such as "rust" or "sh"', (lang) => LANGUAGES.has(String(lang))],
   loop: ['true', (loop) => loop === true],
   options: [
     '[{label, value, lean?: true, hint?, shape?}, …], values distinct, exactly one lean unless pick is "many"',
@@ -112,7 +127,7 @@ each display's own fields, `?` marking the optional; a new one adds its line her
 */
 const DISPLAYS: Record<Display['component'], Record<string, Kind>> = {
   chart: { 'kind': 'kind', 'rows': 'rows', 'text?': 'text' },
-  code: { 'code': 'text', 'text?': 'text' },
+  code: { 'code': 'text', 'lang?': 'lang', 'text?': 'text' },
   figure: { 'svg': 'text', 'text?': 'text' },
   list: { 'items': 'strings', 'text?': 'text' },
   note: { text: 'text' },
@@ -141,7 +156,14 @@ each card component's fields: a display's with `options?`, or a component that i
 const SCHEMAS: Record<Card['component'], Record<string, Kind>> = {
   ...displays({ ...COMMON, 'options?': 'options' }),
   decision: { ...COMMON, options: 'options', text: 'text' },
-  teach: { ...COMMON, cost: 'text', options: 'options', pair: 'pair', text: 'text' },
+  teach: {
+    ...COMMON,
+    'cost': 'text',
+    'lang?': 'lang',
+    'options': 'options',
+    'pair': 'pair',
+    'text': 'text',
+  },
 };
 
 function check(
@@ -289,6 +311,19 @@ function Steps({ items, loop }: Of<'steps'>): ReactNode {
 }
 
 /**
+a code sample: the server's highlighted markup when it made one, else the plain text
+*/
+function Sample({ code, html }: Readonly<{ code: string; html?: string | undefined }>): ReactNode {
+  return html ? (
+    <div className="lit" dangerouslySetInnerHTML={{ __html: html }} />
+  ) : (
+    <pre>
+      <code>{code}</code>
+    </pre>
+  );
+}
+
+/**
 the card's options among `values`, in authored order
 */
 function picked(card: Card, values: unknown[]): Option[] {
@@ -320,11 +355,7 @@ the part of a card or block only its component draws; decision and note are thei
 const BODIES: Partial<Record<Card['component'], (card: never) => ReactNode>> = {
   chart: ({ kind, rows }: Of<'chart'>) =>
     kind === 'bar' ? <Bars rows={rows} /> : <Split rows={rows} />,
-  code: ({ code }: Of<'code'>) => (
-    <pre>
-      <code>{code}</code>
-    </pre>
-  ),
+  code: ({ code, html }: Of<'code'>) => <Sample code={code} html={html?.[0]} />,
   // the author is the local agent, so its markup goes in raw
   figure: ({ svg }: Of<'figure'>) => (
     <div className="figure" dangerouslySetInnerHTML={{ __html: svg }} />
@@ -337,15 +368,13 @@ const BODIES: Partial<Record<Card['component'], (card: never) => ReactNode>> = {
     </ul>
   ),
   steps: Steps,
-  teach: ({ cost, pair }: Of<'teach'>) => (
+  teach: ({ cost, html, pair }: Of<'teach'>) => (
     <>
       <div className="pair">
         {pair.map((code, index) => (
           <div key={index}>
             <small>{index ? 'alternative' : 'today'}</small>
-            <pre>
-              <code>{code}</code>
-            </pre>
+            <Sample code={code} html={html?.[index]} />
           </div>
         ))}
       </div>
@@ -354,5 +383,5 @@ const BODIES: Partial<Record<Card['component'], (card: never) => ReactNode>> = {
   ),
 };
 
-export { BODIES, picked, SCHEMAS, spoken, validate };
+export { BODIES, LANGUAGES, picked, SCHEMAS, spoken, validate };
 export type { Block, Card, Form, Option };

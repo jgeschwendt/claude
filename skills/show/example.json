@@ -4,6 +4,7 @@
       "component": "teach",
       "cost": "39 renames in routines; the old value stays reachable, so the wrong one can be used by mistake.",
       "id": "shadow_reuse",
+      "lang": "rust",
       "meta": "clippy · restriction · 39 hits",
       "options": [
         { "label": "allow in canon", "lean": true, "value": "allow" },
@@ -57,6 +58,7 @@
       "code": "#[expect(\n    clippy::single_call_fn,\n    reason = \"a named step of the tick\"\n)]\nfn rotate(states: &Path) {",
       "component": "code",
       "id": "attribute",
+      "lang": "rust",
       "text": "The attribute each single-call function carries today.",
       "title": "The ceremony"
     },
@@ -78,6 +80,11 @@
     }
   ],
   "overview": [
+    {
+      "code": "mise run -C ~/.grove/code/jgeschwendt/claude/main check",
+      "component": "code",
+      "title": "Plain, with no lang"
+    },
     {
       "component": "chart",
       "kind": "split",

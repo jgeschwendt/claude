@@ -188,6 +188,7 @@ test('validate names the card and the field of every problem', () => {
           text: 't',
           title: 't',
         },
+        { code: 'x', component: 'code', id: 'c', lang: 'nope', title: 't' },
       ],
       overview: [
         { component: 'decision', title: 't' },
@@ -216,6 +217,7 @@ test('validate names the card and the field of every problem', () => {
     'cards[7] 1 chart.kind: expected "bar" or "split", got "pie"',
     'cards[7] 1 chart.rows: expected [{label, value: a number ≥ 0}, …], got [{"label":"l","value":-1}]',
     'cards[8] b teach.pair: expected [today, alternative], two strings, got ["a"]',
+    'cards[9] c code.lang: expected a shiki language id, such as "rust" or "sh", got "nope"',
   ]);
 });
 
@@ -315,6 +317,10 @@ test('open validates, registers and lists; the page renders it; Host and Origin 
   expect(page).toContain('allow in canon<!-- --> ★');
   expect(page).toContain(`<div class="figure"><svg viewBox='0 0 400 80'`);
   expect(page).toContain('window.__SHOW__={');
+  // highlighted on the server, in the state the page hydrates from, uncoloured by anything but variables
+  expect(page).toContain('<div class="lit"><pre class="shiki css-variables"');
+  expect(page).toContain('color:var(--shiki-token-keyword)');
+  expect(page).toContain(String.raw`"html":["<pre class=\"shiki css-variables\"`);
   const index = await fetch(url.replace('lints-canon', ''));
   expect(await index.text()).toContain('Lints canon');
   const missing = await fetch(url.replace('lints-canon', 'gone'));

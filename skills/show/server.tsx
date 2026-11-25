@@ -5,6 +5,7 @@ import { FFIType, dlopen } from 'bun:ffi';
 import { renderToReadableStream } from 'react-dom/server';
 import { type Card, type Form, picked, spoken, validate } from './catalog.tsx';
 import { DIR, FIX, FailError, VERSION, home, hudPath } from './cli.ts';
+import { lit } from './lit.ts';
 import {
   App,
   type Entry,
@@ -475,10 +476,10 @@ async function serve({ port }: { port?: number } = {}): Promise<{
   /**
   open a form: its directory, its first state, and what a cold boot re-reads
   */
-  function open(slug: string, form: Form, session: string): Response {
+  async function open(slug: string, form: Form, session: string): Promise<Response> {
     const held: Held = {
       events: [],
-      form,
+      form: await lit(form),
       status: { lines: [], opened: now(), resolved: [], session, working: [] },
     };
     mkdirSync(`${root}/${slug}`, { recursive: true });
@@ -586,12 +587,12 @@ async function serve({ port }: { port?: number } = {}): Promise<{
       return Response.json(reply);
     },
     'POST /forms/:slug/resolve': ({ body: { target }, held, slug }) => settle(slug, held, target),
-    'PUT /forms/:slug': ({ body: { form }, held, slug }) => {
+    'PUT /forms/:slug': async ({ body: { form }, held, slug }) => {
       const problems = validate(form);
       if (problems.length > 0) {
         return fail('invalid', problems.join('\n'), UNPROCESSABLE);
       }
-      held.form = form;
+      held.form = await lit(form);
       save(`${root}/${slug}/form.json`, form);
       publish(slug);
       return Response.json({ slug, url: `${live.url}${slug}` });
@@ -654,19 +655,22 @@ async function serve({ port }: { port?: number } = {}): Promise<{
     rmSync(`${root}/${stale}`);
   }
   const formFiles = [...FORM_FILES.scanSync(root)];
-  for (const path of formFiles) {
-    const slug = path.slice(0, -'/form.json'.length);
-    const directory = `${root}/${slug}`;
-    forms.set(slug, {
-      events: readFileSync(`${directory}/answers.jsonl`, 'utf8')
-        .split('\n')
-        .filter(Boolean)
-        .map((line) => JSON.parse(line)),
-      form: JSON.parse(readFileSync(`${directory}/form.json`, 'utf8')),
-      // a status saved before `working` existed reads as none working
-      status: { working: [], ...JSON.parse(readFileSync(`${directory}/status.json`, 'utf8')) },
-    });
-  }
+  await Promise.all(
+    formFiles.map(async (path) => {
+      const slug = path.slice(0, -'/form.json'.length);
+      const directory = `${root}/${slug}`;
+      const raw = JSON.parse(readFileSync(`${directory}/form.json`, 'utf8'));
+      forms.set(slug, {
+        events: readFileSync(`${directory}/answers.jsonl`, 'utf8')
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => JSON.parse(line)),
+        form: await lit(raw),
+        // a status saved before `working` existed reads as none working
+        status: { working: [], ...JSON.parse(readFileSync(`${directory}/status.json`, 'utf8')) },
+      });
+    }),
+  );
   must(live.build.success, 'build', live.build.logs.join('\n'));
   /**
   the owner's own hud messages become events; the ones the page said for a Send are `answer`'s

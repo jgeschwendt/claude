@@ -68,15 +68,15 @@ Every card takes `id` (a letter, then letters, digits, `-`, `_`), `title`, `meta
 | component  | fields                                                                                  |
 | ---------- | --------------------------------------------------------------------------------------- |
 | `chart`    | `kind` `"bar"` or `"split"`, `rows` `[{label, value ≥ 0}]`, `text?`                     |
-| `code`     | `code`, `text?`                                                                         |
+| `code`     | `code`, `lang?`, `text?`                                                                |
 | `decision` | `text`, `options` (required)                                                            |
 | `figure`   | `svg` (an `<svg viewBox>`, drawn in the page), `text?` caption                          |
 | `list`     | `items` `[string]`, `text?`                                                             |
 | `note`     | `text`                                                                                  |
 | `steps`    | `items` `[string]`, boxes joined by arrows; `loop?: true` returns to the first, `text?` |
-| `teach`    | `text`, `pair` `[today, alternative]`, `cost`, `options` (required)                     |
+| `teach`    | `text`, `pair` `[today, alternative]`, `cost`, `lang?`, `options` (required)            |
 
-`decision` and `teach` are cards only; the rest also go in `overview`. `example.json` beside this file uses every component.
+`decision` and `teach` are cards only; the rest also go in `overview`. `example.json` beside this file uses every component. `lang` is a shiki language id (`rust`, `sh`, `ts`…); the daemon highlights the sample in grey levels, weight and italic, and without `lang` it stays plain.
 
 **Teach** when the decision is in a language or area he is learning: the plain statement, his own code today → the alternative, what the change costs, then the choice. Every code sample compiles: prove it before it goes on the card.
 

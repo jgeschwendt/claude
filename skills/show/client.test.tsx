@@ -122,9 +122,10 @@ test('hydrates, sends, says it on hud and follows both sockets', async () => {
   );
   expect(card('allow').querySelectorAll('svg')).toHaveLength(1);
 
-  // each option has its own ↵, Ask sits by the message box; a card without options has only Ask
-  expect([labels('land'), labels('else')]).toEqual([
+  // a pick-one card has a ↵ per option and no Send, a pick-many one a Send and no ↵; a card without options has only Ask
+  expect([labels('land'), labels('allow'), labels('else')]).toEqual([
     ['↵', '↵', 'Ask', 'Resolve'],
+    ['Send', 'Ask', 'Resolve'],
     ['Ask', 'Resolve'],
   ]);
 
@@ -211,23 +212,29 @@ test('hydrates, sends, says it on hud and follows both sockets', async () => {
       ),
   );
 
-  // an option's ✎ opens its comment inline; Enter in it, or its ↵, sends just that option
-  find<HTMLInputElement>(card('allow'), '[name=note-ascii]').focus();
-  await until(() => card('allow').querySelector(':scope .pick.open [name=note-ascii]'));
-  const note = find<HTMLInputElement>(card('allow'), '[name=note-ascii]');
+  // a pick-many ✎ only comments: Enter there is left to the form
+  const many = find<HTMLInputElement>(card('allow'), '[name=note-ascii]');
+  many.dispatchEvent(
+    new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Enter' }),
+  );
+
+  // a pick-one ✎ opens its comment inline; Enter in it, or its ↵, sends just that option
+  find<HTMLInputElement>(card('land'), '[name=note-hold]').focus();
+  await until(() => card('land').querySelector(':scope .pick.open [name=note-hold]'));
+  const note = find<HTMLInputElement>(card('land'), '[name=note-hold]');
   note.value = 'only this';
   note.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'a' }));
   note.dispatchEvent(
     new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Enter' }),
   );
   expect(await waited()).toMatchObject({
-    choices: ['ascii'],
+    choice: 'hold',
     kind: 'answer',
-    notes: { ascii: 'only this' },
+    notes: { hold: 'only this' },
   });
-  find<HTMLInputElement>(card('allow'), '[name=note-docs]').value = 'later';
-  find<HTMLButtonElement>(card('allow'), 'button[name=only][value=docs]').click();
-  expect(await waited()).toMatchObject({ choices: ['docs'], notes: { docs: 'later' } });
+  find<HTMLInputElement>(card('land'), '[name=note-land]').value = 'later';
+  find<HTMLButtonElement>(card('land'), 'button[name=only][value=land]').click();
+  expect(await waited()).toMatchObject({ choice: 'land', notes: { land: 'later' } });
 
   // the daemon refuses: the card says why
   send('else', ' ');

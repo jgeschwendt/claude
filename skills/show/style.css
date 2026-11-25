@@ -111,6 +111,9 @@ fieldset {
   margin: 12px 0;
   padding: 0;
 }
+fieldset > button {
+  justify-self: start;
+}
 .option {
   align-items: center;
   border: 1px solid var(--line);
@@ -372,7 +375,7 @@ hud {
   width: 44px;
 }
 .pick > button,
-.pick.open .aside {
+.pick.open > button ~ .aside {
   display: none;
 }
 .pick.open > button {

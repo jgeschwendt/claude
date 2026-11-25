@@ -110,13 +110,13 @@ function Time({ at }: Readonly<{ at: string }>): ReactNode {
 }
 
 /**
-the Ask button by the message: sends the whole card, picks, option comments and message
+a button that sends the whole card, picks, option comments and message: Send under a pick-many card's options, Ask by the message
 */
-function Send(): ReactNode {
+function Send({ label }: Readonly<{ label: string }>): ReactNode {
   const { pending } = useFormStatus();
   return (
     <button disabled={pending} name="verb" type="submit" value="answer">
-      {pending ? 'Sending…' : 'Ask'}
+      {pending ? 'Sending…' : label}
     </button>
   );
 }
@@ -287,9 +287,9 @@ function CardView({
                   id={`note-${card.id}-${value}`}
                   name={`note-${value}`}
                   onFocus={() => setOpen(value)}
-                  // Enter would press the form's first button: press this option's own
+                  // a pick-one card: Enter would press the form's first button, so press this option's own
                   onKeyDown={(event) => {
-                    if (event.key !== 'Enter') {
+                    if (isMany || event.key !== 'Enter') {
                       return;
                     }
                     event.preventDefault();
@@ -299,10 +299,12 @@ function CardView({
                   }}
                   placeholder={`About ${label}`}
                 />
-                <button aria-label={`Send ${label}`} name="only" type="submit" value={value}>
-                  {'↵'}
-                </button>
-                {/* the label focuses the input, which opens it: the ✎ gives way to the ↵ */}
+                {isMany ? undefined : (
+                  <button aria-label={`Send ${label}`} name="only" type="submit" value={value}>
+                    {'↵'}
+                  </button>
+                )}
+                {/* the label focuses the input, which opens it: a pick-one's ✎ gives way to the ↵ */}
                 <label
                   aria-label={`Comment on ${label}`}
                   className="aside"
@@ -312,6 +314,7 @@ function CardView({
                 </label>
               </div>
             ))}
+            {isMany ? <Send label="Send" /> : undefined}
           </fieldset>
         ) : undefined}
         <textarea
@@ -321,7 +324,7 @@ function CardView({
           rows={2}
         />
         <div className="row">
-          <Send />
+          <Send label="Ask" />
           <button className="settle" formNoValidate name="verb" type="submit" value="resolve">
             {'Resolve'}
           </button>

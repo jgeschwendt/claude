@@ -107,6 +107,7 @@ fieldset {
   border: 0;
   display: grid;
   gap: 8px;
+  grid-template-columns: minmax(0, 1fr);
   margin: 12px 0;
   padding: 0;
 }

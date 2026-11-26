@@ -104,23 +104,25 @@ macos('refuses without a safe identity', async () => {
   const runs = [
     end({ cli, extra: { ARGS: '/opt/claude daemon run' }, home, sid: BG }),
     end({ cli, extra: { ARGS: 'claude bg-pty-host 7' }, home, sid: BG }),
+    end({ cli, extra: { ARGS: '/x/MacOS/claude --bg-pty-host /tmp/p.sock' }, home, sid: BG }),
     end({ cli, extra: { CLAUDE_PID: '99999999' }, home, sid: BG }),
     end({ cli, home, sid: '../x' }),
   ];
   await Bun.sleep(QUIET_MS);
   expect([runs.map(([code]) => code), state(cli), await calls(home)]).toEqual([
-    [1, 1, 1, 1],
+    [1, 1, 1, 1, 1],
     'running',
     [],
   ]);
   cli.kill();
 });
 
-// /end interrupts its own CLI and nothing else, though its prompt holds the word daemon.
+// /end interrupts its own CLI and nothing else, run from its versioned path though its prompt holds the word daemon.
 macos('ends an interactive session by its pid alone', async () => {
   const home = await rig();
   const [cli, bystander] = [Bun.spawn(['sleep', '60']), Bun.spawn(['sleep', '60'])];
-  const run = end({ cli, extra: { ARGS: 'claude why does the daemon crash' }, home, sid: FG });
+  const ARGS = '/u/.local/share/claude/versions/2.1.332 why does the daemon crash';
+  const run = end({ cli, extra: { ARGS }, home, sid: FG });
   await cli.exited;
   expect([run, state(cli), state(bystander), await calls(home)]).toEqual([
     [0, '▸ ending bbbbbbbb\n'],

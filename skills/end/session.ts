@@ -59,7 +59,8 @@ const hasExited = async (deadline: number): Promise<boolean> => {
 
 /**
 The CLI pid is a live `claude` and not the daemon or its pty host, matched on the subcommand word alone: a watcher
-armed on the daemon waited for a daemon restart (2026-09-05), and a prompt can hold the word (2026-10-26)
+armed on the daemon waited for a daemon restart (2026-09-05), and a prompt can hold the word (2026-10-26); the
+CLI runs as `…/claude/versions/<version>` and the pty host as `claude --bg-pty-host` (observed 2026-11-26 · 2.1.332)
 */
 const [argv0 = '', sub = ''] = Bun.spawnSync(['ps', '-o', 'args=', '-p', String(pid)])
   .stdout.toString()
@@ -67,8 +68,8 @@ const [argv0 = '', sub = ''] = Bun.spawnSync(['ps', '-o', 'args=', '-p', String(
   .split(/\s+/u, 2);
 if (
   !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/u.test(sid) ||
-  !/(?:^|\/)claude$/u.test(argv0) ||
-  ['bg-pty-host', 'daemon'].includes(sub)
+  !/(?:^|\/)claude(?:\/versions\/[^/]+)?$/u.test(argv0) ||
+  ['bg-pty-host', 'daemon'].includes(sub.replace(/^-+/u, ''))
 ) {
   // a sandbox that denied `ps` still read as erased (2026-10-26)
   await say(

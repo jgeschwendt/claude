@@ -1,5 +1,5 @@
 // The whole loop in a real browser against the real hud, where both exist (skipped elsewhere, CI included): choose,
-// write and Send; `show wait` sees it; a reply lands on the card with no reload; resolve collapses it; a restart
+// write and Send; `show wait` sees it; a reply lands on the question with no reload; resolve collapses it; a restart
 // keeps it all; and the console stays clean.
 import { afterAll, expect, test } from 'bun:test';
 import { hudPath, run } from './cli.ts';
@@ -66,21 +66,21 @@ test.skipIf(!Bun.which('agent-browser') || !existsSync(SHOW_HUD))(
     browse('open', await said('open', `${DIR}/example.json`));
     browse('set', 'viewport', '420', '900');
     await until(() => browse('eval', 'Boolean(document.querySelector("hud"))') === 'true');
-    browse('click', '#card-land input[value=hold]');
-    browse('fill', '#card-land textarea', 'look first');
-    browse('click', '#card-land button[value=answer]');
-    expect(JSON.parse(await said('wait', 'lints-canon'))).toMatchObject({
-      card: 'land',
-      choice: 'hold',
-      kind: 'answer',
-      message: 'look first',
-    });
+    browse('click', '#question-land input[value=hold]');
+    browse('fill', '#question-land textarea', 'look first');
+    browse('click', '#question-land button[value=answer]');
+    expect(JSON.parse(await said('wait', 'lints-canon'))).toMatchObject([
+      'answer',
+      { message: 'look first', picks: { land: ['hold'] }, question: 'land' },
+    ]);
     await until(() =>
-      browse('get', 'text', '#card-land .thread').includes('hold, I want to look — look first'),
+      browse('get', 'text', '#question-land .thread').includes(
+        'land: hold, I want to look — look first',
+      ),
     );
     await said('reply', 'lints-canon', 'land', 'holding until you have looked');
     await until(() =>
-      browse('get', 'text', '#card-land .thread').includes('holding until you have looked'),
+      browse('get', 'text', '#question-land .thread').includes('holding until you have looked'),
     );
     await said('resolve', 'lints-canon', 'land');
     await until(() =>
@@ -90,7 +90,7 @@ test.skipIf(!Bun.which('agent-browser') || !existsSync(SHOW_HUD))(
     expect(await first.exited).toBe(0);
     await start(port);
     await said('status', 'lints-canon', 'back after a restart');
-    await until(() => browse('get', 'text', '.standing').includes('back after a restart'));
+    await until(() => browse('get', 'text', '.tasks').includes('back after a restart'));
     expect(browse('get', 'text', '.resolved')).toContain('jlg.io harness');
     expect(browse('errors')).toBe('');
     expect(browse('console')).not.toMatch(/error/iu);

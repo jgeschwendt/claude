@@ -11,9 +11,14 @@
     "upgrade": "scripts/upgrade.ts"
   },
   "dependencies": {
+    "@dagrejs/dagre": "3.1.4",
+    "@xstate/graph": "3.0.4",
     "d3-scale": "4.0.3",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "shiki": "4.6.0",
+    "verax": "link:../../typescript/verax-next/packages/verax",
+    "xstate": "5.33.4"
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "21.0.4",

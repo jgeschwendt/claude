@@ -1,3 +1,5 @@
 # the show step of the gate (scripts/test.ts) runs here with --coverage: below every line and function, it fails
 [test]
+# a linked verax resolves outside node_modules, so it is ignored by path
+coveragePathIgnorePatterns = ["**/packages/verax/**"]
 coverageThreshold = 1

@@ -35,13 +35,13 @@ const USAGE: Record<string, string> = {
   close: '<slug>',
   health: '',
   list: '',
-  open: '<form.json> [--slug s] [--quiet]',
-  reply: '<slug> <card|thread> [--working] <text…>',
-  resolve: '<slug> <card|thread>',
+  open: '<plan.json> [--slug s] [--quiet]',
+  reply: '<slug> <question|thread> [--working] <text…>',
+  resolve: '<slug> <question|thread>',
   serve: '',
   setup: '',
   status: '<slug> [line…]',
-  update: '<slug> <form.json> [--quiet]',
+  update: '<slug> <plan.json> [--quiet]',
   wait: '<slug>',
 };
 const GLOB = new Bun.Glob('{show,*.{css,ts,tsx}}');
@@ -124,7 +124,7 @@ const call = async <Reply>(method: string, path: string, body?: object): Promise
   return json as Reply;
 };
 
-const form = (file: string): unknown => {
+const plan = (file: string): unknown => {
   try {
     return JSON.parse(readFileSync(file, 'utf8'));
   } catch (error) {
@@ -173,7 +173,7 @@ const bootstrap = (argv: string[], tries = BOOTSTRAP_TRIES): Bun.SyncSubprocess<
 };
 
 /**
-show the form in the owner's browser unless `--quiet` or SHOW_NO_BROWSER says not to; SHOW_OPENER names another opener, and no opener on a platform without one skips silently
+show the plan in the owner's browser unless `--quiet` or SHOW_NO_BROWSER says not to; SHOW_OPENER names another opener, and no opener on a platform without one skips silently
 */
 const browse = (url: string, flags: string[]): void => {
   const { SHOW_NO_BROWSER, SHOW_OPENER } = Bun.env;
@@ -189,7 +189,7 @@ const browse = (url: string, flags: string[]): void => {
 
 const verbs: Record<string, (arguments_: string[]) => Promise<string> | string> = {
   close: async ([slug]) => {
-    await call('DELETE', `/forms/${slug}`);
+    await call('DELETE', `/plans/${slug}`);
     return `closed ${slug}`;
   },
   health: async () => {
@@ -203,20 +203,20 @@ const verbs: Record<string, (arguments_: string[]) => Promise<string> | string> 
     return JSON.stringify(health);
   },
   list: async () => {
-    const forms = await call<Summary[]>('GET', '/forms');
+    const open = await call<Summary[]>('GET', '/plans');
     return (
-      forms
+      open
         .map(
           (one) =>
             `${one.url}  ${one.title} · ${one.yours} his turn · ${one.waiting} waiting on the agent · ${one.working} agent working · ${one.session.slice(0, SHORT_ID)}`,
         )
-        .join('\n') || 'no open forms'
+        .join('\n') || 'no open plans'
     );
   },
   open: async ([file = '', ...rest]) => {
     const { CLAUDE_CODE_SESSION_ID } = Bun.env;
-    const { url } = await call<{ url: string }>('POST', '/forms', {
-      form: form(file),
+    const { url } = await call<{ url: string }>('POST', '/plans', {
+      plan: plan(file),
       session: CLAUDE_CODE_SESSION_ID ?? '',
       slug: rest[rest.indexOf('--slug') + 1],
     });
@@ -224,7 +224,7 @@ const verbs: Record<string, (arguments_: string[]) => Promise<string> | string> 
     return url;
   },
   reply: async ([slug, target, ...text]) => {
-    const { id } = await call<{ id: string }>('POST', `/forms/${slug}/reply`, {
+    const { id } = await call<{ id: string }>('POST', `/plans/${slug}/reply`, {
       target,
       text: text.filter((word) => word !== '--working').join(' '),
       working: text.includes('--working'),
@@ -232,7 +232,7 @@ const verbs: Record<string, (arguments_: string[]) => Promise<string> | string> 
     return `replied ${id.slice(0, SHORT_ID)}`;
   },
   resolve: async ([slug, target]) => {
-    const { resolved } = await call<{ resolved: string }>('POST', `/forms/${slug}/resolve`, {
+    const { resolved } = await call<{ resolved: string }>('POST', `/plans/${slug}/resolve`, {
       target,
     });
     return `resolved ${resolved}`;
@@ -268,11 +268,11 @@ const verbs: Record<string, (arguments_: string[]) => Promise<string> | string> 
     return `loaded ${LABEL} from ${file}`;
   },
   status: async ([slug, ...lines]) => {
-    await call('PUT', `/forms/${slug}/status`, { lines });
+    await call('PUT', `/plans/${slug}/status`, { lines });
     return `status ${slug}: ${lines.length} lines`;
   },
   update: async ([slug, file = '', ...rest]) => {
-    const { url } = await call<{ url: string }>('PUT', `/forms/${slug}`, { form: form(file) });
+    const { url } = await call<{ url: string }>('PUT', `/plans/${slug}`, { plan: plan(file) });
     browse(url, rest);
     return url;
   },
@@ -283,7 +283,7 @@ const verbs: Record<string, (arguments_: string[]) => Promise<string> | string> 
     // a daemon that is down or stopping is retried until it respawns; any other error ends the wait
     const poll = async (): Promise<string> => {
       try {
-        const event = await call('GET', `/forms/${slug}/events?after=${after}`);
+        const event = await call('GET', `/plans/${slug}/events?after=${after}`);
         writeFileSync(cursor, String(after + 1));
         return JSON.stringify(event);
       } catch (error) {

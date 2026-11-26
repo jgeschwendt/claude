@@ -35,6 +35,13 @@ jobs:
       - run: |
           curl -fsSL https://claude.ai/install.sh | bash -s 2.1.332
           echo ~/.local/bin >> "$GITHUB_PATH"
+      # until verax publishes: package.json links it from a sibling checkout, so clone jgeschwendt/typescript at the
+      # pinned sha to the same relative path and build its dist, which verax's exports point at
+      - run: |
+          git clone --quiet https://github.com/jgeschwendt/typescript.git ../../typescript/verax-next
+          git -C ../../typescript/verax-next checkout --quiet c61274867b1dacb357d7b1370a32f77dd670b067
+          mise x -- bun install --cwd ../../typescript/verax-next --frozen-lockfile
+          mise x -- bun run --cwd ../../typescript/verax-next/packages/verax build
       - run: mise x -- bun install --frozen-lockfile
       - run: mise x -- bun run test
       # stele graph gate (check → emit --check). NEVER `stele build` in CI: it is

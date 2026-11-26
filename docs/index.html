@@ -112,7 +112,7 @@
       <a class="link" href="https://github.com/jgeschwendt/claude/blob/main/skills/show/SKILL.md">SKILL.md</a>.</p>
   </header>
   <figure class="show-flow">
-    <svg role="img" aria-label="The show loop: the agent opens a form; the owner's Sends reach the daemon; show wait hands each to the agent, whose replies, status and resolutions reach the page over its socket." viewBox="0 0 720 250">
+    <svg role="img" aria-label="The show loop: the agent opens a plan; the owner's Sends reach the daemon; show wait hands each to the agent, whose replies, status and resolutions reach the page over its socket." viewBox="0 0 720 250">
       <defs>
         <marker id="show-arrow" markerHeight="8" markerUnits="userSpaceOnUse" markerWidth="8" orient="auto" refX="7" refY="4">
           <path d="M0,0 L8,4 L0,8 z" />
@@ -122,9 +122,9 @@
       <text class="show-side" x="530" y="14">the owner · browser</text>
       <g class="show-box"><rect height="58" width="200" x="10" y="24" /><text x="24" y="48">① show open</text><text class="sub" x="24" y="68">validate, register, print the url</text></g>
       <g class="show-box"><rect height="58" width="200" x="10" y="100" /><text x="24" y="124">③ show wait</text><text class="sub" x="24" y="144">blocks, prints one event</text></g>
-      <g class="show-box"><rect height="58" width="200" x="10" y="176" /><text x="24" y="200">④ reply · status · resolve</text><text class="sub" x="24" y="220">answers on the card</text></g>
-      <g class="show-box show-core"><rect height="210" width="230" x="255" y="24" /><text x="269" y="50">show daemon</text><text class="sub" x="269" y="74">form.json, answers.jsonl,</text><text class="sub" x="269" y="92">status.json per form on disk</text><text class="sub" x="269" y="118">hud threads in one store</text><text class="sub" x="269" y="144">unix socket for the CLI,</text><text class="sub" x="269" y="162">127.0.0.1:7469 for pages</text></g>
-      <g class="show-box"><rect height="80" width="190" x="530" y="24" /><text x="544" y="48">② /&lt;slug&gt;</text><text class="sub" x="544" y="68">tap a choice, write,</text><text class="sub" x="544" y="86">Send any card, any time</text></g>
+      <g class="show-box"><rect height="58" width="200" x="10" y="176" /><text x="24" y="200">④ reply · status · resolve</text><text class="sub" x="24" y="220">answers on the question</text></g>
+      <g class="show-box show-core"><rect height="210" width="230" x="255" y="24" /><text x="269" y="50">show daemon</text><text class="sub" x="269" y="74">plan.json, answers.jsonl,</text><text class="sub" x="269" y="92">status.json per plan on disk</text><text class="sub" x="269" y="118">hud threads in one store</text><text class="sub" x="269" y="144">unix socket for the CLI,</text><text class="sub" x="269" y="162">127.0.0.1:7469 for pages</text></g>
+      <g class="show-box"><rect height="80" width="190" x="530" y="24" /><text x="544" y="48">② /&lt;slug&gt;</text><text class="sub" x="544" y="68">tap a choice, write,</text><text class="sub" x="544" y="86">Send any question, any time</text></g>
       <g class="show-box"><rect height="80" width="190" x="530" y="154" /><text x="544" y="178">⑤ the page updates</text><text class="sub" x="544" y="198">over its WebSocket,</text><text class="sub" x="544" y="216">no reload</text></g>
       <path class="show-arrow" d="M210,53 H253" />
       <path class="show-arrow" d="M255,129 H212" />
@@ -133,21 +133,25 @@
       <path class="show-arrow" d="M485,194 H528" />
     </svg>
     <figcaption>Each Send, and each comment the owner leaves through hud, is one event
-      <code class="code">show wait</code> prints; the agent answers it on the card, as many rounds as it
+      <code class="code">show wait</code> prints; the agent answers it on the question, as many rounds as it
       takes.</figcaption>
   </figure>
-  <p class="docs-note">The catalog (<code class="code">skills/show/catalog.tsx</code>): every card also takes
-    <code class="code">id</code>, <code class="code">title</code>, <code class="code">meta?</code>, and gets
-    options, a message box, its own Send and a thread.</p>
+  <p class="docs-note">The catalog (<code class="code">skills/show/catalog.tsx</code>): a plan is
+    <code class="code">[title, overview, questions]</code>, a question <code class="code">[title, body]</code>,
+    every node a part <code class="code">[kind, props]</code> with <code class="code">title?</code> among its
+    props; each question gets a message box, its own Send and a thread.</p>
   <table class="table">
-    <thead><tr><th>component</th><th>fields</th></tr></thead>
+    <thead><tr><th>kind</th><th>props</th></tr></thead>
     <tbody>
-      <tr><td><code class="code">chart</code></td><td><code class="code">kind</code> bar | split, <code class="code">rows</code> [{label, value}], <code class="code">options?</code>, <code class="code">text?</code></td></tr>
-      <tr><td><code class="code">code</code></td><td><code class="code">code</code>, <code class="code">options?</code>, <code class="code">text?</code></td></tr>
-      <tr><td><code class="code">decision</code></td><td><code class="code">options</code> (exactly one lean ★), <code class="code">text</code></td></tr>
-      <tr><td><code class="code">list</code></td><td><code class="code">items</code>, <code class="code">options?</code>, <code class="code">text?</code></td></tr>
-      <tr><td><code class="code">note</code></td><td><code class="code">text</code>, <code class="code">options?</code></td></tr>
-      <tr><td><code class="code">teach</code></td><td><code class="code">text</code>, <code class="code">pair</code> [today, alternative], <code class="code">cost</code>, <code class="code">options</code></td></tr>
+      <tr><td><code class="code">chart</code></td><td><code class="code">kind</code> bar | split, <code class="code">rows</code> [[label, value], …]</td></tr>
+      <tr><td><code class="code">choice</code></td><td>question body only: <code class="code">id</code>, <code class="code">options</code> keyed by value (exactly one lean ★ unless <code class="code">pick</code> many)</td></tr>
+      <tr><td><code class="code">code</code></td><td><code class="code">code</code>, <code class="code">lang?</code></td></tr>
+      <tr><td><code class="code">compare</code></td><td><code class="code">pair</code> [today, alternative], <code class="code">lang?</code></td></tr>
+      <tr><td><code class="code">figure</code></td><td><code class="code">svg</code></td></tr>
+      <tr><td><code class="code">list</code></td><td><code class="code">items</code></td></tr>
+      <tr><td><code class="code">machine</code></td><td><code class="code">machine</code> an xstate config or a list of steps, <code class="code">loop?</code>, <code class="code">walk?</code></td></tr>
+      <tr><td><code class="code">note</code></td><td><code class="code">text</code></td></tr>
+      <tr><td><code class="code">tabs</code></td><td><code class="code">tabs</code> [[label, code, lang?], …]</td></tr>
     </tbody>
   </table>
   <ul class="stack claims" role="list">

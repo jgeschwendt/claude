@@ -61,13 +61,17 @@ export default defineConfig({
     {
       // the launchd plist's DOCTYPE names Apple's DTD by its fixed HTTP URL, and the daemon speaks plain HTTP over its Unix socket. (2026-11-23)
       files: ['skills/show/**/*.{ts,tsx}'],
-      rules: { 'unicorn-js/prefer-https': 'off' },
+      rules: {
+        // verax has only `exports`, which the import plugin's node resolver (main field only) cannot read; options replace the base's, so its bun: entry is restated. (2026-11-25)
+        'import-js/no-unresolved': ['error', { ignore: ['^bun:', '^verax$'] }],
+        'unicorn-js/prefer-https': 'off',
+      },
     },
     {
       files: ['skills/show/**/*.tsx'],
       plugins: ['jsx-a11y'],
       rules: {
-        // hud's `hud:open` event takes the card's place as `x` and `y`; options replace the base's, so its checkGeneric is restated. (2026-11-23)
+        // hud's `hud:open` event takes the question's place as `x` and `y`; options replace the base's, so its checkGeneric is restated. (2026-11-23)
         'id-length': ['error', { checkGeneric: false, exceptions: ['x', 'y'] }],
         // react-dom's entry points are subpaths (`react-dom/client`, `react-dom/server`) with no root export for them. (2026-11-23)
         'import-js/no-internal-modules': 'off',
@@ -77,13 +81,18 @@ export default defineConfig({
         'react/jsx-no-literals': 'off',
         // status lines, thread messages and chart rows are positional snapshots with no id; a list is replaced whole, never reordered. (2026-11-23)
         'react/no-array-index-key': 'off',
-        // a figure is SVG the local agent authored for the form; React has no other way to take markup as a string. (2026-11-24)
+        // a figure is SVG the local agent authored for the plan; React has no other way to take markup as a string. (2026-11-24)
         'react/no-danger': 'off',
         // the page's four components are one tree that hydrates as a unit, each a few lines; a file apiece would only scatter it. (2026-11-23)
         'react/no-multi-comp': 'off',
         // fast refresh is a dev-server feature; show serves a built bundle and has none, and the daemon imports the page's `publish` and `selectorOf`. (2026-11-23)
         'react/only-export-components': 'off',
       },
+    },
+    {
+      // a verax schema is its call tree (tuple of literal and object of refine of record…), nested by construction. (2026-11-25)
+      files: ['skills/show/catalog.tsx'],
+      rules: { 'unicorn/max-nested-calls': 'off' },
     },
     {
       // the page hydrates in the owner's browser, where Temporal is not in every engine: Date stays. (2026-11-23)

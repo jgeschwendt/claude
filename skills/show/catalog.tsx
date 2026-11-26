@@ -1,218 +1,300 @@
-// The component catalog: each component's fields, checked before anything is served, and the body it renders
-// inside the card every component shares (title, meta, text, options, message box, Send, thread).
+// The component catalog: the plan's contract as verax tuples, checked before anything is served, and the body each
+// context renders in the overview or in a question's body, the composition every question holds (title, body with its
+// choices, message box, Ask, thread).
 import { scaleLinear } from 'd3-scale';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
+import {
+  type Infer,
+  type ObjectOf,
+  type Schema,
+  type Shape,
+  unknown as anything,
+  enums,
+  float,
+  validate as judge,
+  list,
+  literal,
+  object,
+  optional,
+  record,
+  refine,
+  string,
+  tuple,
+  union,
+} from 'verax';
 
-type Option = { hint?: string; label: string; lean?: true; shape?: string; value: string };
-type Row = { label: string; value: number };
-type Base = {
-  id: string;
-  meta?: string;
-  options?: Option[];
-  pick?: 'many' | 'one';
-  text?: string;
-  title: string;
-};
-type Display =
-  | { component: 'chart'; kind: 'bar' | 'split'; rows: Row[] }
-  | { component: 'code'; code: string }
-  | { component: 'figure'; svg: string }
-  | { component: 'list'; items: string[] }
-  | { component: 'note'; text: string }
-  | { component: 'steps'; items: string[]; loop?: true };
-type Card = Base &
-  (
-    | Display
-    | { component: 'decision'; options: Option[]; text: string }
-    | { component: 'teach'; cost: string; options: Option[]; pair: [string, string]; text: string }
+/**
+the language ids `lang` accepts; the server fills it from shiki (lit.ts), so the client bundle carries none
+*/
+const LANGUAGES = new Set<string>();
+
+/**
+what xstate says of a machine part that passed its field checks, each problem as `field: message`; the server
+installs it (machine.ts), so the client bundle carries no xstate
+*/
+const MACHINE = {} as { problems: (props: Record<string, unknown>) => string[] };
+
+// ─── schemas ─────────────────────────────────────────────────────────────────────────────────────
+/**
+a list of at least one
+*/
+function some<T extends Schema>(of: T): Schema<Infer<T>[]> {
+  return refine(list(of), 'Expected at least one', (items) => items.length > 0);
+}
+/**
+whether every value of `values` is its own
+*/
+function isDistinct(values: unknown[]): boolean {
+  const seen = new Set(values);
+  return seen.size === values.length;
+}
+/**
+a record of at least one, its keys all passing `isFit`
+*/
+function keyed<T extends Schema>(
+  of: T,
+  message: string,
+  isFit: (key: string) => boolean,
+): Schema<Record<string, Infer<T>>> {
+  return refine(
+    record(of),
+    message,
+    (all) => Object.keys(all).length > 0 && Object.keys(all).every((key) => isFit(key)),
   );
-/**
-a display at the top of the form: a finding he reads, never answers
-*/
-type Block = Display & { text?: string; title: string };
-type Form = { cards: Card[]; overview?: Block[]; text?: string; title: string };
-type Of<C extends Card['component']> = Extract<Card, { component: C }>;
-type Kind =
-  | 'blocks'
-  | 'cards'
-  | 'id'
-  | 'kind'
-  | 'loop'
-  | 'options'
-  | 'pair'
-  | 'pick'
-  | 'rows'
-  | 'strings'
-  | 'text';
+}
 
-function isText(value: unknown): value is string {
-  return typeof value === 'string' && value.trim() !== '';
-}
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-function listOf(isEach: (item: unknown) => boolean): (value: unknown) => value is unknown[] {
-  return (value: unknown): value is unknown[] =>
-    Array.isArray(value) && value.length > 0 && value.every((item) => isEach(item));
-}
-function shapeOf(shape: Record<string, (value: unknown) => boolean>): (value: unknown) => boolean {
-  return (value: unknown) =>
-    isRecord(value) &&
-    Object.keys(value).every((key) => Object.hasOwn(shape, key)) &&
-    Object.entries(shape).every(([key, test]) => test(value[key]));
-}
-const isOptions = listOf(
-  shapeOf({
-    hint: (hint) => hint === undefined || isText(hint),
-    label: isText,
-    lean: (lean) => lean === undefined || lean === true,
-    shape: (shape) => shape === undefined || isText(shape),
-    value: isText,
-  }),
+const words = refine(string(), 'Expected a non-empty string', (value) => value.trim() !== '');
+const maybe = optional(words);
+const once = optional(literal(true));
+/**
+a language id of shiki's
+*/
+const language = refine(string(), 'Expected a shiki language id, such as "rust" or "sh"', (id) =>
+  LANGUAGES.has(id),
 );
-
+const lang = optional(language);
+const row = tuple([words, refine(float(), 'Expected a number ≥ 0', (value) => value >= 0)]);
+const optionShape = object('option', { hint: maybe, label: words, lean: once, shape: maybe });
 /**
-what each field kind accepts, as the message says it and as the test checks it
+a code tab: its label and sample, then its language when it has one (a tuple has no optional item)
 */
-const KINDS: Record<Kind, [string, (value: unknown, owner: Record<string, unknown>) => boolean]> = {
-  blocks: ['[block, …]', listOf(() => true)],
-  cards: ['[card, …]', listOf(() => true)],
-  id: [
-    'a letter, then letters, digits, - or _',
-    (id) => typeof id === 'string' && /^[a-z][\w-]*$/iu.test(id),
-  ],
-  kind: ['"bar" or "split"', (kind) => kind === 'bar' || kind === 'split'],
-  loop: ['true', (loop) => loop === true],
-  options: [
-    '[{label, value, lean?: true, hint?, shape?}, …], values distinct, exactly one lean unless pick is "many"',
-    (options, { pick }) =>
-      isOptions(options) &&
-      (pick === 'many' || options.filter((option) => (option as Option).lean).length === 1) &&
-      options.every(
-        (option, index) =>
-          options.findIndex((other) => (other as Option).value === (option as Option).value) ===
-          index,
-      ),
-  ],
-  pair: [
-    '[today, alternative], two strings',
-    (pair) => Array.isArray(pair) && pair.length === 2 && pair.every((one) => isText(one)),
-  ],
-  pick: ['"one" or "many"', (pick) => pick === 'one' || pick === 'many'],
-  rows: [
-    '[{label, value: a number ≥ 0}, …]',
-    listOf(shapeOf({ label: isText, value: (value) => typeof value === 'number' && value >= 0 })),
-  ],
-  strings: ['[string, …]', listOf(isText)],
-  text: ['a non-empty string', isText],
-};
-
+const tab = union('tab', [tuple([words, words]), tuple([words, words, words])]);
 /**
-each display's own fields, `?` marking the optional; a new one adds its line here and its body below
+an id, a letter first: never a whole number, which JS would hoist ahead of its record's other keys
 */
-const DISPLAYS: Record<Display['component'], Record<string, Kind>> = {
-  chart: { 'kind': 'kind', 'rows': 'rows', 'text?': 'text' },
-  code: { 'code': 'text', 'text?': 'text' },
-  figure: { 'svg': 'text', 'text?': 'text' },
-  list: { 'items': 'strings', 'text?': 'text' },
-  note: { text: 'text' },
-  steps: { 'items': 'strings', 'loop?': 'loop', 'text?': 'text' },
-};
+const NAME = /^[a-z][\w-]*$/iu;
+const id = refine(string(), 'Expected a letter, then letters, digits, - or _', (name) =>
+  NAME.test(name),
+);
+const heading = { title: maybe };
 /**
-every display with `shared` fields added
+a part's props: its own fields, and a heading
 */
-function displays(
-  shared: Record<string, Kind>,
-): Record<Display['component'], Record<string, Kind>> {
-  return Object.fromEntries(
-    Object.entries(DISPLAYS).map(([name, fields]) => [name, { ...shared, ...fields }]),
-  ) as Record<Display['component'], Record<string, Kind>>;
+function props<F extends Shape>(
+  name: string,
+  fields: F,
+): Schema<ObjectOf<F & typeof heading>, ObjectOf<F & typeof heading, 'input'>> {
+  return object(name, { ...fields, ...heading });
 }
-const BLOCKS = displays({ title: 'text' });
-const COMMON: Record<string, Kind> = {
-  'id': 'id',
-  'meta?': 'text',
-  'pick?': 'pick',
-  'title': 'text',
-};
 /**
-each card component's fields: a display's with `options?`, or a component that is always a question
+a tabs context's tabs: two at least, their labels distinct and their languages shiki's
 */
-const SCHEMAS: Record<Card['component'], Record<string, Kind>> = {
-  ...displays({ ...COMMON, 'options?': 'options' }),
-  decision: { ...COMMON, options: 'options', text: 'text' },
-  teach: { ...COMMON, cost: 'text', options: 'options', pair: 'pair', text: 'text' },
-};
-
-function check(
-  where: string,
-  schema: Record<string, Kind>,
-  value: Record<string, unknown>,
-): string[] {
-  return [
-    ...Object.entries(schema).flatMap(([key, kind]) => {
-      const field = key.replace('?', '');
-      const [want, test] = KINDS[kind];
-      return (key.endsWith('?') && value[field] === undefined) || test(value[field], value)
-        ? []
-        : `${where}.${field}: expected ${want}, got ${JSON.stringify(value[field]) ?? 'nothing'}`;
-    }),
-    ...Object.keys(value)
-      .filter(
-        (field) =>
-          field !== 'component' &&
-          !Object.hasOwn(schema, field) &&
-          !Object.hasOwn(schema, `${field}?`),
-      )
-      .map((field) => `${where}.${field}: not a field (${Object.keys(schema).join(', ')})`),
-  ];
-}
-
+const tabs = refine(
+  refine(
+    some(tab),
+    'Expected at least two tabs with distinct labels',
+    (all) => all.length > 1 && isDistinct(all.map((each) => each[0])),
+  ),
+  'Expected each tab language a shiki language id, such as "rust" or "sh"',
+  (all) => all.every((each) => each.slice(2).every((tag) => LANGUAGES.has(tag))),
+);
+const machineProps = refine(
+  props('machine', {
+    loop: once,
+    machine: union('machine', [record(anything()), some(words)]),
+    walk: optional(some(words)),
+  }),
+  'Expected loop only with a list of steps',
+  (entry) => entry.loop === undefined || Array.isArray(entry.machine),
+);
 /**
-the problems of each entry of `list`, named `<name>[index]` and, for cards (which `seen` dedupes), the id
+every context, a new component adds its part here and its body below; the overview requires a title but a note's
 */
-function entries(list: unknown, name: string, seen?: Set<unknown>): string[] {
-  const schemas: Record<string, Record<string, Kind>> = seen ? SCHEMAS : BLOCKS;
-  return (Array.isArray(list) ? list : []).flatMap((entry: unknown, index) => {
-    const at = `${name}[${index}]`;
-    if (!isRecord(entry)) {
-      return `${at}: expected an object`;
-    }
-    const { component, id } = entry;
-    const where = seen ? `${at} ${String(id)}` : at;
-    const schema = schemas[String(component)];
-    const repeat = seen?.has(id) ? [`${where}.id: duplicate`] : [];
-    seen?.add(id);
-    return schema
-      ? [repeat, check(`${where} ${String(component)}`, schema, entry)].flat()
-      : `${where}.component: unknown ${JSON.stringify(component)}, the catalog has ${Object.keys(schemas).join(', ')}`;
-  });
-}
-
+const contexts = [
+  tuple([literal('chart'), props('chart', { kind: enums(['bar', 'split']), rows: some(row) })]),
+  tuple([literal('code'), props('code', { code: words, lang })]),
+  tuple([literal('compare'), props('compare', { lang, pair: tuple([words, words]) })]),
+  tuple([literal('figure'), props('figure', { svg: words })]),
+  tuple([literal('list'), props('list', { items: some(words) })]),
+  tuple([literal('machine'), machineProps]),
+  tuple([literal('note'), props('note', { text: words })]),
+  tuple([literal('tabs'), props('tabs', { tabs })]),
+] as const;
 /**
-every problem in `form`, each naming the card or overview block and the field; empty when it renders
+the kinds of context, which the sketch of a plan checks first: a union of tuples guesses at a kind it does not know
 */
-function validate(form: unknown): string[] {
-  if (!isRecord(form)) {
-    return ['form: expected {title, cards: [card, …], overview?, text?}'];
-  }
-  const { cards, overview } = form;
-  return [
-    ...check(
-      'form',
-      { 'cards': 'cards', 'overview?': 'blocks', 'text?': 'text', 'title': 'text' },
-      form,
+const KINDS = ['chart', 'code', 'compare', 'figure', 'list', 'machine', 'note', 'tabs'] as const;
+const sketch = tuple([
+  anything(),
+  list(tuple([enums(KINDS), anything()])),
+  record(tuple([anything(), list(tuple([enums([...KINDS, 'choice']), anything()]))])),
+]);
+/**
+a question inside a question's body, answered by picks: one option, or any number with `pick: "many"`; its options
+are keyed by value, so a value is never repeated
+*/
+const choice = refine(
+  props('choice', {
+    id,
+    options: keyed(
+      optionShape,
+      'Expected at least one option, each value not a whole number (JS orders those first)',
+      (value) => /^(?!\d+$).+$/u.test(value),
     ),
-    ...entries(overview, 'overview'),
-    ...entries(cards, 'cards', new Set()),
-  ];
+    pick: optional(enums(['many', 'one'])),
+  }),
+  'Expected exactly one lean option unless pick is "many"',
+  (entry) =>
+    entry.pick === 'many' ||
+    Object.values(entry.options).filter((option) => option.lean).length === 1,
+);
+const choiceShape = tuple([literal('choice'), choice]);
+/**
+a question's body items: the contexts and the choice, which is answerable and so never in the overview
+*/
+const itemShape = union('context', [...contexts, choiceShape]);
+const overviewShape = refine(
+  union('context', contexts),
+  'Expected a title',
+  ([kind, { title }]) => kind === 'note' || title !== undefined,
+);
+const questionShape = refine(
+  tuple([words, list(itemShape)]),
+  'Expected choice ids distinct',
+  ([, body]) => isDistinct(body.flatMap(([kind, own]) => (kind === 'choice' ? [own.id] : []))),
+);
+const planShape = tuple([
+  words,
+  list(overviewShape),
+  keyed(
+    questionShape,
+    'Expected at least one question, each id a letter, then letters, digits, - or _',
+    (name) => NAME.test(name),
+  ),
+]);
+
+/**
+what the server draws into a context's props: highlighted `html`, a machine's `svg`
+*/
+type Drawn = { html?: string[]; svg?: string };
+/**
+a part of a plan: a context, or a choice in a question's body
+*/
+type Item = Infer<typeof itemShape>;
+type Choice = Infer<typeof choice>;
+type Kind = Item[0];
+type Plan = Infer<typeof planShape>;
+type Question = Plan[2][string];
+type Option = Infer<typeof optionShape> & { value: string };
+/**
+a question he answers: its id, its title, then a composition of contexts and choices
+*/
+type Asked = { body: Item[]; id: string; title: string };
+/**
+what a Send carries: the picks and the option comments by choice id, then the message
+*/
+type Said = {
+  message: string;
+  notes: Record<string, Record<string, string>>;
+  picks: Record<string, string[]>;
+};
+type Row = Infer<typeof row>;
+type Tab = Infer<typeof tab>;
+type PropsOf<K extends Kind> = Drawn & Extract<Item, [K, unknown]>[1];
+
+/**
+the keys of a path as the author writes them: `[0]` for an index, `.rows` for a field
+*/
+function dotted(keys: readonly PropertyKey[]): string {
+  return keys.map((key) => (typeof key === 'number' ? `[${key}]` : `.${String(key)}`)).join('');
+}
+/**
+what a question's slot says: its title, its body
+*/
+const SLOTS: Record<string, string> = { 0: '.title', 1: '.body' };
+const ROOTS = ['title', 'overview', 'questions'];
+/**
+the length of a path to a context in a question's body: `[2, id, 1, index]`
+*/
+const ITEM_DEPTH = 4;
+
+/**
+a problem's place as the author reads it: `overview[1] chart.rows`, `land.body[0] choice.options`, a question
+named by its id and a context by its kind
+*/
+function where(input: unknown, path: readonly PropertyKey[]): string {
+  const [root, name, side, index] = path;
+  /**
+  a context's place: its kind, then `.kind` when the problem is the kind itself, else the field of its props
+  */
+  function context(label: string, keys: readonly PropertyKey[]): string {
+    let at: unknown = input;
+    for (const key of keys) {
+      at = (at as Record<PropertyKey, unknown> | undefined)?.[key];
+    }
+    const kind = Array.isArray(at) && typeof at[0] === 'string' ? ` ${at[0]}` : '';
+    const [slot, ...fields] = path.slice(keys.length);
+    return `${label}${kind}${slot === 0 ? '.kind' : dotted(fields)}`;
+  }
+  if (root === 1 && name !== undefined) {
+    return context(`overview[${String(name)}]`, path.slice(0, 2));
+  }
+  if (root === 2 && side === 1 && index !== undefined) {
+    return context(`${String(name)}.body[${String(index)}]`, path.slice(0, ITEM_DEPTH));
+  }
+  if (root === undefined) {
+    return 'plan';
+  }
+  return root === 2 && name !== undefined
+    ? `${String(name)}${SLOTS[String(side)] ?? ''}`
+    : (ROOTS[root as number] as string);
+}
+
+/**
+what xstate says of each machine in a plan whose fields all check, named as `where` names it
+*/
+function machines(plan: Plan): string[] {
+  return [
+    ...plan[1].map((item, index) => [[1, index], item] as const),
+    ...Object.entries(plan[2]).flatMap(([name, [, body]]) =>
+      body.map((item, index) => [[2, name, 1, index], item] as const),
+    ),
+  ].flatMap(([path, [kind, own]]) =>
+    kind === 'machine'
+      ? MACHINE.problems(own).map((problem) => `${where(plan, path)}.${problem}`)
+      : [],
+  );
+}
+
+/**
+every problem in `input`, each naming the question or overview context and the field; empty when it renders
+*/
+function validate(input: unknown): string[] {
+  const sketched = judge(input, sketch);
+  const result = sketched.issues ? sketched : judge(input, planShape);
+  return result.issues
+    ? result.issues.map(({ message, path }) => `${where(input, path)}: ${message}`)
+    : machines(result.value as Plan);
+}
+
+/**
+a plan's questions in their authored order, each with its id
+*/
+function asking(plan: Plan): Asked[] {
+  return Object.entries(plan[2]).map(([name, [title, body]]) => ({ body, id: name, title }));
 }
 
 // ─── bodies ──────────────────────────────────────────────────────────────────────────────────────
-/**
-room a bar leaves for its value label
-*/
-const LABEL_GUTTER = 48;
 /**
 the opacity of a split's segments, told apart without colour: white at falling opacity
 */
@@ -220,54 +302,55 @@ const OPAQUE = 0.9;
 const STRONG = 0.6;
 const FAINT = 0.35;
 const GHOST = 0.18;
-const ROW = 44;
 const SHADES = [OPAQUE, STRONG, FAINT, GHOST];
-const VALUE_GAP = 6;
 const WIDTH = 400;
 
+/**
+a two-column table, label then bar and count, so a row is one line high
+*/
 function Bars({ rows }: Readonly<{ rows: Row[] }>): ReactNode {
-  const x = scaleLinear(
-    [0, Math.max(...rows.map((row) => row.value)) || 1],
-    [0, WIDTH - LABEL_GUTTER],
-  );
+  const x = scaleLinear([0, Math.max(...rows.map(([, value]) => value)) || 1], [0, 1]);
   return (
-    <svg className="chart" role="img" viewBox={`0 0 ${WIDTH} ${rows.length * ROW}`}>
-      {rows.map((row, index) => (
-        <g key={index} transform={`translate(0 ${index * ROW})`}>
-          <text y={14}>{row.label}</text>
-          <rect height={16} width={x(row.value)} y={20} />
-          <text x={x(row.value) + VALUE_GAP} y={33}>
-            {row.value}
-          </text>
-        </g>
-      ))}
-    </svg>
+    <table className="bars">
+      <tbody>
+        {rows.map(([label, value], index) => (
+          <tr key={index}>
+            <th>{label}</th>
+            <td>
+              {/* the longest bar leaves room for its count */}
+              <span style={{ width: `calc((100% - 6ch) * ${x(value)})` }} />
+              {value}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
 function Split({ rows }: Readonly<{ rows: Row[] }>): ReactNode {
   const ends = rows.map((_row, index) =>
-    rows.slice(0, index + 1).reduce((sum, row) => sum + row.value, 0),
+    rows.slice(0, index + 1).reduce((sum, [, value]) => sum + value, 0),
   );
   const x = scaleLinear([0, ends.at(-1) || 1], [0, WIDTH]);
   return (
     <>
       <svg className="chart" role="img" viewBox={`0 0 ${WIDTH} 28`}>
-        {rows.map((row, index) => (
+        {rows.map(([, value], index) => (
           <rect
             fillOpacity={SHADES[index % SHADES.length]}
             height={28}
             key={index}
-            width={x(row.value)}
-            x={x((ends[index] ?? 0) - row.value)}
+            width={x(value)}
+            x={x((ends[index] ?? 0) - value)}
           />
         ))}
       </svg>
       <ul className="legend">
-        {rows.map((row, index) => (
+        {rows.map(([label, value], index) => (
           <li key={index}>
             <i style={{ opacity: SHADES[index % SHADES.length] }} />
-            {`${row.label} · ${row.value}`}
+            {`${label} · ${value}`}
           </li>
         ))}
       </ul>
@@ -275,39 +358,121 @@ function Split({ rows }: Readonly<{ rows: Row[] }>): ReactNode {
   );
 }
 
-function Steps({ items, loop }: Of<'steps'>): ReactNode {
+/**
+a code sample: the server's highlighted markup when it made one, else the plain text
+*/
+function Sample({ code, html }: Readonly<{ code: string; html?: string | undefined }>): ReactNode {
+  return html ? (
+    <div className="lit" dangerouslySetInnerHTML={{ __html: html }} />
+  ) : (
+    <pre>
+      <code>{code}</code>
+    </pre>
+  );
+}
+
+/**
+a tabs context: a tab bar over the selected tab's sample, the one piece of client state
+*/
+function Tabs({
+  html,
+  tabs: all,
+}: Readonly<{ html?: string[] | undefined; tabs: Tab[] }>): ReactNode {
+  const [at, setAt] = useState(0);
+  const [, code] = all.at(at) as Tab;
   return (
-    <div className="steps">
-      <ol>
-        {items.map((item, index) => (
-          <li key={index}>{item}</li>
+    <div className="tabs">
+      <div className="tablist" role="tablist">
+        {all.map(([label], index) => (
+          <button
+            aria-selected={index === at}
+            key={index}
+            onClick={() => setAt(index)}
+            role="tab"
+            type="button"
+          >
+            {label}
+          </button>
         ))}
-      </ol>
-      {loop ? <p className="return">{`↺ back to ${items[0]}`}</p> : undefined}
+      </div>
+      <div role="tabpanel">
+        <Sample code={code} html={html?.[at]} />
+      </div>
     </div>
   );
 }
 
 /**
-the card's options among `values`, in authored order
+two samples side by side, today's and the alternative: the compare context
 */
-function picked(card: Card, values: unknown[]): Option[] {
-  return card.options?.filter((option) => values.includes(option.value)) ?? [];
+function Pair({ html, pair }: Readonly<{ html?: string[]; pair: string[] }>): ReactNode {
+  return (
+    <div className="pair">
+      {pair.map((code, index) => (
+        <div key={index}>
+          <small>{index ? 'alternative' : 'today'}</small>
+          <Sample code={code} html={html?.[index]} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+the question's choices, in body order
+*/
+function choicesOf({ body }: Asked): Choice[] {
+  return body.flatMap(([kind, own]) => (kind === 'choice' ? [own] : []));
 }
 /**
-what a Send says on the card's hud thread: the picks' labels, each option comment after its label, then the message
+a choice's options, each with its value, in authored order
 */
-function spoken(
-  card: Card,
-  {
-    choices,
-    message,
-    notes,
-  }: { choices: unknown[]; message: string; notes: Record<string, string> },
-): string {
+function optionsOf({ options }: Choice): Option[] {
+  const all: Option[] = [];
+  for (const [value, option] of Object.entries(options)) {
+    all.push({ ...option, value });
+  }
+  return all;
+}
+/**
+what `make` says of each choice, keyed by choice id, the choices it says nothing of left out
+*/
+function byChoice<T extends object>(
+  choices: Choice[],
+  make: (one: Choice) => T,
+): Record<string, T> {
+  return Object.fromEntries(
+    choices
+      .map((one) => [one.id, make(one)] as const)
+      .filter(([, said]) => Object.keys(said).length > 0),
+  );
+}
+/**
+the choice's options among `values`, in authored order
+*/
+function picked(one: Choice, values: unknown[]): Option[] {
+  return optionsOf(one).filter((option) => values.includes(option.value));
+}
+/**
+what a Send says on the question's hud thread: each choice's picks (its title or id, then labels), each option comment
+after its label, then the message
+*/
+function spoken(question: Asked, { message, notes, picks }: Said): string {
+  const choices = choicesOf(question);
   return [
-    ...picked(card, choices).map((option) => option.label),
-    ...Object.entries(notes).map(([value, text]) => `${picked(card, [value])[0]?.label}: ${text}`),
+    ...choices
+      .map((one) => [one, picked(one, picks[one.id] ?? [])] as const)
+      .filter(([, chosen]) => chosen.length > 0)
+      .map(
+        ([one, chosen]) =>
+          `${one.title ?? one.id}: ${chosen.map((option) => option.label).join(', ')}`,
+      ),
+    ...choices.flatMap((one) => {
+      const said = notes[one.id] ?? {};
+      return picked(one, Object.keys(said)).map(
+        (option) => `${option.label}: ${said[option.value]}`,
+      );
+    }),
     message,
   ]
     .filter(Boolean)
@@ -315,44 +480,42 @@ function spoken(
 }
 
 /**
-the part of a card or block only its component draws; decision and note are their text alone
+the part of a body item or overview context only its kind draws
 */
-const BODIES: Partial<Record<Card['component'], (card: never) => ReactNode>> = {
-  chart: ({ kind, rows }: Of<'chart'>) =>
+const BODIES: Partial<Record<Kind, (own: never) => ReactNode>> = {
+  chart: ({ kind, rows }: PropsOf<'chart'>) =>
     kind === 'bar' ? <Bars rows={rows} /> : <Split rows={rows} />,
-  code: ({ code }: Of<'code'>) => (
-    <pre>
-      <code>{code}</code>
-    </pre>
-  ),
+  code: ({ code, html }: PropsOf<'code'>) => <Sample code={code} html={html?.[0]} />,
+  compare: Pair,
   // the author is the local agent, so its markup goes in raw
-  figure: ({ svg }: Of<'figure'>) => (
+  figure: ({ svg }: PropsOf<'figure'>) => (
     <div className="figure" dangerouslySetInnerHTML={{ __html: svg }} />
   ),
-  list: ({ items }: Of<'list'>) => (
+  list: ({ items }: PropsOf<'list'>) => (
     <ul>
       {items.map((item, index) => (
         <li key={index}>{item}</li>
       ))}
     </ul>
   ),
-  steps: Steps,
-  teach: ({ cost, pair }: Of<'teach'>) => (
-    <>
-      <div className="pair">
-        {pair.map((code, index) => (
-          <div key={index}>
-            <small>{index ? 'alternative' : 'today'}</small>
-            <pre>
-              <code>{code}</code>
-            </pre>
-          </div>
-        ))}
-      </div>
-      <p className="cost">{`Cost: ${cost}`}</p>
-    </>
+  // drawn by the server (machine.ts); the same string renders and hydrates
+  machine: ({ svg }: PropsOf<'machine'>) => (
+    <div className="machine" dangerouslySetInnerHTML={{ __html: svg ?? '' }} />
   ),
+  note: ({ text }: PropsOf<'note'>) => <p>{text}</p>,
+  tabs: Tabs,
 };
 
-export { BODIES, picked, SCHEMAS, spoken, validate };
-export type { Block, Card, Form, Option };
+export {
+  BODIES,
+  LANGUAGES,
+  MACHINE,
+  asking,
+  byChoice,
+  choicesOf,
+  optionsOf,
+  picked,
+  spoken,
+  validate,
+};
+export type { Asked, Choice, Item, Option, Plan, Question, Said };

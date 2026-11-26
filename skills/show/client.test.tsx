@@ -20,6 +20,14 @@ how many times `until` looks before it gives up
 */
 const TRIES = 200;
 const WAIT_MS = 10;
+/**
+the field that tells an event its place in the plan's log
+*/
+const POSITION = 'n';
+/**
+the checks on a question with a picked pick-one option and two picked pick-many ones
+*/
+const THREE = 3;
 
 Object.assign(Bun.env, {
   SHOW_HUD: `${import.meta.dir}/fake-hud.ts`,
@@ -74,25 +82,34 @@ function find<Found extends Element>(root: ParentNode, selector: string): Found 
   expect(found).not.toBeNull();
   return found as Found;
 }
-function card(id: string): HTMLElement {
-  return find(document, `[id="card-${id}"]`);
+function question(id: string): HTMLElement {
+  return find(document, `[id="question-${id}"]`);
 }
 function labels(id: string): (string | null)[] {
-  return [...card(id).querySelectorAll('button')].map((button) => button.textContent);
+  return [...question(id).querySelectorAll('button')].map((button) => button.textContent);
 }
 function send(id: string, message: string, choice?: string): void {
   if (choice) {
-    find<HTMLInputElement>(card(id), `input[value=${choice}]`).click();
+    find<HTMLInputElement>(question(id), `input[value=${choice}]`).click();
   }
-  find<HTMLTextAreaElement>(card(id), 'textarea').value = message;
-  find<HTMLButtonElement>(card(id), 'button[value=answer]').click();
+  find<HTMLTextAreaElement>(question(id), 'textarea').value = message;
+  find<HTMLButtonElement>(question(id), 'button[value=answer]').click();
 }
 /**
-what a `wait` printed, as the event it carries
+what a `wait` printed, as its kind and the props of the event it carries
 */
 async function waited(): Promise<Record<string, unknown>> {
   const [, text] = await run(['wait', 'lints-canon']);
-  return JSON.parse(text);
+  const [kind, own] = JSON.parse(text);
+  return { kind, ...own };
+}
+/**
+what a `wait` printed without its place in the log
+*/
+async function waitedBare(): Promise<Record<string, unknown>> {
+  const event = await waited();
+  Reflect.deleteProperty(event, POSITION);
+  return event;
 }
 
 test('hydrates, sends, says it on hud and follows both sockets', async () => {
@@ -109,7 +126,7 @@ test('hydrates, sends, says it on hud and follows both sockets', async () => {
   const stateText = html.slice(stateAt + MARKER.length, html.indexOf('</script>', stateAt));
   Reflect.set(globalThis, SHOW_KEY, JSON.parse(stateText));
   await import('./client.tsx');
-  await until(() => Object.keys(card('land')).some((key) => key.startsWith('__react')));
+  await until(() => Object.keys(question('land')).some((key) => key.startsWith('__react')));
 
   // a second view of the same state subscribes, and unsubscribes when it unmounts
   const other = createRoot(document.createElement('div'));
@@ -117,38 +134,51 @@ test('hydrates, sends, says it on hud and follows both sockets', async () => {
   other.unmount();
 
   // an option with a shape draws its path inside the tappable row; one without draws none
-  expect(find(card('allow'), 'label.option svg.shape path').getAttribute('d')).toBe(
+  expect(find(question('allow'), 'label.option svg.shape path').getAttribute('d')).toBe(
     'M5 50 L50 10 L95 50 L50 90 Z',
   );
-  expect(card('allow').querySelectorAll('svg')).toHaveLength(1);
+  expect(question('allow').querySelectorAll('svg')).toHaveLength(1);
 
-  // Send sits under a card's options, Ask by its message box; a card without options has only Ask
-  expect([labels('land'), labels('else')]).toEqual([
-    ['Send', 'Ask', 'Resolve'],
+  // a pick-one choice has a ↵ per option, a pick-many one a single ↵ beside them all; a question without choices has
+  // only Ask
+  expect([labels('land'), labels('allow'), labels('attribute'), labels('else')]).toEqual([
+    ['↵', '↵', 'Ask', 'Resolve'],
+    ['↵', 'Ask', 'Resolve'],
+    ['↵', '↵', '↵', 'Ask', 'Resolve'],
     ['Ask', 'Resolve'],
   ]);
+
+  // a tabbed code context: the first tab shows, a click selects another, the plain one shows its text
+  const tabs = [...document.querySelectorAll<HTMLButtonElement>('[role=tab]')];
+  const panel = find(document, '[role=tabpanel]');
+  expect(tabs.map((tab) => tab.getAttribute('aria-selected'))).toEqual(['true', 'false', 'false']);
+  expect(panel.querySelector('.lit')).not.toBeNull();
+  tabs[2]?.click();
+  await until(() => tabs[2]?.getAttribute('aria-selected') === 'true');
+  expect(panel.querySelector('.lit')).toBeFalsy();
+  expect(panel.textContent).toBe('plain notes, no highlighting');
 
   // no <hud> yet: a Send records the answer and says nothing
   send('else', 'no hud here');
   expect(await waited()).toMatchObject({
-    card: 'else',
     message: 'no hud here',
+    question: 'else',
   });
-  await until(() => card('else').textContent?.includes('send again any time'));
+  await until(() => question('else').textContent?.includes('send again any time'));
 
   // the lean is marked, not chosen, and a second tap takes a choice back
-  const hold = find<HTMLInputElement>(card('land'), 'input[value=hold]');
-  expect(card('land').querySelector('input:checked')).toBeNull();
+  const hold = find<HTMLInputElement>(question('land'), 'input[value=hold]');
+  expect(question('land').querySelector('input:checked')).toBeNull();
   hold.click();
   await until(() => hold.checked);
   hold.click();
   await until(() => !hold.checked);
 
-  // his own words alone answer an option card, and the resolved line reads them
+  // his own words alone answer an option question, and the resolved line reads them
   send('land', 'both, staged');
   const alone = await waited();
-  expect(alone).toMatchObject({ card: 'land', kind: 'answer', message: 'both, staged' });
-  expect(alone).not.toHaveProperty('choice');
+  expect(alone).toMatchObject({ kind: 'answer', message: 'both, staged', question: 'land' });
+  expect(alone).not.toHaveProperty('picks');
   await run(['resolve', 'lints-canon', 'land']);
   await until(
     () =>
@@ -175,56 +205,115 @@ test('hydrates, sends, says it on hud and follows both sockets', async () => {
   }
   send('land', 'look first', 'hold');
   expect(await waited()).toMatchObject({
-    card: 'land',
-    choice: 'hold',
     message: 'look first',
+    picks: { land: ['hold'] },
+    question: 'land',
   });
   await until(() =>
-    card('land')
+    question('land')
       .querySelector('.thread')
-      ?.textContent?.includes('hold, I want to look — look first'),
+      ?.textContent?.includes('land: hold, I want to look — look first'),
   );
   send('land', 'still there?');
   expect(await waited()).toMatchObject({ message: 'still there?' });
-  await until(() => card('land').querySelectorAll(':scope .thread li').length === 2);
-  expect(find<HTMLInputElement>(card('land'), 'input[value=hold]').checked).toBe(true);
+  await until(() => question('land').querySelectorAll(':scope .thread li').length === 2);
+  expect(find<HTMLInputElement>(question('land'), 'input[value=hold]').checked).toBe(true);
 
-  // the card he last spoke on waits below the untouched ones; the agent's reply lifts it to the top
-  expect(document.querySelector('.waiting article')?.id).toBe('card-land');
+  // the question he last spoke on waits below the untouched ones; the agent's reply lifts it to the top
+  expect(document.querySelector('.waiting article')?.id).toBe('question-land');
   await relay('reply', { id: thread.id, text: 'on it' });
-  await until(() => document.querySelector('main > article')?.id === 'card-land');
+  await until(() => document.querySelector('main > article')?.id === 'question-land');
   expect(document.querySelector('.waiting')).toBeNull();
 
-  // a pick-many card: picks toggle on and off, and an option's own comment rides the Send and the thread
+  // a pick-many question: picks toggle on and off, and its one ↵ sends them all
   for (const value of ['ascii', 'docs', 'numeric', 'docs']) {
-    find<HTMLInputElement>(card('allow'), `input[value=${value}]`).click();
+    find<HTMLInputElement>(question('allow'), `input[value=${value}]`).click();
   }
-  await until(() => card('allow').querySelectorAll('input:checked').length === 2);
-  find<HTMLInputElement>(card('allow'), '[name=note-docs]').value = 'later';
-  find<HTMLButtonElement>(card('allow'), 'button[value=answer]').click();
-  expect(await waited()).toMatchObject({ choices: ['numeric', 'ascii'], notes: { docs: 'later' } });
+  await until(() => question('allow').querySelectorAll('input:checked').length === 2);
+  find<HTMLButtonElement>(question('allow'), '[aria-label="Send Allowed rules"]').click();
+  const many = await waited();
+  expect(many).toMatchObject({ picks: { rules: ['numeric', 'ascii'] } });
+  expect(many).not.toHaveProperty('notes');
   await until(() =>
-    card('allow')
+    question('allow')
       .querySelector('.thread')
-      ?.textContent?.includes(
-        'default_numeric_fallback — non_ascii_literal — missing_docs_in_private_items: later',
-      ),
+      ?.textContent?.includes('Allowed rules: default_numeric_fallback, non_ascii_literal'),
   );
 
-  // the daemon refuses: the card says why
+  // a question with two choices: a pick-one's ↵ sends just that option and its comment, a pick-many's tall ↵ just that
+  // choice's picks, Ask every choice's picks with the message
+  find<HTMLInputElement>(question('attribute'), 'input[value=drop]').click();
+  find<HTMLInputElement>(question('attribute'), '[name="note:keep:drop"]').value = 'why keep it';
+  find<HTMLButtonElement>(question('attribute'), 'button[name=only][value="keep:drop"]').click();
+  expect(await waitedBare()).toEqual({
+    at: expect.any(String),
+    kind: 'answer',
+    notes: { keep: { drop: 'why keep it' } },
+    picks: { keep: ['drop'] },
+    question: 'attribute',
+  });
+  // a Send's buttons are disabled until hud has carried what it said, and the form is reset once it has
+  await until(() => !question('attribute').querySelector('button:disabled'));
+  for (const value of ['tests', 'canon']) {
+    find<HTMLInputElement>(question('attribute'), `input[value=${value}]`).click();
+  }
+  await until(() => question('attribute').querySelectorAll('input:checked').length === THREE);
+  find<HTMLButtonElement>(question('attribute'), '[aria-label="Send Where it applies"]').click();
+  expect(await waitedBare()).toEqual({
+    at: expect.any(String),
+    kind: 'answer',
+    picks: { where: ['canon', 'tests'] },
+    question: 'attribute',
+  });
+  // happy-dom's form reset after a Send drops the checks until the choice renders again: one more pick does
+  await until(() => !question('attribute').querySelector('button:disabled'));
+  find<HTMLInputElement>(question('attribute'), 'input[value=routines]').click();
+  send('attribute', 'all of it');
+  expect(await waited()).toMatchObject({
+    message: 'all of it',
+    picks: { keep: ['drop'], where: ['routines', 'canon', 'tests'] },
+  });
+
+  // a pick-one ✎ opens its comment inline; Enter in it, or its ↵, sends just that option
+  find<HTMLInputElement>(question('land'), '[name="note:land:hold"]').focus();
+  await until(() => question('land').querySelector(':scope .pick.open [name="note:land:hold"]'));
+  const note = find<HTMLInputElement>(question('land'), '[name="note:land:hold"]');
+  note.value = 'only this';
+  note.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'a' }));
+  note.dispatchEvent(
+    new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Enter' }),
+  );
+  expect(await waited()).toMatchObject({
+    kind: 'answer',
+    notes: { land: { hold: 'only this' } },
+    picks: { land: ['hold'] },
+  });
+  find<HTMLInputElement>(question('land'), '[name="note:land:land"]').value = 'later';
+  find<HTMLButtonElement>(question('land'), 'button[name=only][value="land:land"]').click();
+  expect(await waited()).toMatchObject({
+    notes: { land: { land: 'later' } },
+    picks: { land: ['land'] },
+  });
+
+  // the daemon refuses: the question says why
   send('else', ' ');
   await until(
-    () => card('else').querySelector('[role=alert]')?.textContent === 'not sent: write a message',
+    () =>
+      question('else').querySelector('[role=alert]')?.textContent === 'not sent: write a message',
   );
 
   // the agent's status arrives over show's socket, no reload
   await run(['status', 'lints-canon', 'decided: hold']);
-  await until(() => document.querySelector('.card ul li')?.textContent === 'decided: hold');
+  await until(() => document.querySelector('.tasks li')?.textContent === 'decided: hold');
 
-  // he resolves a card himself: `show wait` hears it, and the card collapses to its line
-  find<HTMLButtonElement>(card('else'), 'button[value=resolve]').click();
-  expect(await waited()).toMatchObject({ card: 'else', kind: 'resolve' });
+  // he resolves a question himself: `show wait` hears it, and the question collapses to its line
+  find<HTMLButtonElement>(question('else'), 'button[value=resolve]').click();
+  expect(await waited()).toMatchObject({ kind: 'resolve', question: 'else' });
   await until(() => document.querySelector('.resolved')?.textContent?.includes('✓ Anything else?'));
+  // every question is a task: checked once resolved, a link to it either way
+  expect(
+    ['else', 'land'].map((id) => find(document, `.tasks a[href="#question-${id}"]`).textContent),
+  ).toEqual(['☑ Anything else?', '☐ jlg.io harness']);
 
   // a close reloads the page (as a new daemon version does)
   expect(reload).not.toHaveBeenCalled();
@@ -235,6 +324,6 @@ test('hydrates, sends, says it on hud and follows both sockets', async () => {
   await daemon.stop('test');
   send('land', 'anyone?');
   await until(
-    () => card('land').querySelector('[role=alert]')?.textContent === 'not sent: show is down',
+    () => question('land').querySelector('[role=alert]')?.textContent === 'not sent: show is down',
   );
 });

@@ -2,6 +2,18 @@
   --dim: rgb(255 255 255 / 0.6);
   --glass: rgb(255 255 255 / 0.06);
   --line: rgb(255 255 255 / 0.18);
+  /* highlighted code: greys, weight and italic, with a faint hue per role; the names are shiki's css-variables theme */
+  --shiki-background: rgb(255 255 255 / 0.05);
+  --shiki-foreground: #d4d4d4;
+  --shiki-token-comment: #7a7a7a;
+  --shiki-token-constant: oklch(0.84 0.07 75);
+  --shiki-token-function: oklch(0.88 0.06 240);
+  --shiki-token-keyword: oklch(0.88 0.07 300);
+  --shiki-token-link: oklch(0.88 0.06 240);
+  --shiki-token-parameter: #d4d4d4;
+  --shiki-token-punctuation: #8a8a8a;
+  --shiki-token-string: oklch(0.8 0.07 150);
+  --shiki-token-string-expression: oklch(0.8 0.07 150);
   color-scheme: dark;
   font:
     16px/1.5 ui-sans-serif,
@@ -31,6 +43,10 @@ h2 {
   font-size: 18px;
   margin: 0 0 6px;
 }
+h3 {
+  font-size: 15px;
+  margin: 0 0 4px;
+}
 p {
   margin: 0 0 10px;
 }
@@ -43,7 +59,7 @@ time {
   color: var(--dim);
   font-size: 14px;
 }
-.card {
+.question {
   backdrop-filter: blur(18px);
   background: var(--glass);
   border: 1px solid var(--line);
@@ -64,6 +80,38 @@ code {
     Menlo,
     monospace;
 }
+.lit [style*='--shiki-token-comment'] {
+  font-style: italic;
+}
+.lit [style*='--shiki-token-constant'] {
+  font-weight: 600;
+}
+.lit [style*='--shiki-token-keyword'] {
+  font-weight: 700;
+}
+.tablist {
+  display: flex;
+  overflow-x: auto;
+}
+.tablist button {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  color: rgb(255 255 255 / 0.45);
+  cursor: pointer;
+  flex: none;
+  font: inherit;
+  padding: 6px 12px;
+}
+.tablist button[aria-selected='true'] {
+  border-bottom-color: #fff;
+  color: #fff;
+}
+.tabs pre {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
 .pair {
   display: grid;
   gap: 8px;
@@ -80,25 +128,34 @@ code {
 }
 fieldset {
   border: 0;
-  display: grid;
+  display: flex;
   gap: 8px;
   margin: 12px 0;
   padding: 0;
 }
+/* one grid for every row: label, comment, ✎/↵ line up down the question */
+.picks {
+  display: grid;
+  flex: 1;
+  grid-template-columns: fit-content(50%) minmax(0, 1fr) auto;
+  min-width: 0;
+  row-gap: 8px;
+}
 fieldset > button {
-  justify-self: start;
+  flex: none;
+  font-size: 20px;
+  padding: 0;
+  width: 44px;
 }
 .option {
   align-items: center;
-  border: 1px solid var(--line);
-  border-radius: 12px;
   cursor: pointer;
   display: flex;
   gap: 10px;
   min-height: 44px;
   padding: 8px 14px;
 }
-.option:has(:checked) {
+.pick:has(:checked) {
   background: #fff;
   color: #000;
   font-weight: 600;
@@ -175,12 +232,34 @@ button:disabled {
 .chart rect {
   fill: #fff;
 }
+.bars {
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 4px 0 10px;
+  width: 100%;
+}
+.bars th {
+  font-weight: 400;
+  padding: 3px 12px 3px 0;
+  text-align: right;
+  white-space: nowrap;
+  width: 1%;
+}
+.bars td {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  padding: 3px 0;
+}
+.bars span {
+  background: #fff;
+  height: 12px;
+}
 .figure svg {
   display: block;
   fill: none;
   height: auto;
   margin: 4px 0 10px;
-  max-width: 480px;
   stroke: currentColor;
   stroke-width: 1.5;
   width: 100%;
@@ -222,11 +301,11 @@ summary {
   display: flex;
   min-height: 44px;
 }
-.forms {
+.plans {
   list-style: none;
   padding: 0;
 }
-.forms a {
+.plans a {
   display: grid;
   min-height: 44px;
   text-decoration: none;
@@ -242,8 +321,30 @@ hud {
   --hud-muted: rgb(255 255 255 / 0.55);
 }
 .overview {
+  margin: 0 0 20px;
+}
+/* the plan's contract: overview, tasks, then a rule; questions, then a rule; resolved */
+.tasks {
   border-bottom: 1px solid var(--line);
   margin: 0 0 20px;
+  padding-bottom: 12px;
+}
+.tasks ul {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+.tasks a {
+  color: inherit;
+  display: block;
+  padding: 3px 0;
+  text-decoration: none;
+}
+.tasks a:hover {
+  text-decoration: underline;
+}
+.resolved {
+  border-top: 1px solid var(--line);
 }
 .overview:empty {
   display: none;
@@ -258,47 +359,15 @@ hud {
 .overview figure {
   margin: 0 0 18px;
 }
-.steps {
+.overview figure + figure {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+.machine svg {
+  display: block;
+  height: auto;
+  margin: 4px 0 10px;
   max-width: 100%;
-  width: fit-content;
-}
-.steps ol {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 26px;
-  list-style: none;
-  margin: 4px 0 0;
-  /* room for the last box's arrow in a wrapped row */
-  padding: 0 21px 0 0;
-}
-.steps li {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 6px 12px;
-  position: relative;
-}
-.steps li:not(:last-child)::after {
-  color: var(--dim);
-  content: '→';
-  position: absolute;
-  right: -21px;
-}
-.steps .return {
-  border: 1px solid var(--dim);
-  border-radius: 0 0 10px 10px;
-  border-top: 0;
-  color: var(--dim);
-  font-size: 13px;
-  margin: 0 0 10px 14px;
-  padding: 6px 12px 2px;
-  position: relative;
-}
-.steps .return::before {
-  content: '↑';
-  left: -6px;
-  line-height: 1;
-  position: absolute;
-  top: -8px;
 }
 .settle {
   background: none;
@@ -309,9 +378,23 @@ hud {
   display: none;
 }
 .pick {
+  border: 1px solid var(--line);
+  border-radius: 12px;
   display: grid;
-  gap: 0 8px;
-  grid-template-columns: 1fr 44px;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  position: relative;
+}
+.pick > .option {
+  grid-column: 1 / 3;
+  min-width: 0;
+}
+.pick > .option:only-child {
+  grid-column: 1 / -1;
+}
+.pick.open > .option,
+.pick:has(> input:not(:placeholder-shown)) > .option {
+  grid-column: 1;
 }
 .option small {
   display: block;
@@ -326,32 +409,74 @@ hud {
 .shape path {
   vector-effect: non-scaling-stroke;
 }
-.option:has(:checked) small {
+.pick:has(:checked) small {
   color: rgb(0 0 0 / 0.6);
 }
 .aside {
   align-items: center;
-  border: 1px solid var(--line);
-  border-radius: 12px;
   color: var(--dim);
   cursor: pointer;
   display: flex;
   justify-content: center;
   min-height: 44px;
 }
+.aside,
+.pick > button {
+  grid-column: 3;
+  padding: 0;
+  width: 44px;
+}
+.pick > button,
+.pick.open > button ~ .aside {
+  display: none;
+}
+.pick.open > button {
+  align-self: center;
+  border-radius: 8px;
+  display: block;
+  height: 32px;
+  justify-self: center;
+  margin: 0 6px;
+  min-height: 0;
+  width: 32px;
+}
+/* collapsed, the comment stays focusable for the ✎ label but takes no room */
 .pick > input {
   background: var(--glass);
   border: 0;
-  border-radius: 10px;
+  border-radius: 12px;
   color: #fff;
   font: inherit;
-  grid-column: 1 / -1;
   height: 0;
-  padding: 0 12px;
+  opacity: 0;
+  padding: 0;
+  position: absolute;
+  width: 0;
 }
-.pick > input:focus,
+.pick.open > input,
 .pick > input:not(:placeholder-shown) {
-  border: 1px solid var(--line);
-  height: 44px;
-  margin-top: 6px;
+  align-self: center;
+  grid-column: 2;
+  height: 32px;
+  margin: 6px 0 6px 14px;
+  opacity: 1;
+  padding: 0 12px;
+  position: static;
+  width: auto;
+}
+@media (max-width: 560px) {
+  .pick.open > .option,
+  .pick:has(> input:not(:placeholder-shown)) > .option {
+    grid-column: 1 / 3;
+  }
+  .pick.open > input,
+  .pick > input:not(:placeholder-shown) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin: 0 14px 8px;
+  }
+}
+.pick:has(:checked) > input {
+  background: rgb(0 0 0 / 0.08);
+  color: #000;
 }

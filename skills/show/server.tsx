@@ -1,10 +1,22 @@
 // The daemon: the browser's pages on loopback TCP (Host and Origin checked, hud mounted in the same server), the
-// CLI's control API on a Unix socket in a 0700 directory, every form on disk under `home()/<slug>/`, which a cold
+// CLI's control API on a Unix socket in a 0700 directory, every plan on disk under `home()/<slug>/`, which a cold
 // boot re-reads. One instance by flock; every stop signal drains inside BUDGET_MS, under launchd's 20 s.
 import { FFIType, dlopen } from 'bun:ffi';
 import { renderToReadableStream } from 'react-dom/server';
-import { type Card, type Form, picked, spoken, validate } from './catalog.tsx';
+import {
+  type Asked,
+  type Plan,
+  type Said,
+  asking,
+  byChoice,
+  choicesOf,
+  optionsOf,
+  picked,
+  spoken,
+  validate,
+} from './catalog.tsx';
 import { DIR, FIX, FailError, VERSION, home, hudPath } from './cli.ts';
+import { lit } from './lit.ts';
 import {
   App,
   type Entry,
@@ -21,6 +33,7 @@ const {
   appendFileSync,
   chmodSync,
   closeSync,
+  existsSync,
   ftruncateSync,
   mkdirSync,
   openSync,
@@ -41,7 +54,7 @@ how long a stop lets in-flight requests finish before it closes every socket
 */
 const BUDGET_MS = 5000;
 /**
-the status of a request the form's current state refuses
+the status of a request the plan's current state refuses
 */
 const CONFLICT = 409;
 /**
@@ -60,7 +73,6 @@ const DRAIN_POLL_MS = 10;
 the status of a request from a Host or Origin that is not ours
 */
 const FORBIDDEN = 403;
-const FORM_FILES = new Bun.Glob('*/form.json');
 /**
 LOCK_EX (2) | LOCK_NB (4): an exclusive lock that fails rather than waits
 */
@@ -75,17 +87,22 @@ the fraction of a second a timestamp carries: milliseconds, as `toISOString` doe
 const MS_DIGITS = 3;
 const NO_STORE = { 'cache-control': 'no-store' };
 /**
-the status of a card, form or route that is not there
+the status of a question, plan or route that is not there
 */
 const NOT_FOUND = 404;
 const OK = 200;
+/**
+what a boot converts: the form file of a plan stored before plans were tuples
+*/
+const OLD_FILES = new Bun.Glob('*/form.json');
 const PANICS = ['uncaughtException', 'unhandledRejection'] as const;
 /**
 a pathname split to its empty lead, its slug and its verb
 */
 const PATH_PARTS = 3;
+const PLAN_FILES = new Bun.Glob('*/plan.json');
 /**
-the field that tells an event its place in the form's log
+the field that tells an event its place in the plan's log
 */
 const POSITION = 'n';
 const SIGNALS = ['SIGHUP', 'SIGINT', 'SIGTERM'] as const;
@@ -96,7 +113,7 @@ the status of a daemon that is booting, stopping or has no threads
 */
 const UNAVAILABLE = 503;
 /**
-the status of a form that fails validation
+the status of a plan that fails validation
 */
 const UNPROCESSABLE = 422;
 const { flock } = dlopen(process.platform === 'darwin' ? 'libc.dylib' : 'libc.so.6', {
@@ -111,9 +128,125 @@ function must(isOk: boolean, code: string, message: string): void {
     throw new FailError(code, message);
   }
 }
-function save(path: string, value: unknown): void {
-  writeFileSync(`${path}.tmp`, JSON.stringify(value, undefined, 1));
+function write(path: string, text: string): void {
+  writeFileSync(`${path}.tmp`, text);
   renameSync(`${path}.tmp`, path);
+}
+function save(path: string, value: unknown): void {
+  write(path, JSON.stringify(value, undefined, 1));
+}
+/**
+a stored form's part as it was: a component object, the fields of every kind loose
+*/
+type Old = Record<string, ReturnType<typeof JSON.parse>>;
+/**
+ONE-WAY, delete once every stored plan is current: a component object becomes parts, a leading note for its caption
+`text` (a note keeps its own), then its kind and props; a chart's rows, a tab and a machine are tuples, a choice's
+options a record keyed by value
+*/
+function convert({ component, text, ...old }: Old): unknown[][] {
+  const { config, items, options, rows, tabs, ...rest } = old;
+  const props = {
+    ...rest,
+    ...(component === 'machine' ? { machine: config ?? items } : items && { items }),
+    ...(options && {
+      options: Object.fromEntries(options.map(({ value, ...option }: Old) => [value, option])),
+    }),
+    ...(rows && { rows: rows.map(({ label, value }: Old) => [label, value]) }),
+    ...(tabs && {
+      tabs: tabs.map(({ code, label, lang }: Old) => [label, code, ...(lang ? [lang] : [])]),
+    }),
+  };
+  const kind = tabs ? 'tabs' : component;
+  return component === 'note'
+    ? [[kind, { ...props, text }]]
+    : [...(text ? [['note', { text }]] : []), [kind, props]];
+}
+/**
+ONE-WAY, delete with `convert`: a form `{title, text?, overview?, cards}` becomes the plan `[title, overview,
+questions]`, a question's `meta` and `text` leading notes of its body
+*/
+function replan({ cards, overview = [], text, title }: Old): Plan {
+  return [
+    title,
+    [...(text ? [['note', { text }]] : []), ...overview.flatMap((block: Old) => convert(block))],
+    Object.fromEntries(
+      cards.map(({ body = [], id, meta, text: lead, title: name }: Old) => [
+        id,
+        [
+          name,
+          [
+            ...[meta, lead].filter(Boolean).map((note) => ['note', { text: note }]),
+            ...body.flatMap((item: Old) => convert(item)),
+          ],
+        ],
+      ]),
+    ),
+  ] as Plan;
+}
+/**
+ONE-WAY, delete with `convert`: an answer or comment object `{kind, card, …}` becomes `[kind, {question, …}]`; an
+event already a tuple stays
+*/
+function reentry(event: Old): Entry {
+  const { card, kind, ...rest } = event;
+  return Array.isArray(event)
+    ? (event as unknown as Entry)
+    : ([kind, { ...(card && { question: card }), ...rest }] as Entry);
+}
+/**
+ONE-WAY, delete once every stored plan is current: a directory holding `form.json` gets its answers rewritten as
+tuples, then its `plan.json`, then loses the form; a kill in between converts again, which changes nothing
+*/
+function migrate(directory: string): void {
+  const answers = `${directory}/answers.jsonl`;
+  const lines = readFileSync(answers, 'utf8').split('\n').filter(Boolean);
+  write(answers, lines.map((line) => `${JSON.stringify(reentry(JSON.parse(line)))}\n`).join(''));
+  const form = JSON.parse(readFileSync(`${directory}/form.json`, 'utf8'));
+  save(`${directory}/plan.json`, replan(form));
+  rmSync(`${directory}/form.json`);
+}
+/**
+what an answer body says of `question`, each pick and comment checked against the question's choices and kept in
+authored order: a value or a choice the question lacks is left out, so the count of picks differs from the count sent
+*/
+function answerOf(
+  question: Asked,
+  body: { message?: unknown; notes?: unknown; picks?: unknown },
+): Said {
+  const choices = choicesOf(question);
+  const given = (body.picks ?? {}) as Record<string, unknown>;
+  const commented = (body.notes ?? {}) as Record<string, Record<string, unknown> | undefined>;
+  return {
+    message: typeof body.message === 'string' ? body.message.trim() : '',
+    notes: byChoice(choices, (choice) =>
+      Object.fromEntries(
+        optionsOf(choice)
+          .map((option) => [
+            option.value,
+            String(commented[choice.id]?.[option.value] ?? '').trim(),
+          ])
+          .filter(([, text]) => text),
+      ),
+    ),
+    picks: byChoice(choices, (choice) =>
+      picked(choice, [given[choice.id] ?? []].flat()).map((option) => option.value),
+    ),
+  };
+}
+/**
+whether an answer body asks for more than the question allows or says nothing: a pick the question lacks (the counts
+differ), two on a pick-one choice, or nothing at all, his own words alone being a full answer
+*/
+function isRefused(question: Asked, body: { picks?: unknown }, answer: Said): boolean {
+  return (
+    Object.values(answer.picks).flat().length !==
+      Object.values((body.picks ?? {}) as object).flat().length ||
+    choicesOf(question).some(
+      (choice) => choice.pick !== 'many' && (answer.picks[choice.id]?.length ?? 0) > 1,
+    ) ||
+    !spoken(question, answer)
+  );
 }
 function now(): string {
   return Temporal.Now.instant().toString({ fractionalSecondDigits: MS_DIGITS });
@@ -137,22 +270,20 @@ async function serve({ port }: { port?: number } = {}): Promise<{
     threads: () => Thread[];
     websocket: Bun.WebSocketHandler<string>;
   };
-  type Held = { events: Entry[]; form: Form; status: Status };
+  type Held = { events: Entry[]; plan: Plan; status: Status };
   type Body = {
-    card?: unknown;
-    choice?: unknown;
-    choices?: unknown;
-    form: Form;
     lines?: unknown;
     message?: unknown;
     notes?: unknown;
+    picks?: unknown;
+    plan: Plan;
+    question?: unknown;
     session?: string;
     slug?: string;
     target?: unknown;
     text?: unknown;
     working?: boolean;
   };
-  type Said = { choices: string[]; message: string; notes: Record<string, string> };
   type Call = { body: Body; held: Held; slug: string; url: URL };
   type Handler = (call: Call) => Promise<Response> | Response;
 
@@ -178,7 +309,7 @@ async function serve({ port }: { port?: number } = {}): Promise<{
   }
   log(`start ${VERSION} pid ${process.pid}`);
 
-  const forms = new Map<string, Held>();
+  const plans = new Map<string, Held>();
   const waiters = new Set<() => void>();
   const live: {
     build?: Bun.BuildOutput;
@@ -194,11 +325,11 @@ async function serve({ port }: { port?: number } = {}): Promise<{
   const expected = new Set<string>();
   const counts = new Map<string, number>();
   /**
-  stands for a form that is not open, so a handler that needs one always holds a `Held`
+  stands for a plan that is not open, so a handler that needs one always holds a `Held`
   */
   const none: Held = {
     events: [],
-    form: { cards: [], title: '' },
+    plan: ['', [], {}],
     status: { lines: [], opened: '', resolved: [], session: '', working: [] },
   };
   const building = Bun.build({
@@ -219,15 +350,15 @@ async function serve({ port }: { port?: number } = {}): Promise<{
     return live.layer?.threads().filter((thread) => thread.page === `/${slug}`) ?? [];
   }
   function summaries(): Summary[] {
-    return [...forms].map(([slug, { form, status }]) => {
-      // each card's turn, as the page sorts it
-      const turns = form.cards.map((card) =>
-        turnOf(card, status, threadOf(slug, card, threadsOf(slug))),
+    return [...plans].map(([slug, { plan, status }]) => {
+      // each question's turn, as the page sorts it
+      const turns = asking(plan).map((question) =>
+        turnOf(question, status, threadOf(slug, question, threadsOf(slug))),
       );
       return {
         session: status.session,
         slug,
-        title: form.title,
+        title: plan[0],
         url: `${live.url}${slug}`,
         waiting: turns.filter((turn) => turn === 'waiting').length,
         working: turns.filter((turn) => turn === 'working').length,
@@ -238,10 +369,10 @@ async function serve({ port }: { port?: number } = {}): Promise<{
 
   function stateOf(path: string): State {
     const slug = path.slice(1);
-    const held = forms.get(slug);
+    const held = plans.get(slug);
     return held
       ? { ...held, slug, version: VERSION }
-      : { forms: summaries(), ...(slug && { missing: slug }), version: VERSION };
+      : { plans: summaries(), ...(slug && { missing: slug }), version: VERSION };
   }
   function withThreads(path: string): State {
     return { ...stateOf(path), threads: threadsOf(path.slice(1)) };
@@ -258,14 +389,14 @@ async function serve({ port }: { port?: number } = {}): Promise<{
     );
     return response?.json();
   }
-  function cardOf(held: Held, thread?: Thread): Card | undefined {
-    return held.form.cards.find((card) => selectorOf(card) === thread?.selector);
+  function questionOf(held: Held, thread?: Thread): Asked | undefined {
+    return asking(held.plan).find((question) => selectorOf(question) === thread?.selector);
   }
   /**
-  after a reply on `thread`: `--working` keeps its card the agent's, a plain reply hands it back to him
+  after a reply on `thread`: `--working` keeps its question the agent's, a plain reply hands it back to him
   */
   function hand(held: Held, thread: Thread | undefined, isWorking?: boolean): void {
-    const id = cardOf(held, thread)?.id;
+    const id = questionOf(held, thread)?.id;
     held.status.working = [
       ...held.status.working.filter((one) => one !== id),
       ...(isWorking && id ? [id] : []),
@@ -282,13 +413,13 @@ async function serve({ port }: { port?: number } = {}): Promise<{
     publish(slug);
   }
   /**
-  an owner event: logged for `show wait`, and a card he speaks on is no longer resolved
+  an owner event: logged for `show wait`, and a question he speaks on is no longer resolved
   */
   function record(slug: string, held: Held, entry: Entry): void {
     held.events.push(entry);
     appendFileSync(`${root}/${slug}/answers.jsonl`, `${JSON.stringify(entry)}\n`);
-    held.status.resolved = held.status.resolved.filter((id) => id !== entry.card);
-    held.status.working = held.status.working.filter((id) => id !== entry.card);
+    held.status.resolved = held.status.resolved.filter((id) => id !== entry[1].question);
+    held.status.working = held.status.working.filter((id) => id !== entry[1].question);
     commit(slug, held);
   }
   async function bodyOf(request: Request): Promise<Body> {
@@ -299,99 +430,89 @@ async function serve({ port }: { port?: number } = {}): Promise<{
     }
   }
   /**
-  the card an answer is for and its message, or the refusal when the card is missing or the answer is wrong
+  the question an answer is for and its message, or the refusal when the question is missing or the answer is wrong
   */
   async function parse(
     slug: string,
     request: Request,
     held: Held,
-  ): Promise<Response | { card: Card; said: Said }> {
+  ): Promise<Response | { question: Asked; said: Said }> {
     const body = await bodyOf(request);
-    const card = held.form.cards.find((one) => one.id === body.card);
-    if (!card) {
-      return fail('not_found', `no card ${body.card} on ${slug}`, NOT_FOUND);
+    const question = asking(held.plan).find((one) => one.id === body.question);
+    if (!question) {
+      return fail('not_found', `no question ${body.question} on ${slug}`, NOT_FOUND);
     }
-    // `choice` or `choices`, each an option's value: one at most unless the card picks many
-    const picks = [body.choices ?? body.choice ?? []].flat();
-    const said: Said = {
-      choices: picked(card, picks).map((option) => option.value),
-      message: typeof body.message === 'string' ? body.message.trim() : '',
-      notes: Object.fromEntries(
-        Object.entries(body.notes ?? {})
-          .map(([value, text]) => [value, String(text).trim()])
-          .filter(([value, text]) => text && picked(card, [value]).length > 0),
-      ),
-    };
-    // a pick, a message, an option's comment or any mix: his own words alone are a full answer
-    if (
-      said.choices.length !== picks.length ||
-      (card.pick !== 'many' && picks.length > 1) ||
-      !spoken(card, said)
-    ) {
+    // `picks` and `notes` are keyed by choice id, each a list of option values: one at most unless the choice picks many
+    const said = answerOf(question, body);
+    if (isRefused(question, body, said)) {
+      const choices = choicesOf(question);
       return fail(
         'invalid',
-        card.options
-          ? `choose one of ${card.options.map((option) => option.value).join(', ')}, or write a message`
+        choices.length > 0
+          ? `choose ${choices.map((choice) => `${choice.id}: ${Object.keys(choice.options).join(', ')}`).join('; ')}, or write a message`
           : 'write a message',
         BAD_REQUEST,
       );
     }
-    return { card, said };
+    return { question, said };
   }
   async function answer(slug: string, request: Request): Promise<Response> {
-    const held = forms.get(slug) ?? none;
+    const held = plans.get(slug) ?? none;
     const parsed = await parse(slug, request, held);
     if (parsed instanceof Response) {
       return parsed;
     }
-    const { card, said } = parsed;
-    const { choices, message, notes } = said;
+    const { question, said } = parsed;
+    const { message, notes, picks } = said;
     const at = now();
-    expected.add(`/${slug} ${selectorOf(card)} ${spoken(card, said)}`);
-    record(slug, held, {
-      at,
-      card: card.id,
-      ...(choices.length > 0 && (card.pick === 'many' ? { choices } : { choice: choices[0] })),
-      kind: 'answer',
-      ...(message && { message }),
-      ...(Object.keys(notes).length > 0 && { notes }),
-    });
+    expected.add(`/${slug} ${selectorOf(question)} ${spoken(question, said)}`);
+    record(slug, held, [
+      'answer',
+      {
+        at,
+        question: question.id,
+        ...(message && { message }),
+        ...(Object.keys(notes).length > 0 && { notes }),
+        ...(Object.keys(picks).length > 0 && { picks }),
+      },
+    ]);
     return Response.json({ at });
   }
   /**
-  the agent's `show resolve`: close the card's or the thread's hud threads, and collapse the card
+  the agent's `show resolve`: close the question's or the thread's hud threads, and collapse the question
   */
   async function settle(slug: string, held: Held, target: unknown): Promise<Response> {
     const threads = threadsOf(slug);
     const thread = threads.find((one) => one.id.startsWith(String(target)));
-    const card = held.form.cards.find((one) => one.id === target) ?? cardOf(held, thread);
-    if (!card && !thread) {
-      return fail('not_found', `no card or thread ${target} on ${slug}`, NOT_FOUND);
+    const question = asking(held.plan).find((one) => one.id === target) ?? questionOf(held, thread);
+    if (!question && !thread) {
+      return fail('not_found', `no question or thread ${target} on ${slug}`, NOT_FOUND);
     }
     await Promise.all(
       threads
         .filter(
           (one) =>
-            one.status === 'open' && (one === thread || (card && cardOf(held, one) === card)),
+            one.status === 'open' &&
+            (one === thread || (question && questionOf(held, one)?.id === question.id)),
         )
         .map((one) => hudCall('resolve', { id: one.id })),
     );
     const done = new Set(held.status.resolved);
-    held.status.resolved = [...done.union(new Set(card ? [card.id] : []))];
+    held.status.resolved = [...done.union(new Set(question ? [question.id] : []))];
     commit(slug, held);
-    return Response.json({ resolved: card?.id ?? thread?.id });
+    return Response.json({ resolved: question?.id ?? thread?.id });
   }
   /**
-  his Resolve on a card: an event for `show wait`, then what `show resolve` does
+  his Resolve on a question: an event for `show wait`, then what `show resolve` does
   */
   async function shut(slug: string, request: Request): Promise<Response> {
-    const held = forms.get(slug) ?? none;
-    const { card } = await bodyOf(request);
-    if (held.form.cards.every((one) => one.id !== card)) {
-      return fail('not_found', `no card ${card} on ${slug}`, NOT_FOUND);
+    const held = plans.get(slug) ?? none;
+    const { question } = await bodyOf(request);
+    if (asking(held.plan).every((one) => one.id !== question)) {
+      return fail('not_found', `no question ${question} on ${slug}`, NOT_FOUND);
     }
-    record(slug, held, { at: now(), card: String(card), kind: 'resolve' });
-    return settle(slug, held, card);
+    record(slug, held, ['resolve', { at: now(), question: String(question) }]);
+    return settle(slug, held, question);
   }
   /**
   what the page may POST to `/<slug>/<verb>`
@@ -408,7 +529,7 @@ async function serve({ port }: { port?: number } = {}): Promise<{
         <head>
           <meta charSet="utf-8" />
           <meta content="width=device-width, initial-scale=1" name="viewport" />
-          <title>{'form' in state ? state.form.title : 'show'}</title>
+          <title>{'plan' in state ? state.plan[0] : 'show'}</title>
           <link href="/style.css" rel="stylesheet" />
         </head>
         <body>
@@ -456,12 +577,12 @@ async function serve({ port }: { port?: number } = {}): Promise<{
     return new Promise((resolve) => {
       // asks again at each wake until an entry, a close or a stop answers
       function ask(): void {
-        const entry = forms.get(slug)?.events[after];
+        const entry = plans.get(slug)?.events[after];
         if (entry) {
-          resolve(Response.json({ ...entry, [POSITION]: after }));
-        } else if (!forms.has(slug) || live.stage === 'stopping') {
+          resolve(Response.json([entry[0], { ...entry[1], [POSITION]: after }]));
+        } else if (!plans.has(slug) || live.stage === 'stopping') {
           resolve(
-            forms.has(slug)
+            plans.has(slug)
               ? fail('stopping', 'show is stopping', UNAVAILABLE)
               : fail('not_found', `${slug} was closed`, NOT_FOUND),
           );
@@ -473,18 +594,18 @@ async function serve({ port }: { port?: number } = {}): Promise<{
     });
   }
   /**
-  open a form: its directory, its first state, and what a cold boot re-reads
+  open a plan: its directory, its first state, and what a cold boot re-reads
   */
-  function open(slug: string, form: Form, session: string): Response {
+  async function open(slug: string, plan: Plan, session: string): Promise<Response> {
     const held: Held = {
       events: [],
-      form,
+      plan: await lit(plan),
       status: { lines: [], opened: now(), resolved: [], session, working: [] },
     };
     mkdirSync(`${root}/${slug}`, { recursive: true });
     writeFileSync(`${root}/${slug}/answers.jsonl`, '');
-    forms.set(slug, held);
-    save(`${root}/${slug}/form.json`, form);
+    plans.set(slug, held);
+    save(`${root}/${slug}/plan.json`, plan);
     saveStatus(slug, held);
     log(`open ${slug}`);
     publish(slug);
@@ -494,13 +615,13 @@ async function serve({ port }: { port?: number } = {}): Promise<{
   why a reply cannot go out, or nothing when exactly one thread is its target
   */
   function refusal({
-    card,
     found,
+    question,
     target,
     text,
   }: {
-    card?: Card;
     found: Thread[];
+    question?: Asked;
     target: unknown;
     text: unknown;
   }): Response | undefined {
@@ -515,26 +636,23 @@ async function serve({ port }: { port?: number } = {}): Promise<{
     }
     return found.length === 0
       ? fail(
-          card ? 'no_thread' : 'not_found',
-          card ? `the owner has not written on ${target} yet` : `0 threads match ${target}`,
+          question ? 'no_thread' : 'not_found',
+          question ? `the owner has not written on ${target} yet` : `0 threads match ${target}`,
           NOT_FOUND,
         )
       : undefined;
   }
 
   const control: Record<string, Handler> = {
-    'DELETE /forms/:slug': ({ slug }) => {
+    'DELETE /plans/:slug': ({ slug }) => {
       mkdirSync(`${root}/.closed`, { recursive: true });
       renameSync(`${root}/${slug}`, `${root}/.closed/${slug}-${Date.now()}`);
-      forms.delete(slug);
+      plans.delete(slug);
       live.tcp?.publish(`/${slug}`, JSON.stringify({ closed: true, version: VERSION }));
       publish('');
       log(`close ${slug}`);
       return Response.json({ slug });
     },
-    'GET /forms': () => Response.json(summaries()),
-    'GET /forms/:slug/events': ({ slug, url }) =>
-      nextEvent(slug, Number(url.searchParams.get('after'))),
     'GET /health': () =>
       Response.json({
         pid: process.pid,
@@ -543,18 +661,21 @@ async function serve({ port }: { port?: number } = {}): Promise<{
         url: live.url,
         version: VERSION,
       }),
-    'POST /forms': ({
+    'GET /plans': () => Response.json(summaries()),
+    'GET /plans/:slug/events': ({ slug, url }) =>
+      nextEvent(slug, Number(url.searchParams.get('after'))),
+    'POST /plans': ({
       body: {
-        form,
+        plan,
         session = '',
-        slug = String(form.title)
+        slug = String(plan[0])
           .toLowerCase()
           .replaceAll(/[^a-z0-9]+/gu, '-')
           .replaceAll(/^-|-$/gu, ''),
       },
     }) => {
       const problems = [
-        ...validate(form),
+        ...validate(plan),
         ...(SLUG.test(slug)
           ? []
           : [`slug ${JSON.stringify(slug)}: lowercase letters, digits and -`]),
@@ -562,21 +683,21 @@ async function serve({ port }: { port?: number } = {}): Promise<{
       if (problems.length > 0) {
         return fail('invalid', problems.join('\n'), UNPROCESSABLE);
       }
-      return forms.has(slug)
+      return plans.has(slug)
         ? fail(
             'exists',
-            `${slug} is open: show update ${slug} <form.json>, or open with --slug`,
+            `${slug} is open: show update ${slug} <plan.json>, or open with --slug`,
             CONFLICT,
           )
-        : open(slug, form, session);
+        : open(slug, plan, session);
     },
-    'POST /forms/:slug/reply': async ({ body: { target, text, working }, held, slug }) => {
+    'POST /plans/:slug/reply': async ({ body: { target, text, working }, held, slug }) => {
       const threads = threadsOf(slug);
-      const card = held.form.cards.find((one) => one.id === target);
-      const found = card
-        ? threads.filter((thread) => cardOf(held, thread) === card).slice(-1)
+      const question = asking(held.plan).find((one) => one.id === target);
+      const found = question
+        ? threads.filter((thread) => questionOf(held, thread)?.id === question.id).slice(-1)
         : threads.filter((thread) => thread.id.startsWith(String(target)));
-      const refused = refusal({ card, found, target, text });
+      const refused = refusal({ found, question, target, text });
       if (refused) {
         return refused;
       }
@@ -585,18 +706,18 @@ async function serve({ port }: { port?: number } = {}): Promise<{
       commit(slug, held);
       return Response.json(reply);
     },
-    'POST /forms/:slug/resolve': ({ body: { target }, held, slug }) => settle(slug, held, target),
-    'PUT /forms/:slug': ({ body: { form }, held, slug }) => {
-      const problems = validate(form);
+    'POST /plans/:slug/resolve': ({ body: { target }, held, slug }) => settle(slug, held, target),
+    'PUT /plans/:slug': async ({ body: { plan }, held, slug }) => {
+      const problems = validate(plan);
       if (problems.length > 0) {
         return fail('invalid', problems.join('\n'), UNPROCESSABLE);
       }
-      held.form = form;
-      save(`${root}/${slug}/form.json`, form);
+      held.plan = await lit(plan);
+      save(`${root}/${slug}/plan.json`, plan);
       publish(slug);
       return Response.json({ slug, url: `${live.url}${slug}` });
     },
-    'PUT /forms/:slug/status': ({ body: { lines }, held, slug }) => {
+    'PUT /plans/:slug/status': ({ body: { lines }, held, slug }) => {
       if (!Array.isArray(lines) || lines.some((line) => typeof line !== 'string')) {
         return fail('invalid', 'lines: expected [string, …]', BAD_REQUEST);
       }
@@ -606,7 +727,7 @@ async function serve({ port }: { port?: number } = {}): Promise<{
     },
   };
   /**
-  the refusal that comes before any handler runs: the version, the lifecycle, a form that is not open
+  the refusal that comes before any handler runs: the version, the lifecycle, a plan that is not open
   */
   function gate(request: Request, route: string, slug: string): Response | undefined {
     const said = request.headers.get('x-show-version');
@@ -620,21 +741,21 @@ async function serve({ port }: { port?: number } = {}): Promise<{
     if (['booting', 'stopping'].includes(live.stage)) {
       return fail(live.stage, `show is ${live.stage}`, UNAVAILABLE);
     }
-    return route.includes(':slug') && !forms.has(slug)
-      ? fail('not_found', `no open form ${slug}`, NOT_FOUND)
+    return route.includes(':slug') && !plans.has(slug)
+      ? fail('not_found', `no open plan ${slug}`, NOT_FOUND)
       : undefined;
   }
   async function dispatch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const slug = url.pathname.split('/', PATH_PARTS)[2] ?? '';
-    const route = `${request.method} ${url.pathname.replace(/^\/forms\/[^/]+/u, '/forms/:slug')}`;
+    const route = `${request.method} ${url.pathname.replace(/^\/plans\/[^/]+/u, '/plans/:slug')}`;
     const handler = control[route];
     if (!handler) {
       return fail('route', `no route ${route}`, NOT_FOUND);
     }
     return (
       gate(request, route, slug) ??
-      handler({ body: await bodyOf(request), held: forms.get(slug) ?? none, slug, url })
+      handler({ body: await bodyOf(request), held: plans.get(slug) ?? none, slug, url })
     );
   }
 
@@ -653,20 +774,31 @@ async function serve({ port }: { port?: number } = {}): Promise<{
   for (const stale of staleFiles) {
     rmSync(`${root}/${stale}`);
   }
-  const formFiles = [...FORM_FILES.scanSync(root)];
-  for (const path of formFiles) {
-    const slug = path.slice(0, -'/form.json'.length);
-    const directory = `${root}/${slug}`;
-    forms.set(slug, {
-      events: readFileSync(`${directory}/answers.jsonl`, 'utf8')
-        .split('\n')
-        .filter(Boolean)
-        .map((line) => JSON.parse(line)),
-      form: JSON.parse(readFileSync(`${directory}/form.json`, 'utf8')),
-      // a status saved before `working` existed reads as none working
-      status: { working: [], ...JSON.parse(readFileSync(`${directory}/status.json`, 'utf8')) },
-    });
+  for (const path of OLD_FILES.scanSync(root)) {
+    migrate(`${root}/${path.slice(0, -'/form.json'.length)}`);
   }
+  // ONE-WAY, with `migrate`: hud's threads were pinned to `#card-<id>`, which the page now calls `#question-<id>`
+  const store = `${root}/threads.json`;
+  if (existsSync(store)) {
+    const threads = readFileSync(store, 'utf8');
+    write(store, threads.replaceAll(/(?<head>"selector":\s*"#)card-/gu, '$<head>question-'));
+  }
+  await Promise.all(
+    [...PLAN_FILES.scanSync(root)].map(async (path) => {
+      const slug = path.slice(0, -'/plan.json'.length);
+      const directory = `${root}/${slug}`;
+      const stored = JSON.parse(readFileSync(`${directory}/plan.json`, 'utf8'));
+      plans.set(slug, {
+        events: readFileSync(`${directory}/answers.jsonl`, 'utf8')
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => JSON.parse(line)),
+        plan: await lit(stored),
+        // a status saved before `working` existed reads as none working
+        status: { working: [], ...JSON.parse(readFileSync(`${directory}/status.json`, 'utf8')) },
+      });
+    }),
+  );
   must(live.build.success, 'build', live.build.logs.join('\n'));
   /**
   the owner's own hud messages become events; the ones the page said for a Send are `answer`'s
@@ -674,7 +806,7 @@ async function serve({ port }: { port?: number } = {}): Promise<{
   function onChange(threads: Thread[]): void {
     for (const thread of threads) {
       const slug = thread.page.slice(1);
-      const held = forms.get(slug);
+      const held = plans.get(slug);
       const fresh = thread.messages
         .slice(counts.get(thread.id) ?? 0)
         .filter(
@@ -685,14 +817,16 @@ async function serve({ port }: { port?: number } = {}): Promise<{
       counts.set(thread.id, thread.messages.length);
       if (held) {
         for (const message of fresh) {
-          const card = cardOf(held, thread);
-          record(slug, held, {
-            at: message.at,
-            ...(card && { card: card.id }),
-            kind: 'comment',
-            text: message.text,
-            thread: thread.id,
-          });
+          const question = questionOf(held, thread);
+          record(slug, held, [
+            'comment',
+            {
+              at: message.at,
+              ...(question && { question: question.id }),
+              text: message.text,
+              thread: thread.id,
+            },
+          ]);
         }
       }
     }

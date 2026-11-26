@@ -1,6 +1,6 @@
 // The browser's entry: hydrate the server's render, then follow two WebSockets, show's (whole states) and hud's
 // (threads, through its `hud:threads` event). Never an EventSource or a streamed fetch: Chromium allows six
-// streams per host:port across every tab, and a seventh form would hang.
+// streams per host:port across every tab, and a seventh plan would hang.
 import { hydrateRoot } from 'react-dom/client';
 import { App, type State, type Thread, publish } from './page.tsx';
 

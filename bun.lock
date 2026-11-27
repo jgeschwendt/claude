@@ -11,7 +11,7 @@
         "react": "19.3.1",
         "react-dom": "19.3.1",
         "shiki": "4.6.0",
-        "verax": "link:../../typescript/verax-next/packages/verax",
+        "verax": "link:../../typescript/main/packages/verax",
         "xstate": "5.33.4",
       },
       "devDependencies": {
@@ -821,7 +821,7 @@
 
     "uri-js": ["uri-js@4.4.1", "", { "dependencies": { "punycode": "^2.1.0" } }, "sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg=="],
 
-    "verax": ["verax@link:../../typescript/verax-next/packages/verax", {}],
+    "verax": ["verax@link:../../typescript/main/packages/verax", {}],
 
     "vfile": ["vfile@6.0.3", "", { "dependencies": { "@types/unist": "^3.0.0", "vfile-message": "^4.0.0" } }, "sha512-KzIbH/9tXat2u30jf+smMwFCsno4wHVdNmzFyL+T/L3UGqqk6JKfVqOFOZEpZSHADH1k40ab6NUIXZq422ov3Q=="],
 

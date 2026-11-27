@@ -43,6 +43,7 @@ On the top model tier, tokens buy judgment, not volume: plan, direct, judge, rev
 - Scripts for one module or skill go in its directory, never top-level `shell/` or `scripts/`.
 - Stale docs are bugs—fix or flag an artifact contradicting the live system the turn you notice.
 - Unicode typographic symbols, no emoji.
+- Use what exists—before adding code or a feature, check whether the system already does it through config or a doc; change the narrowest thing, never a shared runner for one consumer.
 - Verify library/API details in live source or docs, behavior by probe or failing case, not confident recall or plausible inference.
 
 ## Thinking/Top of mind
@@ -62,4 +63,5 @@ Name each repo-relative tool's target—`git -C <repo>`, `mise x -C <repo>`, `cd
 - `mise run fetch-pdf <url|file> [-l <last page>] [-o <file>]` for a PDF's text (poppler, installed by mise), never `mkdir`+`curl`+`pdftotext` by hand; `mise run git-where <repo>` for a repo's branch, uncommitted files and last commits, never `git log` then `git status`.
 - `mise run -C <repo> check` is the gate, in one word, in every repo that defines it—never `cargo fmt`/`clippy`/`test` or `stele check && stele emit --check` spelled out by hand; a repo without one gets it before its next gate.
 - `ripgrep` over `grep`.
+- `run-loaded --reason <why> [--for <minutes>] -- <command…>` for anything that loads this Mac on purpose—a stress or soak test, a gate looped beside busy work: bifrost's triggers freeze undeclared load. Never bare busy loops, and never "under load" in a brief without naming it; exit 75 means nothing ran.
 - `sudo` never rides `!`-prefixed commands—no TTY for the password; hand him the line to run in a real terminal.

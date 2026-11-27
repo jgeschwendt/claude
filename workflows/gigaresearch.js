@@ -3,7 +3,7 @@ export const meta = {
   description:
     'Multi-source research into a cited report and claim ledger, every load-bearing claim checked against a primary source fetched this run',
   whenToUse:
-    'An open-ended question that needs many sources to answer: a deep dive, a comparison, due diligence, a state-of-the-art survey, or a standing question rerun into its workspace. args: the question as text, or {question, depth: quick | standard | deep, slug, workspace}. Scale: quick is one round of 9 searchers, standard two rounds from 15, deep four from 42, each plus a verifier per load-bearing claim; one deep run with 7 sub-questions took 278 agents, 28M subagent tokens and 2.5 h (2026-11-21). One question per run: loosely related sub-questions dilute every phase, so give each its own run and slug, and let a later run name the earlier reports to build on.',
+    'An open-ended question that needs many sources to answer: a deep dive, a comparison, due diligence, a state-of-the-art survey, or a standing question rerun into its workspace. args: the question as text, or {question, depth: quick | standard | deep, slug, workspace}; depth defaults to quick, and standard or deep runs only when the owner names it (since 2026-11-25 · weekly limit: "use gigaresearch\'s quick depth instead of deep"). Scale: quick is one round of 9 searchers, standard two rounds from 15, deep four from 42, each plus a verifier per load-bearing claim; one deep run with 7 sub-questions took 278 agents, 28M subagent tokens and 2.5 h (2026-11-21). One question per run: loosely related sub-questions dilute every phase, so give each its own run and slug, and let a later run name the earlier reports to build on.',
   phases: [
     {
       title: 'Scope',
@@ -91,7 +91,7 @@ const input = typeof args === 'string' ? { question: args } : (args ?? {});
 const question = String(input.question ?? '').trim();
 if (!question)
   return { error: 'No question: pass it as the text after /gigaresearch, or as {question}.' };
-const depth = DEPTHS[input.depth] ? input.depth : 'standard';
+const depth = DEPTHS[input.depth] ? input.depth : 'quick';
 const D = DEPTHS[depth];
 const json = (v) => JSON.stringify(v);
 const opus = { model: 'opus' };

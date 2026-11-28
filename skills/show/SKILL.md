@@ -101,7 +101,7 @@ The contexts above go in a question's `body` and in `overview` alike, `choice` i
 
 **A lint or style decision shows the code each option makes him write**, one labelled sample per option as `code` contexts in the question's `body`, not only the rule names. (since 2026-11-24 · "show me lint decisions with code samples too")
 
-**A new component** when none explains the thing well: add its verax part to the `contexts` list and `KINDS`, and its body to `BODIES`, in `catalog.tsx`, a use of it to `example.json`, run `bun test --coverage --cwd ~/.claude/skills/show` (the subcommand first; `bun --cwd … test` runs the repo's gate), then restart the daemon (below).
+**A new component** when none explains the thing well: add its verax part to the `contexts` list and `KINDS`, and its body to `partOf`, in `catalog.tsx`, a use of it to `example.json`, run `bun test --coverage --cwd ~/.claude/skills/show` (the subcommand first; `bun --cwd … test` runs the repo's gate), then restart the daemon (below).
 
 ## No browser streams
 

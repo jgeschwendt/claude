@@ -1,5 +1,5 @@
 import { expect, spyOn, test } from 'bun:test';
-import { drift, main, offer, reads, survey } from './survey';
+import { drift, main, manifestOf, offer, reads, survey } from './survey';
 
 const HOME = `${import.meta.dir}/../`;
 
@@ -73,9 +73,7 @@ const quietly = async (argv: string[], home: string): Promise<[number, string[]]
 };
 
 test('the manifest is the surface the live types offer, read as census.ts reads it', async () => {
-  const { senses } = (await import(`${HOME}hooks/senses.ts`)) as {
-    senses: Parameters<typeof drift>[0];
-  };
+  const senses = await manifestOf(`${HOME}hooks/senses.ts`);
   const { ghosts, manifest } = survey(
     await offer(`${HOME}.claude-plugin/types`),
     await reads(`${HOME}hooks`),
@@ -122,7 +120,7 @@ test('--write records the survey, a read none of its events offers still failing
     1,
     ["! census's shared reads ghost, which none of ev.one, ev.two offers"],
   ]);
-  expect(((await import(`${home}hooks/senses.ts`)) as { senses: unknown }).senses).toEqual({
+  expect(await manifestOf(`${home}hooks/senses.ts`)).toEqual({
     args: ['tool.call'],
     events: {
       'ev.one': { read: ['a', 'b', 'c'], unread: [] },

@@ -25,7 +25,7 @@ const server = Bun.serve({
   },
   port: 0,
 });
-afterAll(() => server.stop());
+afterAll(async () => server.stop());
 
 /**
 A scratch HOME holding `.claude.json` as `config` and a claude reporting 2.1.0, beside a checkout holding `files`;
@@ -44,13 +44,14 @@ const rig = async (
   const made = await Bun.$`realpath $(mktemp -d)`.text();
   const root = made.trim();
   const [checkout, home] = [`${root}/checkout`, `${root}/.claude`];
-  await Bun.$`mkdir -p ${home} ${checkout}/.mise/tasks && cp ${import.meta.dir}/link ${import.meta.dir}/doctor.ts ${checkout}/.mise/tasks/`;
+  const source = `${import.meta.dir}/../..`;
+  await Bun.$`mkdir -p ${home} ${checkout}/.mise/tasks ${checkout}/scripts && cp ${import.meta.dir}/link ${import.meta.dir}/doctor.ts ${checkout}/.mise/tasks/ && cp ${source}/package.json ${checkout}/ && cp ${source}/scripts/loose.ts ${checkout}/scripts/ && ln -s ${source}/node_modules ${checkout}/node_modules`;
   await Promise.all(
     Object.entries({
       ...files,
       '../.claude.json': config,
       '../.local/bin/claude': '#!/bin/sh\necho "2.1.0 (Claude Code)"\n',
-    }).map(([path, text]) => Bun.write(`${checkout}/${path}`, text)),
+    }).map(async ([path, text]) => Bun.write(`${checkout}/${path}`, text)),
   );
   await Bun.$`chmod +x ${root}/.local/bin/claude && git -C ${checkout} init -q`;
   const doctor = async (latest: string, environment = {}): Promise<string> => {
@@ -65,7 +66,7 @@ const rig = async (
       .quiet();
     return `${run.exitCode}\n${run.stdout.toString()}`;
   };
-  const link = (): Promise<unknown> =>
+  const link = async (): Promise<unknown> =>
     Bun.$`${checkout}/.mise/tasks/link`.env({ ...inherited, HOME: root }).quiet();
   return { checkout, doctor, home, link, root };
 };

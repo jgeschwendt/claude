@@ -5,6 +5,8 @@
 // 2026-11-19 on a `claude stop`) and removes what forget leaves, unless the CLI outlives 60 s: a live session is
 // never forgotten.
 // Exit 0: armed, its one line is what the skill reports on; 1: no safe identity; 2: forget failed. Both close nothing.
+import { unknown as anything, parse, record } from 'verax';
+
 const POLL_MS = 300;
 const SHORT_ID = 8;
 
@@ -23,7 +25,7 @@ const short = sid.slice(0, SHORT_ID);
 const isErase = Bun.argv.includes('--erase');
 const run = (...command: string[]): number | null =>
   Bun.spawnSync(command, { stderr: 'ignore', stdout: 'ignore' }).exitCode;
-const say = (line: string): Promise<number> => Bun.write(Bun.stdout, `${line}\n`);
+const say = async (line: string): Promise<number> => Bun.write(Bun.stdout, `${line}\n`);
 const hasSignalled = (name: NodeJS.Signals | 0): boolean => {
   try {
     return process.kill(pid, name);
@@ -38,9 +40,11 @@ const attempt = async <T>(read: () => Promise<T>, fallback: T): Promise<T> => {
     return fallback;
   }
 };
+const object = record(anything());
 const field = (line: string, key: string): unknown => {
   try {
-    return JSON.parse(line)[key];
+    // a line that is not an object throws on the read, which is the miss
+    return parse(JSON.parse(line), object)[key];
   } catch {
     return undefined;
   }
@@ -95,7 +99,7 @@ if (!Bun.argv.includes('--child')) {
 // a background job is removed, which stops it (verified 2026-11-23 · claude rm on a running background session stopped
 // it, removed it and the transcript was archived at once); an interactive CLI gets Ctrl-C twice, then TERM (verified
 // 2026-11-23 · a probe session in a held pty exited on the interrupts and its transcript was archived a second later)
-if (job) {
+if (job !== undefined && job !== '') {
   run('claude', 'rm', short);
 } else {
   const INT_GAP_MS = 400;
@@ -118,7 +122,7 @@ if (isErase && (await hasExited(Date.now() + Number(limit)))) {
   `path` without the lines whose `key` is this session, rewritten through a temp file only when one is dropped
   */
   const scrub = async (path: string, key: string): Promise<void> => {
-    const text = await attempt(() => Bun.file(path).text(), '');
+    const text = await attempt(async () => Bun.file(path).text(), '');
     const lines = text.split('\n');
     const kept = lines.filter((line) => !line.includes(sid) || field(line, key) !== sid);
     if (kept.length === lines.length) {
@@ -132,7 +136,7 @@ if (isErase && (await hasExited(Date.now() + Number(limit)))) {
   const temporary = `${tmpdir}/claude-${process.getuid?.()}`;
   const logs = toolLog ?? `${state}/subether/tools`;
   const [keys = [], days = []] = await Promise.all(
-    [temporary, logs].map((directory) => attempt(() => fs.readdir(directory), [])),
+    [temporary, logs].map(async (directory) => attempt(async () => fs.readdir(directory), [])),
   );
   const doomed = [
     ...[
@@ -146,8 +150,8 @@ if (isErase && (await hasExited(Date.now() + Number(limit)))) {
     ...keys.map((key) => `${temporary}/${key}/${sid}`),
   ];
   await Promise.all([
-    ...doomed.map((path) => fs.rm(path, { force: true, recursive: true })),
+    ...doomed.map(async (path) => fs.rm(path, { force: true, recursive: true })),
     scrub(`${claude}/history.jsonl`, 'sessionId'),
-    ...days.map((day) => scrub(`${logs}/${day}`, 'session')),
+    ...days.map(async (day) => scrub(`${logs}/${day}`, 'session')),
   ]);
 }

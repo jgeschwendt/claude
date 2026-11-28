@@ -56,7 +56,7 @@ afterAll(() => {
   }
 });
 
-test.skipIf(!Bun.which('agent-browser') || !existsSync(SHOW_HUD))(
+test.skipIf(Bun.which('agent-browser') === null || !existsSync(SHOW_HUD))(
   'a Send, a reply, a resolve and a restart in a real browser',
   async () => {
     const probe = Bun.serve({ fetch: () => new Response(), port: 0 });

@@ -7,6 +7,18 @@
 // then `doctor: <N> broken, <M> unused`, unused lines sorted. Exit 1 on any broken line. A file that fails to parse
 // skips the checks that read it; its contents are never printed, nor an MCP server's env or headers.
 // CLAUDE_HOME, CLAUDE_JSON, CLAUDE_BIN and CLAUDE_LATEST_URL redirect the inputs.
+import {
+  type Infer,
+  type Schema,
+  boolean,
+  float,
+  list,
+  optional,
+  record,
+  string,
+  parse as vet,
+} from 'verax';
+import { loose } from '#loose';
 
 const DAY_MS = 86_400_000;
 const HOOK_MS = 2000;
@@ -19,20 +31,33 @@ const SKILL_DAYS = 60;
 const SKILL_FRESH_DAYS = 30;
 const TRANSCRIPT_DAYS = 30;
 
-/**
-A plugin's or skill's entry in the config's usage maps
-*/
-type Usage = { lastUsedAt?: number; usageCount?: number };
-
-/**
-The fields of ~/.claude.json the checks read
-*/
-type Config = {
-  installMethod?: string;
-  mcpServers?: Record<string, { command?: string; type?: string }>;
-  pluginUsage?: Record<string, Usage>;
-  skillUsage?: Record<string, Usage>;
-};
+// the files are the harness's own, so each shape holds only the fields the checks read; a line that fails is skipped
+const words = optional(string());
+const numbers = optional(float());
+const counts = loose('usage', { lastUsedAt: numbers, usageCount: numbers });
+const usage = optional(record(counts));
+const mcpServer = loose('server', { command: words, type: words });
+const configShape = loose('~/.claude.json', {
+  installMethod: words,
+  mcpServers: optional(record(mcpServer)),
+  pluginUsage: usage,
+  skillUsage: usage,
+});
+const flags = record(boolean());
+const settingsShape = loose('settings.json', { enabledPlugins: optional(flags) });
+const hookRun = loose('attachment', {
+  durationMs: float(),
+  hookEvent: string(),
+  hookName: string(),
+  type: string(),
+});
+const toolUse = loose('block', { name: words });
+const message = loose('message', { content: list(toolUse) });
+const entryShape = loose('entry', {
+  attachment: optional(hookRun),
+  message: optional(message),
+  type: string(),
+});
 
 const { CLAUDE_BIN, CLAUDE_HOME, CLAUDE_JSON, CLAUDE_LATEST_URL, HOME } = Bun.env;
 const bin = CLAUDE_BIN ?? `${HOME}/.local/bin/claude`;
@@ -71,7 +96,7 @@ The `---` block that opens a file, empty when there is none
 */
 const front = (text: string): string => /^---\n[\s\S]*?\n---/u.exec(text)?.[0] ?? '';
 
-const isPresent = (path: string): Promise<boolean> =>
+const isPresent = async (path: string): Promise<boolean> =>
   attempt(
     async () => {
       await Bun.file(path).stat();
@@ -80,11 +105,11 @@ const isPresent = (path: string): Promise<boolean> =>
     () => false,
   );
 
-const parse = <T>(path: string): Promise<T | undefined> => {
+const parse = async <T>(path: string, shape: Schema<T>): Promise<T | undefined> => {
   const name = path.slice(path.lastIndexOf('/') + 1);
   return attempt(
     async (): Promise<T | undefined> => {
-      const value = JSON.parse(await Bun.file(path).text()) as T;
+      const value = vet(JSON.parse(await Bun.file(path).text()), shape);
       found.push(`ok: parse ${name}`);
       return value;
     },
@@ -105,7 +130,7 @@ The sorted paths under `directory` matching `pattern`, none when it is missing
 const scan = async (pattern: string, directory: string): Promise<string[]> => {
   const glob = new Bun.Glob(pattern);
   const names = await attempt(
-    () => Array.fromAsync(glob.scan({ cwd: directory, followSymlinks: true })),
+    async () => Array.fromAsync(glob.scan({ cwd: directory, followSymlinks: true })),
     (): string[] => [],
   );
   return names
@@ -113,8 +138,8 @@ const scan = async (pattern: string, directory: string): Promise<string[]> => {
     .map((name) => `${directory}/${name}`);
 };
 
-const settings = await parse<{ enabledPlugins?: Record<string, boolean> }>(`${home}/settings.json`);
-const config = await parse<Config>(CLAUDE_JSON ?? `${HOME}/.claude.json`);
+const settings = await parse(`${home}/settings.json`, settingsShape);
+const config = await parse(CLAUDE_JSON ?? `${HOME}/.claude.json`, configShape);
 
 check(
   'link',
@@ -151,9 +176,9 @@ check(
 
 const rules = await scan('*.md', `${home}/rules`);
 const memory = await Promise.all(
-  [`${home}/CLAUDE.md`, ...rules].map((path) =>
+  [`${home}/CLAUDE.md`, ...rules].map(async (path) =>
     attempt(
-      () => Bun.file(path).text(),
+      async () => Bun.file(path).text(),
       () => '',
     ),
   ),
@@ -173,21 +198,13 @@ await Promise.all(
     .map((path) => Bun.file(path))
     .filter((file) => file.lastModified > now - TRANSCRIPT_DAYS * DAY_MS)
     .map(async (file) => {
-      /**
-      A transcript line, as far as tool calls and hook runs go
-      */
-      type Entry = {
-        attachment?: { durationMs: number; hookEvent: string; hookName: string; type: string };
-        message?: { content: { name?: string }[] };
-        type: string;
-      };
       const text = await file.text();
       // a line that does not parse is a live session's half-written tail
       const entries = await Promise.all(
-        text.split('\n').map((line) =>
+        text.split('\n').map(async (line) =>
           attempt(
-            () => JSON.parse(line) as Entry,
-            (): Entry => ({ type: '' }),
+            () => vet(JSON.parse(line), entryShape),
+            (): Infer<typeof entryShape> => ({ type: '' }),
           ),
         ),
       );
@@ -247,7 +264,7 @@ if (config) {
     ...servers
       .filter(([name]) => {
         const prefix = `mcp__${name.replaceAll(/[^\w-]/gu, '_')}__`;
-        return [...tools].every((tool) => !tool?.startsWith(prefix));
+        return [...tools].every((tool) => tool?.startsWith(prefix) !== true);
       })
       .map(([name]) => `unused: mcp ${name} — no calls in ${TRANSCRIPT_DAYS} days`),
   ]);

@@ -1,6 +1,7 @@
 // End to end in this process, so the coverage counts: real daemons on port 0 under scratch state, driven through
 // the CLI's `run`, the page's HTTP and WebSocket surface, and fake-hud.ts standing in for hud.
 import { afterEach, expect, test } from 'bun:test';
+import { unknown as anything, list, parse, record, scalar, string } from 'verax';
 import { validate } from './catalog.tsx';
 import { FIX, VERSION, plist, run } from './cli.ts';
 import { lit } from './lit.ts';
@@ -23,7 +24,7 @@ const DIR = import.meta.dir;
 const EXAMPLE = `${DIR}/example.json`;
 const EXECUTABLE = 0o755;
 const FORBIDDEN = 403;
-const PLAN = JSON.parse(readFileSync(EXAMPLE, 'utf8'));
+const PLAN = parse(JSON.parse(readFileSync(EXAMPLE, 'utf8')), list(anything()));
 /**
 the characters of an id the CLI prints
 */
@@ -82,27 +83,44 @@ const boot = async (
 ): Promise<{ root: string; stop: (reason: string) => Promise<void>; url: string }> => {
   Object.assign(Bun.env, { SHOW_HUD: hud, XDG_STATE_HOME: mkdtempSync('/tmp/show-') });
   const daemon = await serve({ port: 0 });
-  stops.push(() => daemon.stop('test'));
+  stops.push(async () => daemon.stop('test'));
   return { ...daemon, root: `${stateHome()}/show` };
 };
-const show = (...argv: string[]): Promise<[number, string]> => run(argv);
+/**
+a CLI call's code and text, loosely typed so a matcher can stand in for the text
+*/
+const show = async (...argv: string[]): Promise<unknown[]> => run(argv);
 /**
 what a CLI call printed
 */
 const said = async (...argv: string[]): Promise<string> => {
-  const [, text] = await show(...argv);
+  const [, text] = await run(argv);
   return text;
 };
 /**
+text read as JSON
+*/
+const readJson = (text: string): unknown => JSON.parse(text);
+/**
 what a CLI call printed, read as JSON
 */
-const parsed = async (...argv: string[]): Promise<unknown> => JSON.parse(await said(...argv));
+const parsed = async (...argv: string[]): Promise<unknown> => readJson(await said(...argv));
+/**
+the values of a JSON object
+*/
+const fieldsOf = record(anything());
+const fields = (value: unknown): Record<string, unknown> => parse(value, fieldsOf);
+/**
+matchers, which type as `any`, held as what they are
+*/
+const anyNumber: unknown = expect.any(Number);
+const anyString: unknown = expect.any(String);
 const json = (body: unknown, origin?: string): RequestInit => ({
   body: JSON.stringify(body),
-  headers: { 'content-type': 'application/json', ...(origin && { origin }) },
+  headers: { 'content-type': 'application/json', ...(origin !== undefined && { origin }) },
   method: 'POST',
 });
-const control = (path: string, version = VERSION): Promise<Response> =>
+const control = async (path: string, version = VERSION): Promise<Response> =>
   fetch(`http://show${path}`, {
     headers: { 'x-show-version': version },
     unix: `${stateHome()}/show/show.sock`,
@@ -117,7 +135,7 @@ const textOf = async (response: Promise<Response>): Promise<string> => {
 /**
 the body of a response, read as JSON
 */
-const jsonOf = async <Body>(response: Promise<Response>): Promise<Body> => {
+const jsonOf = async (response: Promise<Response>): Promise<unknown> => {
   const settled = await response;
   return settled.json();
 };
@@ -129,6 +147,14 @@ const statusOf = async (response: Promise<Response>): Promise<number> => {
   return settled.status;
 };
 /**
+the error a second daemon throws: a code beside its message
+*/
+const raised = scalar(
+  'raised',
+  (value: unknown): value is { code: string; message: string } =>
+    Error.isError(value) && 'code' in value,
+);
+/**
 what a second daemon on the same state refuses with
 */
 const refused = async (): Promise<string[]> => {
@@ -136,7 +162,7 @@ const refused = async (): Promise<string[]> => {
     await serve({ port: 0 });
     return [];
   } catch (error) {
-    const { code, message } = error as { code: string; message: string };
+    const { code, message } = parse(error, raised);
     return [code, message];
   }
 };
@@ -146,7 +172,7 @@ const opened = async (): Promise<string> => {
 };
 
 afterEach(async () => {
-  await Promise.all(stops.splice(0).map((stop) => stop()));
+  await Promise.all(stops.splice(0).map(async (stop) => stop()));
 });
 
 const lean = { label: 'x', lean: true };
@@ -387,8 +413,11 @@ test('a machine without a walk goes down its longest simple path; a shorthand ch
       ],
       plain: ['t', []],
     },
-  ] as never);
-  const [long, chain] = overview.map(([, own]) => (own as { svg: string }).svg);
+  ]);
+  const [long, chain] = overview.map(([, own]) => {
+    const { svg } = fields(own);
+    return parse(svg, string());
+  });
   // first, middle and last lit in turn; lone, never visited, never animated
   expect(long).toContain("values='0.35;0;0'");
   expect(long).toContain("values='0;0;0.35'");
@@ -498,14 +527,15 @@ test('a plan stored as a form is converted once on boot: its answers, its file a
     ),
   );
   const daemon = await serve({ port: 0 });
-  stops.push(() => daemon.stop('test'));
+  stops.push(async () => daemon.stop('test'));
   expect(existsSync(`${stored}/form.json`)).toBe(false);
   expect(existsSync(`${root}/bare/form.json`)).toBe(false);
   // every answer is a tuple with its `question`, the one already current left as it was
   const after = readFileSync(`${stored}/answers.jsonl`, 'utf8')
     .split('\n')
     .filter(Boolean)
-    .map((line) => JSON.parse(line));
+    .map((line) => parse(readJson(line), list(anything())));
+  const [first = []] = after;
   expect(after).toEqual([
     [
       'answer',
@@ -522,9 +552,9 @@ test('a plan stored as a form is converted once on boot: its answers, its file a
     ['resolve', { at: 'x', question: 'one' }],
     current,
   ]);
-  expect(await parsed('wait', 'old')).toMatchObject(after[0]);
+  expect(await parsed('wait', 'old')).toMatchObject(first);
   // the plan: the form's text, a caption and a question's meta and text leading notes, components as parts
-  const migrated = JSON.parse(readFileSync(`${stored}/plan.json`, 'utf8'));
+  const migrated = readJson(readFileSync(`${stored}/plan.json`, 'utf8'));
   expect(migrated).toEqual([
     'Old form',
     [
@@ -573,17 +603,18 @@ test('a plan stored as a form is converted once on boot: its answers, its file a
     },
   ]);
   expect(validate(migrated)).toEqual([]);
-  expect(JSON.parse(readFileSync(`${root}/bare/plan.json`, 'utf8'))).toEqual([
+  expect(readJson(readFileSync(`${root}/bare/plan.json`, 'utf8'))).toEqual([
     'Bare',
     [],
     { solo: ['C', []] },
   ]);
   // hud's threads follow the page's new selector, the ones that were never a card's left alone
-  expect(
-    JSON.parse(readFileSync(`${root}/threads.json`, 'utf8')).map(
-      ({ selector }: { selector: string }) => selector,
-    ),
-  ).toEqual(['#question-one', 'h1', '#question-one > p']);
+  const threads = parse(readJson(readFileSync(`${root}/threads.json`, 'utf8')), list(fieldsOf));
+  expect(threads.map(({ selector }) => selector)).toEqual([
+    '#question-one',
+    'h1',
+    '#question-one > p',
+  ]);
   // served, with its resolved question and its answer
   const page = await textOf(fetch(`${daemon.url}old`));
   expect(page).toContain('caption');
@@ -619,7 +650,9 @@ test('a request cut off mid-flight is outcome unknown, never retried', async () 
   mkdirSync(`${root}/show`);
   const cut = Bun.serve({
     fetch: async () => {
-      setTimeout(() => cut.stop(true), CUT_AFTER_MS);
+      setTimeout(() => {
+        void cut.stop(true);
+      }, CUT_AFTER_MS);
       await Bun.sleep(SLOW_MS);
       return new Response('late');
     },
@@ -640,11 +673,11 @@ test('boots, refuses a second instance, reports its version and rotates its log'
   mkdirSync(`${stateHome()}/show`);
   writeFileSync(`${stateHome()}/show/show.log`, 'x'.repeat(LOG_CAP + 1));
   const booting = serve({ port: 0 });
-  const { state: booted } = (await parsed('health')) as { state: string };
+  const { state: booted } = fields(await parsed('health'));
   expect(booted).toBe('booting');
   expect(await show('list')).toEqual([1, 'show: booting: show is booting']);
   const daemon = await booting;
-  stops.push(() => daemon.stop('test'));
+  stops.push(async () => daemon.stop('test'));
   const second = await refused();
   expect(second).toEqual([
     'running',
@@ -667,7 +700,7 @@ test('boots, refuses a second instance, reports its version and rotates its log'
 
 test('without hud it runs degraded, and replies say why', async () => {
   const { url } = await boot(`${DIR}/missing.ts`);
-  const { reason, state } = (await parsed('health')) as { reason: string; state: string };
+  const { reason, state } = fields(await parsed('health'));
   expect([state, reason]).toEqual(['degraded', expect.stringMatching(/^hud: /u)]);
   await show('open', EXAMPLE);
   expect(await show('reply', 'lints-canon', 'land', 'hi')).toEqual([
@@ -716,7 +749,7 @@ test('open validates, registers and lists; the page renders it; Host and Origin 
   const index = await fetch(url.replace('lints-canon', ''));
   expect(await index.text()).toContain('Lints canon');
   const missing = await fetch(url.replace('lints-canon', 'gone'));
-  expect([missing.status, await missing.text()]).toEqual([
+  expect<unknown[]>([missing.status, await missing.text()]).toEqual([
     NOT_FOUND,
     expect.stringContaining('No open plan at /gone'),
   ]);
@@ -733,7 +766,8 @@ test('open validates, registers and lists; the page renders it; Host and Origin 
 test('answers are checked, recorded, waited for once each, and pushed over the socket', async () => {
   const url = await opened();
   const origin = url.replace(/\/lints-canon$/u, '');
-  const answer = (body: object): Promise<Response> => fetch(`${url}/answer`, json(body, origin));
+  const answer = async (body: object): Promise<Response> =>
+    fetch(`${url}/answer`, json(body, origin));
   expect(await statusOf(answer({ question: 'nope' }))).toBe(NOT_FOUND);
   expect(
     await statusOf(
@@ -754,7 +788,7 @@ test('answers are checked, recorded, waited for once each, and pushed over the s
         { picks: { elsewhere: ['land'] } },
         { picks: { land: {} } },
         { picks: 'land' },
-      ].map((body) => jsonOf(answer({ question: 'land', ...body }))),
+      ].map(async (body) => jsonOf(answer({ question: 'land', ...body }))),
     ),
   ).toEqual([wrong, wrong, wrong, wrong, wrong, wrong, wrong]);
   expect(await jsonOf(answer({ message: ' ', question: 'else' }))).toEqual({
@@ -763,7 +797,8 @@ test('answers are checked, recorded, waited for once each, and pushed over the s
   const socket = new WebSocket(url.replace('http', 'ws'));
   const frames: { events?: unknown[]; status?: unknown }[] = [];
   socket.addEventListener('message', ({ data }) => {
-    frames.push(JSON.parse(String(data)));
+    const frame = readJson(String(data));
+    frames.push(fields(frame));
   });
   await new Promise((resolve) => {
     socket.addEventListener('open', resolve);
@@ -777,7 +812,7 @@ test('answers are checked, recorded, waited for once each, and pushed over the s
     'answer',
     {
       [POSITION]: 0,
-      at: expect.any(String),
+      at: anyString,
       message: 'look first',
       picks: { land: ['hold'] },
       question: 'land',
@@ -794,7 +829,7 @@ test('answers are checked, recorded, waited for once each, and pushed over the s
   await answer({ message: 'both, staged', question: 'land' });
   expect(await parsed('wait', 'lints-canon')).toEqual([
     'answer',
-    { [POSITION]: 2, at: expect.any(String), message: 'both, staged', question: 'land' },
+    { [POSITION]: 2, at: anyString, message: 'both, staged', question: 'land' },
   ]);
   // a pick-many choice: picks in authored order, and only the option comments he wrote, for options and choices
   // the question has
@@ -826,8 +861,8 @@ test('answers are checked, recorded, waited for once each, and pushed over the s
   expect(await parsed('wait', 'lints-canon')).toEqual([
     'answer',
     {
-      [POSITION]: expect.any(Number),
-      at: expect.any(String),
+      [POSITION]: anyNumber,
+      at: anyString,
       notes: { keep: { keep: 'because' } },
       question: 'attribute',
     },
@@ -844,7 +879,7 @@ test('answers are checked, recorded, waited for once each, and pushed over the s
   ]);
   await Bun.sleep(SHORT_MS);
   expect(frames.at(-1)?.status).toMatchObject({
-    at: expect.any(String),
+    at: anyString,
     lines: ['one', 'two'],
   });
   expect(await textOf(fetch(url))).toContain('<li>two</li>');
@@ -853,8 +888,11 @@ test('answers are checked, recorded, waited for once each, and pushed over the s
 
 test('threads: the owner speaks on hud, the agent replies and resolves', async () => {
   const url = await opened();
-  const say = (body: object): Promise<{ id: string }> =>
-    jsonOf(fetch(url.replace('lints-canon', '__hud/say'), json(body)));
+  const say = async (body: object): Promise<{ id: string }> => {
+    const reply = jsonOf(fetch(url.replace('lints-canon', '__hud/say'), json(body)));
+    const { id } = fields(await reply);
+    return { id: parse(id, string()) };
+  };
   expect(await show('reply', 'lints-canon', 'land', 'hi')).toEqual([
     1,
     'show: no_thread: the owner has not written on land yet',
@@ -975,7 +1013,7 @@ test('open and update show the plan in the browser, unless told not to', async (
   Reflect.deleteProperty(Bun.env, 'SHOW_NO_BROWSER');
   Object.assign(Bun.env, { SHOW_OPENER: opener });
   try {
-    const [, url] = await show('open', EXAMPLE);
+    const url = await said('open', EXAMPLE);
     expect(await landed(1)).toEqual([url]);
     await show('update', 'lints-canon', EXAMPLE);
     expect(await landed(2)).toEqual([url, url]);
@@ -1009,7 +1047,7 @@ test('state survives a restart, a wait rides through it, and every stop drains o
   await Bun.sleep(SHORT_MS);
   await Promise.all([stop('first'), stop('second')]);
   const again = await serve({ port: 0 });
-  stops.push(() => again.stop('test'));
+  stops.push(async () => again.stop('test'));
   expect(existsSync(`${root}/lints-canon/status.json.tmp`)).toBe(false);
   expect(await show('list')).toEqual([0, expect.stringContaining('Lints canon · 6 his turn')]);
   await fetch(`${again.url}lints-canon/answer`, json({ message: 'still here?', question: 'else' }));

@@ -88,7 +88,7 @@ for (const name of [senses.args, senses.ops, ['engine.create']].flat()) {
 /**
 the key of a `sense.new` for a name the manifest lacks: JSON's null, as the ledger's contract spells it
 */
-const UNNAMED = JSON.parse('null') as null;
+const UNNAMED = null;
 
 /**
 A hook two events share, the second's input told apart by its own fields; `next` handed the input as it came
@@ -175,14 +175,14 @@ const note = ($: EngineInterface, event: string, fields: object): void => {
 `reading`'s answer, or undefined where it rejects: a reader the host lacks leaves its field out
 */
 const quiet = async <T>(reading: Promise<T>): Promise<T | undefined> =>
-  await reading.catch((): undefined => undefined);
+  reading.catch((): undefined => undefined);
 
 /**
 `event` with the engine's version, as `senses` and `sense.new` carry it, left out where it cannot be read (a build
 lacking the call throws where it is made)
 */
 const sense = async ($: EngineInterface, event: string, fields: object): Promise<void> => {
-  const version = async (): Promise<SessionVersion> => await $.session.version();
+  const version = async (): Promise<SessionVersion> => $.session.version();
   await emit(
     $,
     event,
@@ -203,7 +203,7 @@ The classic DirectoryAdded, `/add-dir` or a host's → `directory`
 */
 const added: Hook<'classic.DirectoryAdded'> = async ($, e, next) => {
   note($, 'directory', { path: e.directory, source: e.source });
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -212,7 +212,7 @@ the tool in flight; a mode that settles the call with no person raises none
 */
 const asked: Hook<'classic.PermissionRequest'> = async ($, e, next) => {
   note($, 'tool.wait', { agent: e.agent_id, id: feed.calls[`${e.agent_id ?? ''}:${e.tool_name}`] });
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -227,7 +227,7 @@ const attached: Shared<SessionAttachInput | SessionDetachInput> = async ($, e, n
     surface,
     viewport: field(e, 'viewport'),
   });
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -257,7 +257,7 @@ A slash command about to run → `command` by name and origin, never its argumen
 */
 const commanded: Hook<'command.run'> = async ($, e, next) => {
   note($, 'command', { command: e.command, origin: e.origin.kind });
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -280,7 +280,7 @@ The classic ConfigChange, a settings file or the skills changing under the sessi
 */
 const configured: Hook<'classic.ConfigChange'> = async ($, e, next) => {
   note($, 'config', { path: e.file_path, source: e.source });
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -293,7 +293,7 @@ const denied: Hook<'classic.PermissionDenied'> = async ($, e, next) => {
     reason: e.reason.slice(0, HEAD),
     tool: e.tool_name,
   });
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -309,7 +309,7 @@ const elicited: Shared<
     mode: e.mode,
     server: e.mcp_server_name,
   });
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -319,7 +319,7 @@ const ended: Hook<'session.end'> = async ($, e, next) => {
   await emit($, 'session.end', { reason: e.reason, session: e.sessionId });
   delete feed.session;
   feed.sensed.clear();
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -342,7 +342,7 @@ const entered: Hook<'classic.SessionStart'> = async ($, e, next) => {
   if (e.source !== 'compact') {
     void sense($, 'senses', { reviewed: senses.version, session: e.session_id });
   }
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -354,7 +354,7 @@ const failed: Hook<'classic.StopFailure'> = async ($, e, next) => {
     details: e.error_details?.slice(0, HEAD),
     error: e.error,
   });
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -372,9 +372,9 @@ const gauged: Hook<'session.measure'> = async ($, e, next) => {
   });
   if (reading !== feed.measured) {
     feed.measured = reading;
-    note($, 'usage', JSON.parse(reading));
+    note($, 'usage', { limits: e.rateLimits, percent, tokens, usd: e.cost?.usd, window });
   }
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -382,7 +382,7 @@ The classic TeammateIdle, a teammate gone quiet → `teammate.idle`
 */
 const idled: Hook<'classic.TeammateIdle'> = async ($, e, next) => {
   note($, 'teammate.idle', { name: e.teammate_name });
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -390,7 +390,7 @@ The person pressing Stop → `stop`, noted before anything awaits, whether a tur
 */
 const interrupted: Hook<'session.stop'> = async ($, e, next) => {
   note($, 'stop', { running: e.isTurnRunning });
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -414,7 +414,7 @@ const loaded: Hook<'classic.InstructionsLoaded'> = async ($, e, next) => {
     reason: e.load_reason,
     type: e.memory_type,
   });
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -431,7 +431,7 @@ The classic CwdChanged → `cwd`
 */
 const moved: Hook<'classic.CwdChanged'> = async ($, e, next) => {
   note($, 'cwd', { from: e.old_cwd, to: e.new_cwd });
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -443,7 +443,7 @@ const notified: Hook<'classic.Notification'> = async ($, e, next) => {
     title: e.title,
     type: e.notification_type,
   });
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -462,7 +462,7 @@ const prompted: Hook<'prompt.submit'> = async ($, e, next) => {
       wait: e.wait,
     });
   }
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -502,7 +502,7 @@ An agent's report → `agent.end` with its status and the report's head, the rep
 */
 const reported: Hook<'agent.report'> = async ($, e, next) => {
   await emit($, 'agent.end', { agent: e.agentId, report: e.text.slice(0, HEAD), status: e.status });
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -525,9 +525,11 @@ const sent: Hook<'session.send'> = async ($, e, next) => {
 Every event (`*` selects no `telemetry.*` one) → `sense.new`, once a session, for a name the manifest lacks (`key` null)
 and for each field its event does not offer; synchronous, `e` handed on as it came, so the dispatch waits on nothing
 */
-const sensed: AnyEventHook = ($, e, next) => {
+const sensed: AnyEventHook = async ($, e, next) => {
   const fields = known.get(next.event);
-  const keys = fields ? Object.keys(e as object).filter((key) => !fields.has(key)) : [UNNAMED];
+  const keys = fields
+    ? Object.keys(e instanceof Object ? e : {}).filter((key) => !fields.has(key))
+    : [UNNAMED];
   for (const key of keys) {
     const { size } = feed.sensed;
     if (feed.sensed.add(`${next.event} ${key}`).size > size) {
@@ -542,7 +544,7 @@ A skill's prompt expanded for the model (`/name`, the Skill tool, a preload) →
 */
 const skilled: Hook<'skill.prompt'> = async ($, e, next) => {
   note($, 'skill', { plugin: e.pluginName, skill: e.skill, source: e.source });
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -604,7 +606,7 @@ const started: Hook<'session.start'> = async ($, e, next) => {
     transcript: info?.transcriptPath,
     version: version?.version,
   });
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -647,7 +649,7 @@ const stopped: Hook<'classic.Stop'> = async ($, e, next) => {
     mode: e.permission_mode,
     tasks: e.background_tasks,
   });
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -660,7 +662,7 @@ const switched: Hook<'classic.PostModelSwitch'> = async ($, e, next) => {
     source: e.source,
     to: e.to_model,
   });
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -675,7 +677,7 @@ const tasked: Shared<
     subject: e.task_subject.slice(0, HEAD),
     teammate: e.teammate_name,
   });
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -695,7 +697,7 @@ const turnEnded: Hook<'turn.complete'> = async ($, e, next) => {
     await update($, workflows, (ids) => ids.filter((id) => id !== e.agentId));
     await emit($, 'agent.end', { agent: e.agentId, status: 'completed' });
   }
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -703,7 +705,7 @@ A loop's turn starting
 */
 const turnStarted: Hook<'turn.start'> = async ($, e, next) => {
   await emit($, 'turn.start', { agent: e.agentId, turn: e.turnId });
-  return await next(e);
+  return next(e);
 };
 
 /**
@@ -716,7 +718,7 @@ const typed: Hook<'prompt.edit'> = async ($, e, next) => {
     feed.typed = now;
     note($, 'typing', {});
   }
-  return await next(e);
+  return next(e);
 };
 
 export {

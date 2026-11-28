@@ -32,7 +32,7 @@ const LANGUAGES = new Set<string>();
 what xstate says of a machine part that passed its field checks, each problem as `field: message`; the server
 installs it (machine.ts), so the client bundle carries no xstate
 */
-const MACHINE = {} as { problems: (props: Record<string, unknown>) => string[] };
+const MACHINE: { problems?: (props: MachineProps) => string[] } = {};
 
 // ─── schemas ─────────────────────────────────────────────────────────────────────────────────────
 /**
@@ -192,10 +192,10 @@ a part of a plan: a context, or a choice in a question's body
 */
 type Item = Infer<typeof itemShape>;
 type Choice = Infer<typeof choice>;
-type Kind = Item[0];
 type Plan = Infer<typeof planShape>;
 type Question = Plan[2][string];
 type Option = Infer<typeof optionShape> & { value: string };
+type MachineProps = Extract<Item, ['machine', unknown]>[1];
 /**
 a question he answers: its id, its title, then a composition of contexts and choices
 */
@@ -210,7 +210,9 @@ type Said = {
 };
 type Row = Infer<typeof row>;
 type Tab = Infer<typeof tab>;
-type PropsOf<K extends Kind> = Drawn & Extract<Item, [K, unknown]>[1];
+type Shown<I = Exclude<Item, ['choice', unknown]>> = I extends [infer K, infer P]
+  ? [K, Drawn & P]
+  : never;
 
 /**
 the keys of a path as the author writes them: `[0]` for an index, `.rows` for a field
@@ -240,7 +242,7 @@ function where(input: unknown, path: readonly PropertyKey[]): string {
   function context(label: string, keys: readonly PropertyKey[]): string {
     let at: unknown = input;
     for (const key of keys) {
-      at = (at as Record<PropertyKey, unknown> | undefined)?.[key];
+      at = Reflect.get(new Object(at), key);
     }
     const kind = Array.isArray(at) && typeof at[0] === 'string' ? ` ${at[0]}` : '';
     const [slot, ...fields] = path.slice(keys.length);
@@ -257,7 +259,7 @@ function where(input: unknown, path: readonly PropertyKey[]): string {
   }
   return root === 2 && name !== undefined
     ? `${String(name)}${SLOTS[String(side)] ?? ''}`
-    : (ROOTS[root as number] as string);
+    : String(ROOTS[Number(root)]);
 }
 
 /**
@@ -271,7 +273,7 @@ function machines(plan: Plan): string[] {
     ),
   ].flatMap(([path, [kind, own]]) =>
     kind === 'machine'
-      ? MACHINE.problems(own).map((problem) => `${where(plan, path)}.${problem}`)
+      ? (MACHINE.problems?.(own) ?? []).map((problem) => `${where(plan, path)}.${problem}`)
       : [],
   );
 }
@@ -284,7 +286,7 @@ function validate(input: unknown): string[] {
   const result = sketched.issues ? sketched : judge(input, planShape);
   return result.issues
     ? result.issues.map(({ message, path }) => `${where(input, path)}: ${message}`)
-    : machines(result.value as Plan);
+    : machines(result.value);
 }
 
 /**
@@ -332,7 +334,7 @@ function Split({ rows }: Readonly<{ rows: Row[] }>): ReactNode {
   const ends = rows.map((_row, index) =>
     rows.slice(0, index + 1).reduce((sum, [, value]) => sum + value, 0),
   );
-  const x = scaleLinear([0, ends.at(-1) || 1], [0, WIDTH]);
+  const x = scaleLinear([0, (ends.at(-1) ?? 0) || 1], [0, WIDTH]);
   return (
     <>
       <svg className="chart" role="img" viewBox={`0 0 ${WIDTH} 28`}>
@@ -362,12 +364,12 @@ function Split({ rows }: Readonly<{ rows: Row[] }>): ReactNode {
 a code sample: the server's highlighted markup when it made one, else the plain text
 */
 function Sample({ code, html }: Readonly<{ code: string; html?: string | undefined }>): ReactNode {
-  return html ? (
-    <div className="lit" dangerouslySetInnerHTML={{ __html: html }} />
-  ) : (
+  return (html ?? '') === '' ? (
     <pre>
       <code>{code}</code>
     </pre>
+  ) : (
+    <div className="lit" dangerouslySetInnerHTML={{ __html: html ?? '' }} />
   );
 }
 
@@ -379,7 +381,7 @@ function Tabs({
   tabs: all,
 }: Readonly<{ html?: string[] | undefined; tabs: Tab[] }>): ReactNode {
   const [at, setAt] = useState(0);
-  const [, code] = all.at(at) as Tab;
+  const code = all[at]?.[1] ?? '';
   return (
     <div className="tabs">
       <div className="tablist" role="tablist">
@@ -387,7 +389,9 @@ function Tabs({
           <button
             aria-selected={index === at}
             key={index}
-            onClick={() => setAt(index)}
+            onClick={() => {
+              setAt(index);
+            }}
             role="tab"
             type="button"
           >
@@ -482,40 +486,47 @@ function spoken(question: Asked, { message, notes, picks }: Said): string {
 /**
 the part of a body item or overview context only its kind draws
 */
-const BODIES: Partial<Record<Kind, (own: never) => ReactNode>> = {
-  chart: ({ kind, rows }: PropsOf<'chart'>) =>
-    kind === 'bar' ? <Bars rows={rows} /> : <Split rows={rows} />,
-  code: ({ code, html }: PropsOf<'code'>) => <Sample code={code} html={html?.[0]} />,
-  compare: Pair,
-  // the author is the local agent, so its markup goes in raw
-  figure: ({ svg }: PropsOf<'figure'>) => (
-    <div className="figure" dangerouslySetInnerHTML={{ __html: svg }} />
-  ),
-  list: ({ items }: PropsOf<'list'>) => (
-    <ul>
-      {items.map((item, index) => (
-        <li key={index}>{item}</li>
-      ))}
-    </ul>
-  ),
-  // drawn by the server (machine.ts); the same string renders and hydrates
-  machine: ({ svg }: PropsOf<'machine'>) => (
-    <div className="machine" dangerouslySetInnerHTML={{ __html: svg ?? '' }} />
-  ),
-  note: ({ text }: PropsOf<'note'>) => <p>{text}</p>,
-  tabs: Tabs,
-};
+function partOf([kind, own]: Shown): ReactNode {
+  if (kind === 'chart') {
+    return own.kind === 'bar' ? <Bars rows={own.rows} /> : <Split rows={own.rows} />;
+  }
+  if (kind === 'code') {
+    return <Sample code={own.code} html={own.html?.[0]} />;
+  }
+  if (kind === 'compare') {
+    return <Pair html={own.html} pair={own.pair} />;
+  }
+  if (kind === 'figure') {
+    // the author is the local agent, so its markup goes in raw
+    return <div className="figure" dangerouslySetInnerHTML={{ __html: own.svg }} />;
+  }
+  if (kind === 'list') {
+    return (
+      <ul>
+        {own.items.map((item, index) => (
+          <li key={index}>{item}</li>
+        ))}
+      </ul>
+    );
+  }
+  if (kind === 'machine') {
+    // drawn by the server (machine.ts); the same string renders and hydrates
+    return <div className="machine" dangerouslySetInnerHTML={{ __html: own.svg ?? '' }} />;
+  }
+  return kind === 'note' ? <p>{own.text}</p> : <Tabs html={own.html} tabs={own.tabs} />;
+}
 
 export {
-  BODIES,
   LANGUAGES,
   MACHINE,
   asking,
   byChoice,
   choicesOf,
   optionsOf,
+  partOf,
   picked,
+  planShape,
   spoken,
   validate,
 };
-export type { Asked, Choice, Item, Option, Plan, Question, Said };
+export type { Asked, Choice, Item, MachineProps, Option, Plan, Question, Said };

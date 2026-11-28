@@ -114,9 +114,13 @@ const measure = async ($: Engine, extra = '', tokens = '50000'): Promise<void> =
 
 const mount = async (
   $: Engine,
-  { columns = COLUMNS, isMeasured = true, surface = 'terminal' as RenderSurface } = {},
+  {
+    columns = COLUMNS,
+    isMeasured = true,
+    surface = 'terminal',
+  }: { columns?: number; isMeasured?: boolean; surface?: RenderSurface } = {},
 ): Promise<Mounted<RenderSurface, 'PromptHint'>> =>
-  await $.ui.mount({
+  $.ui.mount({
     component: 'PromptHint',
     plugin: 'subether',
     props: { hint: '? for shortcuts', isDraft: false, isWorking: false },

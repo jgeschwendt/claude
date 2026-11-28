@@ -1,6 +1,8 @@
 // The agent's side of show: every verb talks to the daemon over its Unix socket, one request per call, and an
 // error is `show: <code>: <message>` on stderr, the code the contract.
-import type { Summary } from './page.tsx';
+import { type Schema, unknown as anything, list, object, parse, string } from 'verax';
+import { loose } from '#loose';
+import { summaryShape } from './shapes.ts';
 
 const { existsSync, readFileSync, realpathSync, writeFileSync } =
   process.getBuiltinModule('node:fs');
@@ -60,6 +62,17 @@ class FailError extends Error {
 }
 
 /**
+the `code` a thrown value carries, `error` when it has none
+*/
+const codeOf = (error: unknown): string =>
+  String(Reflect.get(new Object(error), 'code') ?? 'error');
+const messageOf = (error: unknown): string =>
+  Error.isError(error) ? error.message : String(error);
+const failure = object('failure', {
+  error: object('error', { code: string(), message: string() }),
+});
+
+/**
 `${XDG_STATE_HOME:-~/.local/state}/show`, read per call so a test can move it
 */
 const home = (): string => {
@@ -105,30 +118,33 @@ const send = async (method: string, path: string, body?: object): Promise<Respon
   try {
     return await fetch(`http://show${path}`, init);
   } catch (error) {
-    const { code, message } = error as { code?: string; message: string };
-    throw NOT_SENT.has(String(code))
+    throw NOT_SENT.has(codeOf(error))
       ? new FailError('down', `no daemon on ${home()}/show.sock: ${FIX}`)
-      : new FailError('unknown', `outcome unknown: ${message}`);
+      : new FailError('unknown', `outcome unknown: ${messageOf(error)}`);
   }
 };
 
 /**
-a request and its JSON reply, a typed failure on any error body
+a request and its JSON reply as `shape` reads it, a typed failure on any error body
 */
-const call = async <Reply>(method: string, path: string, body?: object): Promise<Reply> => {
+const call = async <Reply>(
+  shape: Schema<Reply>,
+  { body, method, path }: { body?: object; method: string; path: string },
+): Promise<Reply> => {
   const response = await send(method, path, body);
-  const json = (await response.json()) as { error: { code: string; message: string } };
+  const json: unknown = await response.json();
   if (!response.ok) {
-    throw new FailError(json.error.code, json.error.message);
+    const { error } = parse(json, failure);
+    throw new FailError(error.code, error.message);
   }
-  return json as Reply;
+  return parse(json, shape);
 };
 
 const plan = (file: string): unknown => {
   try {
     return JSON.parse(readFileSync(file, 'utf8'));
   } catch (error) {
-    throw new FailError('invalid', `${file}: ${(error as Error).message}`);
+    throw new FailError('invalid', `${file}: ${messageOf(error)}`);
   }
 };
 
@@ -140,7 +156,7 @@ const plist = (mise: string, hud?: string): string => `<?xml version="1.0" encod
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-${hud ? `  <key>EnvironmentVariables</key>\n  <dict>\n    <key>SHOW_HUD</key>\n    <string>${hud}</string>\n  </dict>\n` : ''}  <key>KeepAlive</key>
+${hud !== undefined && hud !== '' ? `  <key>EnvironmentVariables</key>\n  <dict>\n    <key>SHOW_HUD</key>\n    <string>${hud}</string>\n  </dict>\n` : ''}  <key>KeepAlive</key>
   <true/>
   <key>Label</key>
   <string>${LABEL}</string>
@@ -178,7 +194,7 @@ show the plan in the owner's browser unless `--quiet` or SHOW_NO_BROWSER says no
 const browse = (url: string, flags: string[]): void => {
   const { SHOW_NO_BROWSER, SHOW_OPENER } = Bun.env;
   const opener = SHOW_OPENER ?? (process.platform === 'darwin' ? 'open' : '');
-  if (opener && !SHOW_NO_BROWSER && !flags.includes('--quiet')) {
+  if (opener !== '' && (SHOW_NO_BROWSER ?? '') === '' && !flags.includes('--quiet')) {
     try {
       Bun.spawn([opener, url], { stderr: 'ignore', stdin: 'ignore', stdout: 'ignore' }).unref();
     } catch {
@@ -189,11 +205,14 @@ const browse = (url: string, flags: string[]): void => {
 
 const verbs: Record<string, (arguments_: string[]) => Promise<string> | string> = {
   close: async ([slug]) => {
-    await call('DELETE', `/plans/${slug}`);
+    await call(anything(), { method: 'DELETE', path: `/plans/${slug}` });
     return `closed ${slug}`;
   },
   health: async () => {
-    const health = await call<{ version: string }>('GET', '/health');
+    const health = await call(loose('health', { version: string() }), {
+      method: 'GET',
+      path: '/health',
+    });
     if (health.version !== VERSION) {
       throw new FailError(
         'version',
@@ -203,7 +222,7 @@ const verbs: Record<string, (arguments_: string[]) => Promise<string> | string> 
     return JSON.stringify(health);
   },
   list: async () => {
-    const open = await call<Summary[]>('GET', '/plans');
+    const open = await call(list(summaryShape), { method: 'GET', path: '/plans' });
     return (
       open
         .map(
@@ -215,25 +234,35 @@ const verbs: Record<string, (arguments_: string[]) => Promise<string> | string> 
   },
   open: async ([file = '', ...rest]) => {
     const { CLAUDE_CODE_SESSION_ID } = Bun.env;
-    const { url } = await call<{ url: string }>('POST', '/plans', {
-      plan: plan(file),
-      session: CLAUDE_CODE_SESSION_ID ?? '',
-      slug: rest[rest.indexOf('--slug') + 1],
+    const { url } = await call(loose('opened', { url: string() }), {
+      body: {
+        plan: plan(file),
+        session: CLAUDE_CODE_SESSION_ID ?? '',
+        slug: rest[rest.indexOf('--slug') + 1],
+      },
+      method: 'POST',
+      path: '/plans',
     });
     browse(url, rest);
     return url;
   },
   reply: async ([slug, target, ...text]) => {
-    const { id } = await call<{ id: string }>('POST', `/plans/${slug}/reply`, {
-      target,
-      text: text.filter((word) => word !== '--working').join(' '),
-      working: text.includes('--working'),
+    const { id } = await call(loose('replied', { id: string() }), {
+      body: {
+        target,
+        text: text.filter((word) => word !== '--working').join(' '),
+        working: text.includes('--working'),
+      },
+      method: 'POST',
+      path: `/plans/${slug}/reply`,
     });
     return `replied ${id.slice(0, SHORT_ID)}`;
   },
   resolve: async ([slug, target]) => {
-    const { resolved } = await call<{ resolved: string }>('POST', `/plans/${slug}/resolve`, {
-      target,
+    const { resolved } = await call(loose('resolved', { resolved: string() }), {
+      body: { target },
+      method: 'POST',
+      path: `/plans/${slug}/resolve`,
     });
     return `resolved ${resolved}`;
   },
@@ -268,27 +297,34 @@ const verbs: Record<string, (arguments_: string[]) => Promise<string> | string> 
     return `loaded ${LABEL} from ${file}`;
   },
   status: async ([slug, ...lines]) => {
-    await call('PUT', `/plans/${slug}/status`, { lines });
+    await call(anything(), { body: { lines }, method: 'PUT', path: `/plans/${slug}/status` });
     return `status ${slug}: ${lines.length} lines`;
   },
   update: async ([slug, file = '', ...rest]) => {
-    const { url } = await call<{ url: string }>('PUT', `/plans/${slug}`, { plan: plan(file) });
+    const { url } = await call(loose('updated', { url: string() }), {
+      body: { plan: plan(file) },
+      method: 'PUT',
+      path: `/plans/${slug}`,
+    });
     browse(url, rest);
     return url;
   },
-  wait: ([slug]) => {
+  wait: async ([slug]) => {
     const cursor = `${home()}/${slug}/cursor`;
     const after = Number(Bun.file(cursor).size > 0 ? readFileSync(cursor, 'utf8') : 0);
     const since = Date.now();
     // a daemon that is down or stopping is retried until it respawns; any other error ends the wait
     const poll = async (): Promise<string> => {
       try {
-        const event = await call('GET', `/plans/${slug}/events?after=${after}`);
+        const event = await call(anything(), {
+          method: 'GET',
+          path: `/plans/${slug}/events?after=${after}`,
+        });
         writeFileSync(cursor, String(after + 1));
         return JSON.stringify(event);
       } catch (error) {
         if (
-          !['down', 'stopping', 'unknown'].includes((error as FailError).code) ||
+          !['down', 'stopping', 'unknown'].includes(codeOf(error)) ||
           Date.now() - since > REJOIN_MS
         ) {
           throw error;
@@ -304,9 +340,9 @@ const verbs: Record<string, (arguments_: string[]) => Promise<string> | string> 
 /**
 one CLI invocation: its exit code and the text for stdout (0) or stderr
 */
-const run = async ([verb = '', ...arguments_]: string[]): Promise<[number, string]> => {
+const run = async ([verb = '', ...verbArguments]: string[]): Promise<[number, string]> => {
   const verbFunction = verbs[verb];
-  if (!verbFunction || arguments_.length < (USAGE[verb]?.match(/</gu) ?? []).length) {
+  if (!verbFunction || verbArguments.length < (USAGE[verb]?.match(/</gu) ?? []).length) {
     return [
       1,
       `show: usage: ${Object.entries(USAGE)
@@ -315,10 +351,10 @@ const run = async ([verb = '', ...arguments_]: string[]): Promise<[number, strin
     ];
   }
   try {
-    return [0, await verbFunction(arguments_)];
+    return [0, await verbFunction(verbArguments)];
   } catch (error) {
-    return [1, `show: ${(error as FailError).code ?? 'error'}: ${(error as Error).message}`];
+    return [1, `show: ${codeOf(error)}: ${messageOf(error)}`];
   }
 };
 
-export { DIR, FailError, FIX, home, hudPath, plist, run, VERSION };
+export { DIR, FailError, FIX, home, hudPath, messageOf, plist, run, VERSION };

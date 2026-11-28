@@ -1,10 +1,30 @@
 // The page, rendered on the server and hydrated in the browser from the same state: the index of open plans,
 // or one plan's questions. Live changes arrive as whole states through `publish`.
-import { type ReactNode, useActionState, useState, useSyncExternalStore } from 'react';
+import {
+  type ReactElement,
+  type ReactNode,
+  useActionState,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { useFormStatus } from 'react-dom';
 import {
+  unknown as anything,
+  is,
+  list,
+  literal,
+  object,
+  optional,
+  parse,
+  record,
+  scalar,
+  string,
+  tuple,
+  union,
+} from 'verax';
+import { loose } from '#loose';
+import {
   type Asked,
-  BODIES,
   type Choice,
   type Plan,
   type Said,
@@ -12,9 +32,11 @@ import {
   byChoice,
   choicesOf,
   optionsOf,
+  partOf,
   picked,
   spoken,
 } from './catalog.tsx';
+import { entryShape, statusShape, summaryShape, threadShape } from './shapes.ts';
 
 /**
 what he sent on a question: an answer is his picks, option comments and message
@@ -77,19 +99,60 @@ type State = Shared &
     | { missing?: string; plans: Summary[] }
   );
 
-const live: { listeners: Set<() => void>; state?: State } = { listeners: new Set() };
+const shared = { threads: optional(list(threadShape)), version: string() };
+const drawn = tuple([string(), list(anything()), record(anything())]);
+const planFrame = loose('plan state', {
+  ...shared,
+  events: list(entryShape),
+  plan: drawn,
+  slug: string(),
+  status: statusShape,
+});
+const indexFrame = loose('index state', {
+  ...shared,
+  missing: optional(string()),
+  plans: list(summaryShape),
+});
 /**
-replace the page's state (a frame from the socket) or merge part of it (threads from hud)
+a frame of the server's state: a plan's (drawn on, so only its three parts), the index's or a close frame
 */
-function publish(next: Partial<State>): void {
-  live.state = { ...live.state, ...next } as State;
+const frameShape = union('state', [
+  planFrame,
+  indexFrame,
+  loose('close frame', { closed: literal(true), version: string() }),
+]);
+const stateShape = scalar('state', (value: unknown): value is State => is(value, frameShape));
+const live: { listeners: Set<() => void>; state?: State | undefined } = { listeners: new Set() };
+/**
+the error a daemon's refusal carries
+*/
+const refusal = object('refusal', {
+  error: object('error', { code: string(), message: string() }),
+});
+/**
+whether a document event carries hud's threads
+*/
+function isThreads(event: Event): event is CustomEvent<{ threads: Thread[] }> {
+  return event.type === 'hud:threads';
+}
+/**
+replace the page's state (a frame from the socket) or merge hud's threads into it
+*/
+function publish(next: State | { threads: Thread[] }): void {
+  // a frame from the socket carries no threads, and a close frame no plan, so what hud and the page last had stays
+  const merged = { ...live.state, ...next };
+  if ('version' in merged) {
+    live.state = merged;
+  }
   for (const listener of live.listeners) {
     listener();
   }
 }
 function subscribe(listener: () => void): () => void {
   live.listeners.add(listener);
-  return () => live.listeners.delete(listener);
+  return () => {
+    live.listeners.delete(listener);
+  };
 }
 function selectorOf(question: Asked): string {
   return `#question-${question.id}`;
@@ -138,7 +201,7 @@ function Send({
     <button
       aria-label={label}
       disabled={pending}
-      name={only ? 'only' : 'verb'}
+      name={only === undefined ? 'verb' : 'only'}
       type="submit"
       value={only ?? 'answer'}
     >
@@ -151,15 +214,15 @@ function Send({
 say `text` on the question's hud thread as the owner (the daemon expects it, so it is no second event), and settle
 once hud's threads carry it or SETTLE_MS pass
 */
-function say(question: Asked, thread: Thread | undefined, text: string): Promise<void> {
+async function say(question: Asked, thread: Thread | undefined, text: string): Promise<void> {
   return new Promise((settle) => {
     const host = document.querySelector('hud');
     const count = thread?.messages.length ?? 0;
     const finish = new AbortController();
     function heard(event: Event): void {
-      const { threads } = (event as CustomEvent<{ threads: Thread[] }>).detail;
       if (
-        threads.some(
+        isThreads(event) &&
+        event.detail.threads.some(
           (one) =>
             one.page === location.pathname &&
             one.selector === selectorOf(question) &&
@@ -169,7 +232,12 @@ function say(question: Asked, thread: Thread | undefined, text: string): Promise
         finish.abort();
       }
     }
-    const timer = setTimeout(() => finish.abort(), host ? SETTLE_MS : 0);
+    const timer = setTimeout(
+      () => {
+        finish.abort();
+      },
+      host ? SETTLE_MS : 0,
+    );
     finish.signal.addEventListener('abort', () => {
       clearTimeout(timer);
       host?.removeEventListener('hud:threads', heard);
@@ -197,7 +265,10 @@ async function post(verb: string, body: object): Promise<Response> {
       method: 'POST',
     });
   } catch {
-    return Response.json({ error: { message: 'show is down' } }, { status: UNAVAILABLE });
+    return Response.json(
+      { error: { code: 'down', message: 'show is down' } },
+      { status: UNAVAILABLE },
+    );
   }
 }
 
@@ -206,8 +277,9 @@ the owner's last answer on a question
 */
 function lastAnswer(question: Asked, events: Entry[]): Answer | undefined {
   return events.findLast(
-    ([kind, own]) => kind === 'answer' && own.question === question.id,
-  )?.[1] as Answer | undefined;
+    (entry): entry is ['answer', Answer] =>
+      entry[0] === 'answer' && entry[1].question === question.id,
+  )?.[1];
 }
 /**
 the owner's last answer on a question, its labels or else his message, set after the title once resolved
@@ -219,7 +291,14 @@ function chosenSuffix(question: Asked, events: Entry[]): string {
       .flatMap((one) => picked(one, last?.picks?.[one.id] ?? []))
       .map((option) => option.label)
       .join(', ') || last?.message;
-  return said ? ` · ${said}` : '';
+  return said === undefined || said === '' ? '' : ` · ${said}`;
+}
+/**
+the text of a form field, empty when it is absent or a file
+*/
+function fieldOf(data: FormData, name: string): string {
+  const value = data.get(name);
+  return typeof value === 'string' ? value : '';
 }
 
 /**
@@ -227,25 +306,27 @@ what a submit of the question's form says: an option's own ↵ sends `<choice id
 its choice id, just that much; Ask sends every choice
 */
 function saidOf(question: Asked, data: FormData): Said {
-  const only = String(data.get('only') ?? '');
+  const only = fieldOf(data, 'only');
   const [target = ''] = only.split(':', 1);
   const value = only.slice(target.length + 1);
-  const sent = choicesOf(question).filter((one) => !target || one.id === target);
+  const sent = choicesOf(question).filter((one) => target === '' || one.id === target);
   return {
-    message: String(data.get('message')).trim(),
+    message: fieldOf(data, 'message').trim(),
     // each option's own comment, only the ones he wrote
     notes: byChoice(sent, (one) =>
       Object.fromEntries(
         optionsOf(one)
-          .filter((option) => !value || option.value === value)
-          .map((option) => [
-            option.value,
-            String(data.get(`note:${one.id}:${option.value}`) ?? '').trim(),
-          ])
-          .filter(([, text]) => text),
+          .filter((option) => value === '' || option.value === value)
+          .map(
+            (option) =>
+              [option.value, fieldOf(data, `note:${one.id}:${option.value}`).trim()] as const,
+          )
+          .filter(([, text]) => text !== ''),
       ),
     ),
-    picks: byChoice(sent, (one) => (value ? [value] : data.getAll(`pick:${one.id}`).map(String))),
+    picks: byChoice(sent, (one) =>
+      value === '' ? data.getAll(`pick:${one.id}`).map(String) : [value],
+    ),
   };
 }
 
@@ -291,15 +372,15 @@ function ChoiceView({
                 type={isMany ? 'checkbox' : 'radio'}
                 value={value}
               />
-              {shape ? (
+              {shape === undefined ? undefined : (
                 <svg className="shape" role="img" viewBox="0 0 100 100">
                   <path d={shape} />
                 </svg>
-              ) : undefined}
+              )}
               <span>
                 {label}
                 {lean ? ' ★' : undefined}
-                {hint ? <small>{hint}</small> : undefined}
+                {hint === undefined ? undefined : <small>{hint}</small>}
               </span>
             </label>
             {isMany ? undefined : (
@@ -308,15 +389,18 @@ function ChoiceView({
                   aria-label={`Comment on ${label}`}
                   id={`note-${id}-${choice.id}-${value}`}
                   name={`note:${choice.id}:${value}`}
-                  onFocus={() => setOpen(`${choice.id}:${value}`)}
+                  onFocus={() => {
+                    setOpen(`${choice.id}:${value}`);
+                  }}
                   // Enter would press the form's first button, so press this option's own
                   onKeyDown={(event) => {
                     if (event.key !== 'Enter') {
                       return;
                     }
                     event.preventDefault();
+                    const { nextElementSibling } = event.currentTarget;
                     event.currentTarget.form?.requestSubmit(
-                      event.currentTarget.nextElementSibling as HTMLButtonElement,
+                      nextElementSibling instanceof HTMLElement ? nextElementSibling : undefined,
                     );
                   }}
                   placeholder={`About ${label}`}
@@ -364,28 +448,30 @@ function QuestionView({
   const [open, setOpen] = useState('');
   const [problem, action] = useActionState(async (_previous: string, data: FormData) => {
     const said = saidOf(question, data);
-    const [target] = String(data.get('only') ?? '').split(':', 1);
+    const [target = ''] = fieldOf(data, 'only').split(':', 1);
     // the button pressed names the verb; an option's ↵ is an answer
-    const verb = target ? 'answer' : String(data.get('verb'));
+    const verb = target === '' ? fieldOf(data, 'verb') : 'answer';
     const response = await post(verb, { question: question.id, ...said });
-    const reply = await response.json();
+    const reply: unknown = await response.json();
     if (!response.ok) {
-      return `not sent: ${reply.error.message}`;
+      return `not sent: ${parse(reply, refusal).error.message}`;
     }
     // a resolve says nothing on hud: it closes the question's threads instead
-    await (verb === 'answer' && say(question, thread, spoken(question, said)));
+    if (verb === 'answer') {
+      await say(question, thread, spoken(question, said));
+    }
     return '';
   }, '');
   return (
     <article className="question" id={`question-${question.id}`}>
       <h2>{question.title}</h2>
       <form action={action}>
-        {question.body.map(([kind, own], index) => (
+        {question.body.map((item, index) => (
           <div className="part" key={index}>
-            {own.title ? <h3>{own.title}</h3> : undefined}
-            {kind === 'choice' ? (
+            {item[1].title === undefined ? undefined : <h3>{item[1].title}</h3>}
+            {item[0] === 'choice' ? (
               <ChoiceView
-                choice={own as Choice}
+                choice={item[1]}
                 chosen={chosen}
                 id={question.id}
                 open={open}
@@ -393,11 +479,11 @@ function QuestionView({
                 setOpen={setOpen}
               />
             ) : (
-              BODIES[kind]?.(own as never)
+              partOf(item)
             )}
           </div>
         ))}
-        {thread ? (
+        {thread === undefined ? undefined : (
           <ol className="thread">
             {thread.messages.map((message, index) => (
               <li className={message.author} key={`${index}`}>
@@ -410,7 +496,7 @@ function QuestionView({
               </li>
             ))}
           </ol>
-        ) : undefined}
+        )}
         <textarea
           aria-label={`Message about ${question.title}`}
           name="message"
@@ -430,7 +516,7 @@ function QuestionView({
             </span>
           ) : undefined}
         </div>
-        {problem ? <p role="alert">{problem}</p> : undefined}
+        {problem === '' ? undefined : <p role="alert">{problem}</p>}
       </form>
     </article>
   );
@@ -446,7 +532,9 @@ function App({ initial }: Readonly<{ initial: State }>): ReactNode {
     return (
       <main>
         <h1>{'show'}</h1>
-        {state.missing ? <p className="meta">{`No open plan at /${state.missing}.`}</p> : undefined}
+        {state.missing === undefined || state.missing === '' ? undefined : (
+          <p className="meta">{`No open plan at /${state.missing}.`}</p>
+        )}
         <ul className="plans">
           {state.plans.map((one) => (
             <li className="question" key={one.slug}>
@@ -469,7 +557,7 @@ function App({ initial }: Readonly<{ initial: State }>): ReactNode {
   function thread(question: Asked): Thread | undefined {
     return threadOf(slug, question, state.threads);
   }
-  function view(question: Asked): ReactNode {
+  function view(question: Asked): ReactElement {
     return (
       <QuestionView
         events={events}
@@ -498,10 +586,10 @@ function App({ initial }: Readonly<{ initial: State }>): ReactNode {
         <p className="meta">{'Tap a choice, write to the agent, send any question at any time.'}</p>
       </header>
       <section className="overview">
-        {overview.map(([kind, own], index) => (
+        {overview.map((item, index) => (
           <figure key={index}>
-            {own.title ? <h2>{own.title}</h2> : undefined}
-            {BODIES[kind]?.(own as never)}
+            {item[1].title === undefined ? undefined : <h2>{item[1].title}</h2>}
+            {partOf(item)}
           </figure>
         ))}
       </section>
@@ -509,7 +597,7 @@ function App({ initial }: Readonly<{ initial: State }>): ReactNode {
       <section className="tasks">
         <h2>
           {`Tasks · ${resolved.length}/${questions.length} `}
-          {status.at ? <Time at={status.at} /> : undefined}
+          {status.at === undefined ? undefined : <Time at={status.at} />}
         </h2>
         <ul className="meta">
           {status.lines.map((line, index) => (
@@ -534,12 +622,12 @@ function App({ initial }: Readonly<{ initial: State }>): ReactNode {
           ['waiting', 'Waiting on the agent', waiting],
         ] as const
       ).map(([name, heading, group]) =>
-        group ? (
+        group === undefined ? undefined : (
           <section className={name} key={name}>
             <h2>{`${heading} · ${group.length}`}</h2>
             {group.map((question) => view(question))}
           </section>
-        ) : undefined,
+        ),
       )}
       {resolved.length > 0 ? (
         <section className="resolved">
@@ -559,5 +647,5 @@ function App({ initial }: Readonly<{ initial: State }>): ReactNode {
   );
 }
 
-export { App, publish, selectorOf, threadOf, turnOf };
+export { App, isThreads, publish, selectorOf, stateShape, threadOf, turnOf };
 export type { Entry, State, Status, Summary, Thread, Turn };

@@ -19,9 +19,10 @@ const { positionals, values } = process.getBuiltinModule('node:util').parseArgs(
     cols: { default: '200', type: 'string' },
     rows: { default: '50', type: 'string' },
     sock: {
-      default: job
-        ? `${job}/tmp/drive-sessions.sock`
-        : `${process.getBuiltinModule('node:os').tmpdir()}/drive-sessions/pty.sock`,
+      default:
+        job !== undefined && job !== ''
+          ? `${job}/tmp/drive-sessions.sock`
+          : `${process.getBuiltinModule('node:os').tmpdir()}/drive-sessions/pty.sock`,
       type: 'string',
     },
   },
@@ -116,7 +117,12 @@ const verbs: Record<string, (...argv: string[]) => Promise<string>> = {
     const size = { cols: Number(cols), rows: Number(rows) };
     const term = new Terminal({ ...size, allowProposedApi: true, scrollback: 0 });
     const child = Bun.spawn(argv, {
-      terminal: { ...size, data: (_terminal, bytes) => term.write(bytes) },
+      terminal: {
+        ...size,
+        data: (_terminal, bytes) => {
+          term.write(bytes);
+        },
+      },
     });
     const kill = (): void => {
       fs.rmSync(sock, { force: true });
@@ -148,7 +154,7 @@ const verbs: Record<string, (...argv: string[]) => Promise<string>> = {
     return process.exit(0);
   },
   open: async (...argv) => {
-    if (await alive()) {
+    if ((await alive()) !== undefined) {
       return fail(`a holder already answers on ${sock}`);
     }
     fs.mkdirSync(process.getBuiltinModule('node:path').dirname(sock), {
@@ -204,9 +210,9 @@ const verbs: Record<string, (...argv: string[]) => Promise<string>> = {
       text.replaceAll(
         /\\(?:x(?<hex>[\da-f]{2})|(?<char>.))/giu,
         (_match, hex: string | undefined, char: string) =>
-          hex
-            ? String.fromCodePoint(Number.parseInt(hex, 16))
-            : ('\n\r\t'['nrt'.indexOf(char)] ?? char),
+          hex === undefined
+            ? ('\n\r\t'['nrt'.indexOf(char)] ?? char)
+            : String.fromCodePoint(Number.parseInt(hex, 16)),
       ),
     );
     return '';

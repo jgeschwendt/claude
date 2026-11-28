@@ -1,9 +1,17 @@
-import { defineConfig, namingConvention } from '@jlg/oxlint';
+import { defineConfig } from '@jlg/oxlint';
 
 /**
 Claude Code's hook payload fields, a snake_case wire format the mod matches on
 */
 const wireFields = '^(file_path|notification_type|tool_use_id)$';
+
+/**
+the engine writes the mod's types where a session loaded it; a checkout without them (CI) cannot type the hooks or
+their tests, so it leaves them unlinted as `scripts/test.ts` leaves their tsc unrun
+*/
+const engineTyped = process
+  .getBuiltinModule('node:fs')
+  .existsSync(`${import.meta.dirname}/plugins/subether/.claude-plugin/types/tsconfig.json`);
 
 export default defineConfig({
   ignorePatterns: [
@@ -11,6 +19,7 @@ export default defineConfig({
     'docs/**',
     'node_modules',
     'plugins/*/.claude-plugin/types/**',
+    ...(engineTyped ? [] : ['plugins/subether/hooks/**', 'plugins/subether/tests/**']),
     // workflow scripts run in Claude Code's workflow runtime (injected globals, top-level return), not as modules
     'workflows/**',
   ],
@@ -20,27 +29,13 @@ export default defineConfig({
       rules: {
         // `$.classic.Notification(...)` is a mods API name, not a constructor. (2026-11-05)
         'eslint/new-cap': ['error', { capIsNewExceptionPattern: String.raw`^\$\.classic\.` }],
-        // the mods API matches hooks on Claude Code's snake_case payload fields. (2026-11-05)
-        'eslint-js/camelcase': ['error', { allow: [wireFields] }],
         // the React preset (react is a dependency, for skills/show) makes every .tsx function a declaration; the mod's
         // hooks are expressions, the base's default. (2026-11-23)
         'func-style': ['error', 'expression'],
         // a hook is `($, e, next) =>` and JSX compiles against the global `h`; options replace the base's, so its checkGeneric is restated. (2026-11-05)
         'id-length': ['error', { checkGeneric: false, exceptions: ['$', 'e', 'h'] }],
-        // `claude-code` and `claude-code/testing` are ambient declarations the engine lays under .claude-plugin/types; `./gauge` resolves to a .tsx the resolver does not see. (2026-11-05)
-        'import-js/no-unresolved': 'off',
         // a hook's handlers type `$`, `e` and `next` from the generated mods API, whose types are not readonly. (2026-11-05)
         'typescript/prefer-readonly-parameter-types': 'off',
-        // the same payload fields as camelcase's; options replace the base's, so its .tsx entries are restated. (2026-11-05)
-        'typescript-js/naming-convention': [
-          'warn',
-          {
-            filter: { match: true, regex: wireFields },
-            format: ['snake_case'],
-            selector: 'objectLiteralProperty',
-          },
-          ...namingConvention.tsx,
-        ],
         // a hook's `.catch` handler is `($, e, next) =>`, not a promise rejection handler: its first parameter is the context. (2026-11-05)
         'unicorn/catch-error-name': ['error', { ignore: [String.raw`^\$$`] }],
         // `$.clock.every(ms, fn)` is the mods API timer, not an array method taking thisArg. (2026-11-05)
@@ -50,6 +45,24 @@ export default defineConfig({
         // `on(…).catch(handler)` registers a hook's error handler, a mods API call with no awaitable form. (2026-11-05)
         'unicorn-js/prefer-await': 'off',
       },
+    },
+    {
+      // the mod's tests run in the engine's test kit, which loads no packages: a JSON fixture keeps the wire's notation
+      // and is typed by assertion, as nothing there can validate it; a `turn.step` stand-in is an async generator by the
+      // hook's type, awaiting nothing. (2026-11-28)
+      files: ['plugins/subether/tests/**'],
+      rules: {
+        'typescript/no-unnecessary-type-parameters': 'off',
+        'typescript/no-unsafe-assignment': 'off',
+        'typescript/no-unsafe-return': 'off',
+        'typescript/no-unsafe-type-assertion': 'off',
+        'typescript/require-await': 'off',
+      },
+    },
+    {
+      // the ledger's contract keys a `sense.new` for an unnamed event as JSON's null. (2026-11-28)
+      files: ['plugins/subether/hooks/census.ts'],
+      rules: { 'unicorn/no-null': 'off' },
     },
     {
       // the runner other hook files call with `$`: past an import the engine follows `$` only
@@ -62,8 +75,6 @@ export default defineConfig({
       // the launchd plist's DOCTYPE names Apple's DTD by its fixed HTTP URL, and the daemon speaks plain HTTP over its Unix socket. (2026-11-23)
       files: ['skills/show/**/*.{ts,tsx}'],
       rules: {
-        // verax has only `exports`, which the import plugin's node resolver (main field only) cannot read; options replace the base's, so its bun: entry is restated. (2026-11-25)
-        'import-js/no-unresolved': ['error', { ignore: ['^bun:', '^verax$'] }],
         'unicorn-js/prefer-https': 'off',
       },
     },
@@ -110,5 +121,7 @@ export default defineConfig({
   rules: {
     // the base turns this off (one import per module, type names inline), yet oxlint 1.91.0 reports it; restated here until the base catches up. (2026-11-05)
     'import/consistent-type-specifier-style': 'off',
+    // process.env names (SHOW_HUD, XDG_STATE_HOME…) are SCREAMING_SNAKE object keys, React's `dangerouslySetInnerHTML` takes `{ __html }`, and the mods API matches hooks on Claude Code's snake_case payload fields. (2026-11-28)
+    'names/case': ['error', { allow: ['[A-Z][A-Z0-9]*(_[A-Z0-9]+)+', '__html', wireFields] }],
   },
 });

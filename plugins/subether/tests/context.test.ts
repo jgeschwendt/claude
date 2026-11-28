@@ -55,7 +55,7 @@ const engine = (
   on('session.id', () => ({ value: id() }));
   on('state.set', async ($, e, next) => {
     written.push(...(e.key === 'recalls' ? [e.value] : []));
-    return await next(e);
+    return next(e);
   });
   on('session.surfaces', () => ({ value: surfaces }));
   on('tool.call', ($, e) => ({

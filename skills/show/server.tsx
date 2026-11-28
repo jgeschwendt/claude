@@ -4,6 +4,20 @@
 import { FFIType, dlopen } from 'bun:ffi';
 import { renderToReadableStream } from 'react-dom/server';
 import {
+  type Infer,
+  type Schema,
+  unknown as anything,
+  boolean,
+  parse as decode,
+  record as dict,
+  is,
+  list,
+  optional,
+  scalar,
+  string,
+} from 'verax';
+import { loose } from '#loose';
+import {
   type Asked,
   type Plan,
   type Said,
@@ -12,10 +26,11 @@ import {
   choicesOf,
   optionsOf,
   picked,
+  planShape,
   spoken,
   validate,
 } from './catalog.tsx';
-import { DIR, FIX, FailError, VERSION, home, hudPath } from './cli.ts';
+import { DIR, FIX, FailError, VERSION, home, hudPath, messageOf } from './cli.ts';
 import { lit } from './lit.ts';
 import {
   App,
@@ -28,6 +43,7 @@ import {
   threadOf,
   turnOf,
 } from './page.tsx';
+import { entryShape, statusShape } from './shapes.ts';
 
 const {
   appendFileSync,
@@ -132,13 +148,54 @@ function write(path: string, text: string): void {
   writeFileSync(`${path}.tmp`, text);
   renameSync(`${path}.tmp`, path);
 }
+function readAs<Shape>(path: string, shape: Schema<Shape>): Shape {
+  return decode(JSON.parse(readFileSync(path, 'utf8')), shape);
+}
 function save(path: string, value: unknown): void {
   write(path, JSON.stringify(value, undefined, 1));
 }
 /**
 a stored form's part as it was: a component object, the fields of every kind loose
 */
-type Old = Record<string, ReturnType<typeof JSON.parse>>;
+type Old = Record<string, unknown>;
+/**
+the stored forms and events, which only this daemon wrote: objects, and their lists lists of them
+*/
+const OLD = dict(anything());
+const OLDS = list(OLD);
+/**
+a request of the page's or the CLI's: the handlers check what they read of the fields left unknown
+*/
+const bodyShape = loose('body', {
+  lines: anything(),
+  message: anything(),
+  notes: anything(),
+  picks: anything(),
+  plan: anything(),
+  question: anything(),
+  session: optional(string()),
+  slug: optional(string()),
+  target: anything(),
+  text: anything(),
+  working: optional(boolean()),
+});
+type Body = Infer<typeof bodyShape>;
+async function bodyOf(request: Request): Promise<Body> {
+  try {
+    return decode(await request.json(), bodyShape);
+  } catch {
+    return {};
+  }
+}
+function olds(value: unknown): Old[] | undefined {
+  return is(value, OLDS) ? value : undefined;
+}
+/**
+whether `value` is a non-empty string, which is what a stored form's optional words are
+*/
+function isFilled(value: unknown): value is string {
+  return typeof value === 'string' && value !== '';
+}
 /**
 ONE-WAY, delete once every stored plan is current: a component object becomes parts, a leading note for its caption
 `text` (a note keeps its own), then its kind and props; a chart's rows, a tab and a machine are tuples, a choice's
@@ -146,53 +203,64 @@ options a record keyed by value
 */
 function convert({ component, text, ...old }: Old): unknown[][] {
   const { config, items, options, rows, tabs, ...rest } = old;
+  const [choices, lines, samples] = [options, rows, tabs].map((value) => olds(value));
   const props = {
     ...rest,
-    ...(component === 'machine' ? { machine: config ?? items } : items && { items }),
-    ...(options && {
-      options: Object.fromEntries(options.map(({ value, ...option }: Old) => [value, option])),
+    ...(component === 'machine' ? { machine: config ?? items } : items !== undefined && { items }),
+    ...(choices && {
+      options: Object.fromEntries(
+        choices.map(({ value, ...option }) => [String(value), option] as const),
+      ),
     }),
-    ...(rows && { rows: rows.map(({ label, value }: Old) => [label, value]) }),
-    ...(tabs && {
-      tabs: tabs.map(({ code, label, lang }: Old) => [label, code, ...(lang ? [lang] : [])]),
+    ...(lines && { rows: lines.map(({ label, value }) => [label, value]) }),
+    ...(samples && {
+      tabs: samples.map(({ code, label, lang }) => [
+        label,
+        code,
+        ...(isFilled(lang) ? [lang] : []),
+      ]),
     }),
   };
-  const kind = tabs ? 'tabs' : component;
+  const kind = samples ? 'tabs' : component;
   return component === 'note'
     ? [[kind, { ...props, text }]]
-    : [...(text ? [['note', { text }]] : []), [kind, props]];
+    : [...(isFilled(text) ? [['note', { text }]] : []), [kind, props]];
 }
 /**
 ONE-WAY, delete with `convert`: a form `{title, text?, overview?, cards}` becomes the plan `[title, overview,
 questions]`, a question's `meta` and `text` leading notes of its body
 */
-function replan({ cards, overview = [], text, title }: Old): Plan {
+function replan({ cards, overview, text, title }: Old): unknown[] {
   return [
     title,
-    [...(text ? [['note', { text }]] : []), ...overview.flatMap((block: Old) => convert(block))],
+    [
+      ...(isFilled(text) ? [['note', { text }]] : []),
+      ...(olds(overview) ?? []).flatMap((block) => convert(block)),
+    ],
     Object.fromEntries(
-      cards.map(({ body = [], id, meta, text: lead, title: name }: Old) => [
-        id,
+      (olds(cards) ?? []).map(({ body, id, meta, text: lead, title: name }) => [
+        String(id),
         [
           name,
           [
             ...[meta, lead].filter(Boolean).map((note) => ['note', { text: note }]),
-            ...body.flatMap((item: Old) => convert(item)),
+            ...(olds(body) ?? []).flatMap((item) => convert(item)),
           ],
         ],
       ]),
     ),
-  ] as Plan;
+  ];
 }
 /**
 ONE-WAY, delete with `convert`: an answer or comment object `{kind, card, …}` becomes `[kind, {question, …}]`; an
 event already a tuple stays
 */
-function reentry(event: Old): Entry {
-  const { card, kind, ...rest } = event;
-  return Array.isArray(event)
-    ? (event as unknown as Entry)
-    : ([kind, { ...(card && { question: card }), ...rest }] as Entry);
+function reentry(event: unknown): unknown {
+  if (Array.isArray(event)) {
+    return event;
+  }
+  const { card, kind, ...rest } = decode(event, OLD);
+  return [kind, { ...(isFilled(card) && { question: card }), ...rest }];
 }
 /**
 ONE-WAY, delete once every stored plan is current: a directory holding `form.json` gets its answers rewritten as
@@ -202,9 +270,15 @@ function migrate(directory: string): void {
   const answers = `${directory}/answers.jsonl`;
   const lines = readFileSync(answers, 'utf8').split('\n').filter(Boolean);
   write(answers, lines.map((line) => `${JSON.stringify(reentry(JSON.parse(line)))}\n`).join(''));
-  const form = JSON.parse(readFileSync(`${directory}/form.json`, 'utf8'));
+  const form = readAs(`${directory}/form.json`, OLD);
   save(`${directory}/plan.json`, replan(form));
   rmSync(`${directory}/form.json`);
+}
+/**
+the field of a request's loose value, nothing when it is not an object
+*/
+function field(value: unknown, key: string): unknown {
+  return Reflect.get(new Object(value), key);
 }
 /**
 what an answer body says of `question`, each pick and comment checked against the question's choices and kept in
@@ -215,22 +289,20 @@ function answerOf(
   body: { message?: unknown; notes?: unknown; picks?: unknown },
 ): Said {
   const choices = choicesOf(question);
-  const given = (body.picks ?? {}) as Record<string, unknown>;
-  const commented = (body.notes ?? {}) as Record<string, Record<string, unknown> | undefined>;
   return {
     message: typeof body.message === 'string' ? body.message.trim() : '',
     notes: byChoice(choices, (choice) =>
       Object.fromEntries(
         optionsOf(choice)
-          .map((option) => [
-            option.value,
-            String(commented[choice.id]?.[option.value] ?? '').trim(),
-          ])
-          .filter(([, text]) => text),
+          .map((option) => {
+            const note = field(field(body.notes, choice.id), option.value);
+            return [option.value, typeof note === 'string' ? note.trim() : ''] as const;
+          })
+          .filter(([, text]) => text !== ''),
       ),
     ),
     picks: byChoice(choices, (choice) =>
-      picked(choice, [given[choice.id] ?? []].flat()).map((option) => option.value),
+      picked(choice, [field(body.picks, choice.id) ?? []].flat()).map((option) => option.value),
     ),
   };
 }
@@ -241,11 +313,11 @@ differ), two on a pick-one choice, or nothing at all, his own words alone being 
 function isRefused(question: Asked, body: { picks?: unknown }, answer: Said): boolean {
   return (
     Object.values(answer.picks).flat().length !==
-      Object.values((body.picks ?? {}) as object).flat().length ||
+      Object.values(new Object(body.picks)).flat().length ||
     choicesOf(question).some(
       (choice) => choice.pick !== 'many' && (answer.picks[choice.id]?.length ?? 0) > 1,
     ) ||
-    !spoken(question, answer)
+    spoken(question, answer) === ''
   );
 }
 function now(): string {
@@ -271,22 +343,14 @@ async function serve({ port }: { port?: number } = {}): Promise<{
     websocket: Bun.WebSocketHandler<string>;
   };
   type Held = { events: Entry[]; plan: Plan; status: Status };
-  type Body = {
-    lines?: unknown;
-    message?: unknown;
-    notes?: unknown;
-    picks?: unknown;
-    plan: Plan;
-    question?: unknown;
-    session?: string;
-    slug?: string;
-    target?: unknown;
-    text?: unknown;
-    working?: boolean;
-  };
   type Call = { body: Body; held: Held; slug: string; url: URL };
   type Handler = (call: Call) => Promise<Response> | Response;
 
+  // a module namespace has no prototype, so `instanceof Object` would refuse it
+  const hudShape = scalar(
+    'hud',
+    (value: unknown): value is { hud?: (options: object) => Layer } => typeof value === 'object',
+  );
   const { SHOW_PORT } = Bun.env;
   const root = home();
   mkdirSync(root, { mode: DIR_MODE, recursive: true });
@@ -399,7 +463,7 @@ async function serve({ port }: { port?: number } = {}): Promise<{
     const id = questionOf(held, thread)?.id;
     held.status.working = [
       ...held.status.working.filter((one) => one !== id),
-      ...(isWorking && id ? [id] : []),
+      ...(isWorking === true && id !== undefined ? [id] : []),
     ];
   }
   function saveStatus(slug: string, held: Held): void {
@@ -422,13 +486,6 @@ async function serve({ port }: { port?: number } = {}): Promise<{
     held.status.working = held.status.working.filter((id) => id !== entry[1].question);
     commit(slug, held);
   }
-  async function bodyOf(request: Request): Promise<Body> {
-    try {
-      return await request.json();
-    } catch {
-      return {} as Body;
-    }
-  }
   /**
   the question an answer is for and its message, or the refusal when the question is missing or the answer is wrong
   */
@@ -440,7 +497,7 @@ async function serve({ port }: { port?: number } = {}): Promise<{
     const body = await bodyOf(request);
     const question = asking(held.plan).find((one) => one.id === body.question);
     if (!question) {
-      return fail('not_found', `no question ${body.question} on ${slug}`, NOT_FOUND);
+      return fail('not_found', `no question ${String(body.question)} on ${slug}`, NOT_FOUND);
     }
     // `picks` and `notes` are keyed by choice id, each a list of option values: one at most unless the choice picks many
     const said = answerOf(question, body);
@@ -486,16 +543,17 @@ async function serve({ port }: { port?: number } = {}): Promise<{
     const thread = threads.find((one) => one.id.startsWith(String(target)));
     const question = asking(held.plan).find((one) => one.id === target) ?? questionOf(held, thread);
     if (!question && !thread) {
-      return fail('not_found', `no question or thread ${target} on ${slug}`, NOT_FOUND);
+      return fail('not_found', `no question or thread ${String(target)} on ${slug}`, NOT_FOUND);
     }
     await Promise.all(
       threads
         .filter(
           (one) =>
             one.status === 'open' &&
-            (one === thread || (question && questionOf(held, one)?.id === question.id)),
+            (one === thread ||
+              (question !== undefined && questionOf(held, one)?.id === question.id)),
         )
-        .map((one) => hudCall('resolve', { id: one.id })),
+        .map(async (one) => hudCall('resolve', { id: one.id })),
     );
     const done = new Set(held.status.resolved);
     held.status.resolved = [...done.union(new Set(question ? [question.id] : []))];
@@ -509,7 +567,7 @@ async function serve({ port }: { port?: number } = {}): Promise<{
     const held = plans.get(slug) ?? none;
     const { question } = await bodyOf(request);
     if (asking(held.plan).every((one) => one.id !== question)) {
-      return fail('not_found', `no question ${question} on ${slug}`, NOT_FOUND);
+      return fail('not_found', `no question ${String(question)} on ${slug}`, NOT_FOUND);
     }
     record(slug, held, ['resolve', { at: now(), question: String(question) }]);
     return settle(slug, held, question);
@@ -555,25 +613,26 @@ async function serve({ port }: { port?: number } = {}): Promise<{
   ): Promise<Response> | Response | undefined {
     const { pathname } = new URL(request.url);
     if (request.headers.get('upgrade') === 'websocket') {
-      return server?.upgrade(request, { data: pathname })
+      return server?.upgrade(request, { data: pathname }) === true
         ? undefined
         : fail('upgrade', 'not a WebSocket', BAD_REQUEST);
     }
     const [, slug = '', verb] = pathname.split('/', PATH_PARTS);
-    const asset = {
+    const assets: Record<string, [string, Blob | undefined]> = {
       '/client.js': ['text/javascript', live.build?.outputs[0]],
       '/style.css': ['text/css', Bun.file(`${DIR}/style.css`)],
-    }[pathname];
-    if (asset) {
-      return new Response(asset[1] as Blob, {
+    };
+    const asset = assets[pathname];
+    if (asset !== undefined) {
+      return new Response(asset[1], {
         headers: { ...NO_STORE, 'content-type': `${asset[0]}; charset=utf-8` },
       });
     }
-    const action = request.method === 'POST' && ACTIONS.get(String(verb));
-    return action ? action(slug, request) : render(pathname);
+    const action = request.method === 'POST' ? ACTIONS.get(String(verb)) : undefined;
+    return action === undefined ? render(pathname) : action(slug, request);
   }
 
-  function nextEvent(slug: string, after: number): Promise<Response> {
+  async function nextEvent(slug: string, after: number): Promise<Response> {
     return new Promise((resolve) => {
       // asks again at each wake until an entry, a close or a stop answers
       function ask(): void {
@@ -628,16 +687,18 @@ async function serve({ port }: { port?: number } = {}): Promise<{
     if (!live.layer) {
       return fail('hud_off', `threads are off: ${live.reason}`, UNAVAILABLE);
     }
-    if (typeof text !== 'string' || !text.trim()) {
+    if (typeof text !== 'string' || text.trim() === '') {
       return fail('invalid', 'nothing to say', BAD_REQUEST);
     }
     if (found.length > 1) {
-      return fail('ambiguous', `${found.length} threads match ${target}`, CONFLICT);
+      return fail('ambiguous', `${found.length} threads match ${String(target)}`, CONFLICT);
     }
     return found.length === 0
       ? fail(
           question ? 'no_thread' : 'not_found',
-          question ? `the owner has not written on ${target} yet` : `0 threads match ${target}`,
+          question
+            ? `the owner has not written on ${String(target)} yet`
+            : `0 threads match ${String(target)}`,
           NOT_FOUND,
         )
       : undefined;
@@ -662,13 +723,13 @@ async function serve({ port }: { port?: number } = {}): Promise<{
         version: VERSION,
       }),
     'GET /plans': () => Response.json(summaries()),
-    'GET /plans/:slug/events': ({ slug, url }) =>
+    'GET /plans/:slug/events': async ({ slug, url }) =>
       nextEvent(slug, Number(url.searchParams.get('after'))),
-    'POST /plans': ({
+    'POST /plans': async ({
       body: {
         plan,
         session = '',
-        slug = String(plan[0])
+        slug = String(field(plan, '0'))
           .toLowerCase()
           .replaceAll(/[^a-z0-9]+/gu, '-')
           .replaceAll(/^-|-$/gu, ''),
@@ -689,7 +750,7 @@ async function serve({ port }: { port?: number } = {}): Promise<{
             `${slug} is open: show update ${slug} <plan.json>, or open with --slug`,
             CONFLICT,
           )
-        : open(slug, plan, session);
+        : open(slug, decode(plan, planShape), session);
     },
     'POST /plans/:slug/reply': async ({ body: { target, text, working }, held, slug }) => {
       const threads = threadsOf(slug);
@@ -706,13 +767,14 @@ async function serve({ port }: { port?: number } = {}): Promise<{
       commit(slug, held);
       return Response.json(reply);
     },
-    'POST /plans/:slug/resolve': ({ body: { target }, held, slug }) => settle(slug, held, target),
+    'POST /plans/:slug/resolve': async ({ body: { target }, held, slug }) =>
+      settle(slug, held, target),
     'PUT /plans/:slug': async ({ body: { plan }, held, slug }) => {
       const problems = validate(plan);
       if (problems.length > 0) {
         return fail('invalid', problems.join('\n'), UNPROCESSABLE);
       }
-      held.plan = await lit(plan);
+      held.plan = await lit(decode(plan, planShape));
       save(`${root}/${slug}/plan.json`, plan);
       publish(slug);
       return Response.json({ slug, url: `${live.url}${slug}` });
@@ -763,11 +825,13 @@ async function serve({ port }: { port?: number } = {}): Promise<{
   rmSync(sock, { force: true });
   // a long `wait` must outlive Bun's 10 s idle cut: idleTimeout works on a Unix socket (probed), yet bun-types
   // offers it on the TCP options only
-  const unix = Bun.serve({
+  const idle = { idleTimeout: 0 };
+  const unixOptions: { fetch: typeof dispatch; unix: string } = {
+    ...idle,
     fetch: dispatch,
-    idleTimeout: 0,
     unix: sock,
-  } as unknown as Bun.Serve.Options<undefined>);
+  };
+  const unix = Bun.serve(unixOptions);
 
   live.build = await building;
   const staleFiles = [...TEMP_FILES.scanSync(root)];
@@ -787,19 +851,23 @@ async function serve({ port }: { port?: number } = {}): Promise<{
     [...PLAN_FILES.scanSync(root)].map(async (path) => {
       const slug = path.slice(0, -'/plan.json'.length);
       const directory = `${root}/${slug}`;
-      const stored = JSON.parse(readFileSync(`${directory}/plan.json`, 'utf8'));
+      const stored = readAs(`${directory}/plan.json`, planShape);
       plans.set(slug, {
         events: readFileSync(`${directory}/answers.jsonl`, 'utf8')
           .split('\n')
           .filter(Boolean)
-          .map((line) => JSON.parse(line)),
+          .map((line) => decode(JSON.parse(line), entryShape)),
         plan: await lit(stored),
         // a status saved before `working` existed reads as none working
-        status: { working: [], ...JSON.parse(readFileSync(`${directory}/status.json`, 'utf8')) },
+        status: {
+          working: [],
+          ...readAs(`${directory}/status.json`, statusShape),
+        },
       });
     }),
   );
-  must(live.build.success, 'build', live.build.logs.join('\n'));
+  const logs = Array.from(live.build.logs, String);
+  must(live.build.success, 'build', logs.join('\n'));
   /**
   the owner's own hud messages become events; the ones the page said for a Send are `answer`'s
   */
@@ -846,10 +914,9 @@ async function serve({ port }: { port?: number } = {}): Promise<{
   */
   async function loadHud(): Promise<((options: object) => Layer) | undefined> {
     try {
-      const loaded = await import(hudPath());
-      return loaded.hud;
+      return decode(await import(hudPath()), hudShape).hud;
     } catch (error) {
-      live.reason = `hud: ${(error as Error).message}`;
+      live.reason = `hud: ${messageOf(error)}`;
       return undefined;
     }
   }
@@ -863,7 +930,7 @@ async function serve({ port }: { port?: number } = {}): Promise<{
   }
   const served = live.layer ?? { fetch: page, websocket };
   const tcp = Bun.serve<string>({
-    fetch: (request, server) => {
+    fetch: async (request, server) => {
       const allowed = new Set([`127.0.0.1:${server.port}`, `localhost:${server.port}`]);
       const origin = request.headers.get('origin');
       return !allowed.has(String(request.headers.get('host'))) ||
@@ -885,7 +952,7 @@ async function serve({ port }: { port?: number } = {}): Promise<{
   /**
   every signal and panic listener, kept so a stop can take them all off
   */
-  const listeners = new Map<string, (error: Error) => unknown>();
+  const listeners = new Map<string, (error: Error) => void>();
   /**
   wait until no request is in flight or the deadline passes
   */
@@ -919,20 +986,22 @@ async function serve({ port }: { port?: number } = {}): Promise<{
     release(reason);
   }
   for (const signal of SIGNALS) {
-    listeners.set(signal, () => stop(signal));
+    listeners.set(signal, () => {
+      void stop(signal);
+    });
   }
   for (const panic of PANICS) {
     listeners.set(panic, (error: Error) => {
       log(`panic ${error.stack ?? error}`);
       process.exitCode = 1;
-      return stop('panic');
+      void stop('panic');
     });
   }
   for (const [event, listener] of listeners) {
     process.on(event, listener);
   }
   live.stage = live.layer ? 'ready' : 'degraded';
-  log(`${live.stage} ${live.url}${live.reason && ` ${live.reason}`}`);
+  log(`${live.stage} ${live.url}${live.reason === '' ? '' : ` ${live.reason}`}`);
   return { stop, url: live.url };
 }
 

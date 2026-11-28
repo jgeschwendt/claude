@@ -11,7 +11,7 @@ test('the page opens no browser stream', async () => {
     [
       ...outputs,
       ...['catalog.tsx', 'client.tsx', 'page.tsx'].map((name) => Bun.file(`${DIR}/${name}`)),
-    ].map((file) => file.text()),
+    ].map(async (file) => file.text()),
   );
   expect(texts.filter((text) => STREAMS.test(text))).toEqual([]);
   expect(

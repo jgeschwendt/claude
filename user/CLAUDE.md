@@ -32,12 +32,12 @@ On the top model tier, tokens buy judgment, not volume: plan, direct, judge, rev
 - Code golf, source and tests—100 % end-to-end coverage is table stakes; a refactor cuts both to the fewest statements, functions and branches keeping every feature; nothing lowering coverage merges.
 - Complicated goes in a form—findings, tables, a choice of options reach him as a hud-served HTML form ("Show me"), built with the `show` skill, never a hand-rolled page and server, asked or not; the terminal carries one line and the link.
 - Diagnose read-only: no `git stash`/`reset`/`clean`/`checkout --`/`restore` or destructive flags; re-edit your botched edit—`git checkout -- <path>` discards _every_ uncommitted change to the path. Stop a process with `mise run stop <pid|:port>` (global task: shows it, SIGTERMs, confirms; a name goes through `pgrep -x <name>` first), never `pkill -f`.
-- Document nothing auto-discoverable.
+- Document nothing auto-discoverable—an error the compiler or linter raises is discoverable: let it lead the consumer to the fix, never prescribe the workaround in a README, where it drifts into a bug.
 - Edit files with Edit/Write, never a `python3 - <<EOF` or `sed -i` read-replace-write: a heredoc edit skips the diff he reviews and the tool log's record of what changed; several replacements are several Edit calls in one turn. A heredoc is for computing, never for writing a tracked file.
 - Harness: `jgeschwendt/claude` at `~/.grove/code/jgeschwendt/claude/main`—work there per its `AGENTS.md`; `~/.claude` is runtime state and symlinks into it, not a repo.
 - Merge without asking—a reviewed, green PR of yours lands at once (`floodgate add` on a private repo, `gh pr merge` by the ruleset's method on a public one); wait on him only when the change is risky or he might hold a differing opinion.
 - Name nothing that rots—a model or tier name, a version, "current" or "latest" marks a moment and is wrong by the next release. State the role (the top tier, the tier below); literals only in code or config that runs them.
-- Never bare `sleep` to wait: a background command that exits on the condition, or Monitor; the harness blocks a foreground sleep.
+- Never wait in the foreground—no bare `sleep`, nor a `perl -e 'select(…)'` or `time.sleep` standing in for one: a background command that exits on the condition, or Monitor; the harness blocks a foreground sleep.
 - Open-ended aesthetic ask: get his word on a concrete sample first; commit-and-build is for technical calls.
 - Prose to him: answer or action first, fewest tokens, no basics, preamble or hedging. Code has its own rules.
 - Scripts for one module or skill go in its directory, never top-level `shell/` or `scripts/`.

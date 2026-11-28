@@ -1,14 +1,23 @@
 // A stand-in for `@jlg/hud/server` in the tests, where no hud checkout exists (CI): the same `hud({ fetch, onChange,
 // store, WebSocket })` shape and agent routes, threads in `store`, and `POST /__hud/say` for the owner's own comment.
-type Thread = {
-  id: string;
-  messages: { at: string; author: 'agent' | 'user'; text: string }[];
-  page: string;
-  selector: string;
-  status: 'open' | 'resolved';
-};
+import { type Infer, list, optional, parse, string } from 'verax';
+import { loose } from '#loose';
+import { threadShape } from './shapes.ts';
+
+type Thread = Infer<typeof threadShape>;
 
 const { existsSync, readFileSync, writeFileSync } = process.getBuiltinModule('node:fs');
+
+/**
+the owner's words, and the threads this file stored
+*/
+const saidShape = loose('said', {
+  id: optional(string()),
+  page: optional(string()),
+  selector: optional(string()),
+  text: optional(string()),
+});
+const threadsShape = list(threadShape);
 
 /**
 the fraction of a second a timestamp carries: milliseconds, as `toISOString` does
@@ -26,10 +35,12 @@ const hud = ({
   store: string;
   websocket: unknown;
 }): object => {
-  type Said = { id?: string; page: string; selector: string; text: string };
-  const threads: Thread[] = existsSync(store) ? JSON.parse(readFileSync(store, 'utf8')) : [];
+  const threads: Thread[] = existsSync(store)
+    ? parse(JSON.parse(readFileSync(store, 'utf8')), threadsShape)
+    : [];
+  type Said = Infer<typeof saidShape>;
   // the thread with this id, or a new one for the page and selector the owner spoke on
-  const thread = ({ id, page, selector }: Said): Thread => {
+  const thread = ({ id, page = '', selector = '' }: Said): Thread => {
     const found = threads.find((one) => one.id === id);
     const made: Thread = { id: crypto.randomUUID(), messages: [], page, selector, status: 'open' };
     if (!found) {
@@ -47,9 +58,9 @@ const hud = ({
     return one;
   };
   const routes: Record<string, (body: Said) => Thread> = {
-    '/__hud/reply': (body) => say(thread(body), 'agent', body.text),
+    '/__hud/reply': (body) => say(thread(body), 'agent', body.text ?? ''),
     '/__hud/resolve': (body) => Object.assign(thread(body), { status: 'resolved' }),
-    '/__hud/say': (body) => say(thread(body), 'user', body.text),
+    '/__hud/say': (body) => say(thread(body), 'user', body.text ?? ''),
   };
   return {
     fetch: async (request: Request, server: unknown) => {
@@ -58,7 +69,7 @@ const hud = ({
       if (!route) {
         return fetch(request, server);
       }
-      const reply = route(await request.json());
+      const reply = route(parse(await request.json(), saidShape));
       writeFileSync(store, JSON.stringify(threads));
       onChange(structuredClone(threads));
       return Response.json(reply);

@@ -361,7 +361,7 @@ const start: Hook<'session.start'> = async ($, e, next) => {
       logged($, poll($));
     });
   }
-  return await next(e);
+  return next(e);
 };
 
 /**

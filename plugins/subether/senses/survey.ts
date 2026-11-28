@@ -18,6 +18,19 @@ import {
   isVariableDeclaration,
 } from 'tsrs/ast';
 import { API, type Checker, type Program } from 'tsrs/async';
+import { type Infer, type Schema, coerce, list, object, parse, record, string } from 'verax';
+
+const strings = list(string());
+
+/**
+`schema`, `empty` where the key is absent: a mod not yet surveyed records `undeclared` alone
+*/
+const or = <TSchema extends Schema>(
+  schema: TSchema,
+  empty: Infer<TSchema>,
+): Schema<Infer<TSchema>, unknown> => coerce(schema, (value) => value ?? empty);
+
+const fieldsRead = object('fields', { read: strings, unread: strings });
 
 /**
 What `hooks/senses.ts` records: the events census hooks, each field read or not; the others, by field; the events whose
@@ -25,14 +38,25 @@ input carries a tool's arguments beside the fields named; the calls on `$`; the 
 time that the types do not declare, by `<namespace>.*`, reviewed by hand and kept by every `--write`; the engine version
 it was surveyed at
 */
-type Manifest = {
-  args: string[];
-  events: Record<string, { read: string[]; unread: string[] }>;
-  ops: string[];
-  undeclared: Record<string, string[]>;
-  unsubscribed: Record<string, string[]>;
-  version: string;
-};
+const MANIFEST = object('manifest', {
+  args: or(strings, []),
+  events: or(record(fieldsRead), {}),
+  ops: or(strings, []),
+  undeclared: record(strings),
+  unsubscribed: or(record(strings), {}),
+  version: or(string(), ''),
+});
+type Manifest = Infer<typeof MANIFEST>;
+
+/**
+the manifest `path` exports, read fresh past the module cache
+*/
+const manifestOf = async (path: string): Promise<Manifest> =>
+  parse(
+    // a module namespace is no plain object: its exports, copied, are
+    { ...(await import(`${path}?${crypto.randomUUID()}`)) },
+    object('senses.ts', { senses: MANIFEST }),
+  ).senses;
 
 /**
 the mod's folder
@@ -65,10 +89,10 @@ type Named = Parameters<Checker['getDeclaredTypeOfSymbol']>[0];
 /**
 The properties of the type `symbol` declares: an event table's events
 */
-const table = async (checker: Checker, symbol: Named | undefined): Promise<readonly Named[]> => {
-  const type = await checker.getDeclaredTypeOfSymbol(symbol as Named);
-  return await checker.getPropertiesOfType(type);
-};
+const table = async (checker: Checker, symbol: Named | undefined): Promise<readonly Named[]> =>
+  symbol === undefined
+    ? []
+    : checker.getPropertiesOfType(await checker.getDeclaredTypeOfSymbol(symbol));
 
 /**
 An event's fields, every variant's or, for one open to a tool's arguments (an index signature in a variant), the
@@ -80,12 +104,10 @@ const fieldsOf = async (
 ): Promise<[string, { fields: string[]; open: boolean }]> => {
   const type = await checker.getTypeOfSymbol(event);
   const variants = type.isUnionType() ? ((await type.getTypes()) ?? []) : [type];
-  const infos = await Promise.all(
-    variants.map(async (each) => await checker.getIndexInfosOfType(each)),
-  );
+  const infos = await Promise.all(variants.map(async (each) => checker.getIndexInfosOfType(each)));
   const open = infos.some((each) => each.length > 0);
   const properties = await Promise.all(
-    variants.map(async (each) => await checker.getPropertiesOfType(each)),
+    variants.map(async (each) => checker.getPropertiesOfType(each)),
   );
   const names = properties.map((each) => each.map((property) => property.name));
   const fields = names.flat().filter((key) => !open || names.every((each) => each.includes(key)));
@@ -121,21 +143,23 @@ const offer = async (
   ops: string[];
   version: string;
 }> =>
-  await session(types, async (api) => {
+  session(types, async (api) => {
     const { checker, file } = await load(api, types);
-    const module = file?.statements.find(
-      (statement) => isModuleDeclaration(statement) && statement.name.text === 'claude-code',
-    );
-    const symbol = await checker.getSymbolOfDeclaration(module as never);
-    const exports = await checker.getExportsOfModule(symbol);
+    const module = file?.statements
+      .filter((statement) => isModuleDeclaration(statement))
+      .find((statement) => statement.name.text === 'claude-code');
+    const exports =
+      module === undefined
+        ? []
+        : await checker.getExportsOfModule(await checker.getSymbolOfDeclaration(module));
     const named = (name: string): Named | undefined => exports.find((each) => each.name === name);
     const [classic, engine, ops] = await Promise.all(
-      ['ClassicEventOf', 'EngineEventOf', 'OpEventOf'].map(
-        async (name) => await table(checker, named(name)),
+      ['ClassicEventOf', 'EngineEventOf', 'OpEventOf'].map(async (name) =>
+        table(checker, named(name)),
       ),
     );
     const events = await Promise.all(
-      [classic ?? [], engine ?? []].flat().map(async (event) => await fieldsOf(checker, event)),
+      [classic ?? [], engine ?? []].flat().map(async (event) => fieldsOf(checker, event)),
     );
     return {
       events: Object.fromEntries(events),
@@ -176,29 +200,31 @@ Each census.ts hook `register.tsx` binds, by name: the events it is bound to and
 const reads = async (
   hooks: string,
 ): Promise<Record<string, { events: string[]; fields: string[] }>> =>
-  await session(hooks, async (api) => {
-    const parse = async (name: string): Promise<Node[]> => {
+  session(hooks, async (api) => {
+    const nodesOf = async (name: string): Promise<Node[]> => {
       const path = `${hooks}/${name}`;
       const retained = await api.createSourceFile(path, await Bun.file(path).text());
       return descend(retained.sourceFile);
     };
-    const [register, census] = await Promise.all([parse('register.tsx'), parse('census.ts')]);
+    const [register, census] = await Promise.all([nodesOf('register.tsx'), nodesOf('census.ts')]);
     const bound = register.flatMap((node) =>
       isCallExpression(node) && node.expression.getText() === 'on'
         ? [[node.arguments[0], node.arguments.at(-1)].map((argument) => argument?.getText() ?? '')]
         : [],
     );
     return Object.fromEntries(
-      census.flatMap((node) => {
-        const hook = isVariableDeclaration(node) && node.initializer;
-        const name = isVariableDeclaration(node) && node.name.getText();
-        const events = bound
-          .filter(([, each]) => each === name)
-          .map(([event = '']) => event.replaceAll("'", ''));
-        return hook && (isArrowFunction(hook) || isFunctionExpression(hook)) && events.length > 0
-          ? [[name, { events, fields: sorted(readsOf(hook)) }]]
-          : [];
-      }),
+      census
+        .filter((node) => isVariableDeclaration(node))
+        .flatMap(({ initializer: hook, name }) => {
+          const events = bound
+            .filter(([, each]) => each === name.getText())
+            .map(([event = '']) => event.replaceAll("'", ''));
+          return hook !== undefined &&
+            (isArrowFunction(hook) || isFunctionExpression(hook)) &&
+            events.length > 0
+            ? [[name.getText(), { events, fields: sorted(readsOf(hook)) }] as const]
+            : [];
+        }),
     );
   });
 
@@ -224,7 +250,9 @@ const survey = (
   return {
     ghosts: Object.entries(hooks).flatMap(([hook, { events, fields }]) =>
       fields
-        .filter((field) => events.every((event) => !offered.events[event]?.fields.includes(field)))
+        .filter((field) =>
+          events.every((event) => offered.events[event]?.fields.includes(field) !== true),
+        )
         .map(
           (field) => `! census's ${hook} reads ${field}, which none of ${events.join(', ')} offers`,
         ),
@@ -235,8 +263,8 @@ const survey = (
         heard.map(([event, { fields }]) => [
           event,
           {
-            read: fields.filter((field) => read.get(event)?.includes(field)),
-            unread: fields.filter((field) => !read.get(event)?.includes(field)),
+            read: fields.filter((field) => read.get(event)?.includes(field) === true),
+            unread: fields.filter((field) => read.get(event)?.includes(field) !== true),
           },
         ]),
       ),
@@ -288,7 +316,7 @@ formatted; 1 on any line printed
 */
 const main = async (argv: string[], home = HOME): Promise<number> => {
   const path = `${home}hooks/senses.ts`;
-  const { senses } = (await import(`${path}?${crypto.randomUUID()}`)) as { senses: Manifest };
+  const senses = await manifestOf(path);
   const { ghosts, manifest } = survey(
     await offer(`${home}.claude-plugin/types`),
     await reads(`${home}hooks`),
@@ -307,4 +335,4 @@ const main = async (argv: string[], home = HOME): Promise<number> => {
   return lines.length > 0 ? 1 : 0;
 };
 
-export { drift, main, offer, reads, survey };
+export { drift, main, manifestOf, offer, reads, survey };

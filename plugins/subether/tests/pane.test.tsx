@@ -165,7 +165,7 @@ test('rows are drawn newest first, the newest open: a closed-gate pull, a failed
     },
   ];
   on('state.get', async (_dollar, e, next) =>
-    e.key === 'recalls' ? { value: { value: blocks, version: 1 } } : await next(e),
+    e.key === 'recalls' ? { value: { value: blocks, version: 1 } } : next(e),
   );
   expect(await drawn($, { press: `recall:${NOW}` })).toEqual([
     '*recall · 2 pulls · 0 sent',

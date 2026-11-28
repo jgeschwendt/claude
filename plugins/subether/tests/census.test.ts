@@ -233,8 +233,7 @@ const TURN = [
 
 test("a turn's tool call is its start and end by target, a permission request mid-call its ask", async ($, on) => {
   const { emits } = engine(on, {
-    gate: async () =>
-      await $.classic.PermissionRequest(fixture('{"tool_input":{},"tool_name":"Read"}')),
+    gate: async () => $.classic.PermissionRequest(fixture('{"tool_input":{},"tool_name":"Read"}')),
   });
   const call = { id: 'u1', target: '/f', tool: 'Read' };
   await $.turn.start(START);
@@ -537,7 +536,7 @@ const VIEWPORT = '{"columns":40,"rows":20}';
 */
 const typing = async ($: Engine, edit: PromptEditInput): Promise<unknown> => {
   const raise: (e: PromptEditInput) => Promise<unknown> = Reflect.get($.prompt, 'edit');
-  return await raise(edit);
+  return raise(edit);
 };
 
 test('clients, commands, skills, mentions, messages, worktrees, a Stop and typing are each emitted', async ($, on) => {
@@ -654,7 +653,7 @@ const PROBE = {
   register: (on: On): void => {
     on('engine.create', async ($, e, next) => ({
       ...(await next(e)),
-      probe: { ping: async (): Promise<number> => await Promise.resolve(1) },
+      probe: { ping: async (): Promise<number> => 1 },
     }));
     on('vcs.status', async ($) => {
       await ($ as unknown as { probe: { ping: () => Promise<number> } }).probe.ping();

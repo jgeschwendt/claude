@@ -30,7 +30,7 @@ append answering `exitCode` (or refusing to start), each append's argv and line,
 const engine = (
   on: On,
   {
-    answer = { result: 'ran', text: 'ran' } as ToolCallResult,
+    answer = { result: 'ran', text: 'ran' },
     environment = fixture<Record<string, string>>(
       '{"CLAUDE_TOOL_LOG_DIR":"/logs","HOME":"/home/test"}',
     ),

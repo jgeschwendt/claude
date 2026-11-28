@@ -1110,18 +1110,16 @@ const refuse = async (
   $: EngineInterface,
   { reason, subject, tool }: { reason: string; subject: string; tool: string },
 ): Promise<ToolCallResult> =>
-  await mark($, tool, `${reason}: ${subject.slice(0, RATIONALE)}`)
+  mark($, tool, `${reason}: ${subject.slice(0, RATIONALE)}`)
     .then((): ToolCallResult => ({ deny: `subether: ${reason}.` }))
-    .catch(async (error: unknown) => await unread($, tool, messageOf(error)));
+    .catch(async (error: unknown) => unread($, tool, messageOf(error)));
 
 /**
 A Bash command the house rules forbid is denied; any other goes on unchanged
 */
 const bash: MatchedHook<'tool.call', { tool: 'Bash' }> = async ($, e, next) => {
   const reason = decide(e.command);
-  return reason === undefined
-    ? await next(e)
-    : await refuse($, { reason, subject: e.command, tool: e.tool });
+  return reason === undefined ? next(e) : refuse($, { reason, subject: e.command, tool: e.tool });
 };
 
 /**
@@ -1129,17 +1127,17 @@ An Edit or Write to a `.yml` path is denied; any other goes on unchanged
 */
 const yml: MatchedHook<'tool.call', { tool: ['Edit', 'Write'] }> = async ($, e, next) =>
   YML.test(e.file_path)
-    ? await refuse($, { reason: YML_RULE, subject: e.file_path, tool: e.tool })
-    : await next(e);
+    ? refuse($, { reason: YML_RULE, subject: e.file_path, tool: e.tool })
+    : next(e);
 
 /**
 Fail closed: a guard that threw or timed out before it called `next` denies the call (`Caught.called`, `Caught.error`:
 d.ts 1218–1229, `HookFailure` 5370–5386); one that failed after keeps what `next` settled to
 */
 const bashFailed: CatchHandler<typeof bash> = async ($, e, next) =>
-  next.called ? await next(e) : await unread($, e.tool, next.error.message ?? next.error.kind);
+  next.called ? next(e) : unread($, e.tool, next.error.message ?? next.error.kind);
 
 const ymlFailed: CatchHandler<typeof yml> = async ($, e, next) =>
-  next.called ? await next(e) : await unread($, e.tool, next.error.message ?? next.error.kind);
+  next.called ? next(e) : unread($, e.tool, next.error.message ?? next.error.kind);
 
 export { bash, bashFailed, decide, yml, ymlFailed };

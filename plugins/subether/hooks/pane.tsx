@@ -137,12 +137,12 @@ const opening: MatchedHook<'session.start', { isInteractive: true }> = async ($,
     immediate: true,
     name: PANE.id,
   });
-  return await next(e);
+  return next(e);
 };
 
 const pane: MatchedHook<'ui.render', { component: 'Pane' }> = async ($, e, next) => {
   if (e.requestId !== PANE.id) {
-    return await next(e);
+    return next(e);
   }
   const [all, flipped] = await Promise.all([read($, recalls), read($, toggled)]);
   const { Box, Button, Text } = $.ui.resolve(e);

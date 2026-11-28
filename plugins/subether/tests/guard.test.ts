@@ -390,7 +390,7 @@ const edit = (path: string): Parameters<Engine['tool']['call']>[0] =>
   fixture(`{"file_path":"${path}","new_string":"b","old_string":"a","tool":"Edit"}`);
 
 const bash = async ($: Engine, command: string): Promise<unknown> =>
-  await $.tool.call({ command, tool: 'Bash' });
+  $.tool.call({ command, tool: 'Bash' });
 
 const byText = (left = '', right = ''): number => left.localeCompare(right);
 
@@ -409,7 +409,7 @@ const reasonOf = (result: unknown): string =>
 for (const [rule, subjects] of Object.entries(DENIED)) {
   test(`a Bash call is denied by "${rule}", each denial marked`, async ($, on) => {
     const { calls, runs } = engine(on);
-    const results = await Promise.all(subjects.map(async (subject) => await bash($, subject)));
+    const results = await Promise.all(subjects.map(async (subject) => bash($, subject)));
     expect(results).toEqual(subjects.map(() => ({ deny: expect.stringContaining(rule) })));
     const rationales = subjects.map(
       (subject, at) => `${reasonOf(results[at])}: ${subject.slice(0, RATIONALE)}`,
@@ -432,7 +432,7 @@ for (const [rule, subjects] of Object.entries(DENIED)) {
 
 test('every allowed command line reaches the engine, and marks nothing', async ($, on) => {
   const { calls, runs } = engine(on);
-  const results = await Promise.all(ALLOWED.map(async (command) => await bash($, command)));
+  const results = await Promise.all(ALLOWED.map(async (command) => bash($, command)));
   expect(results).toEqual(ALLOWED.map(() => ({ result: 'ran' })));
   expect(calls).toHaveLength(ALLOWED.length);
   expect(runs).toEqual([]);

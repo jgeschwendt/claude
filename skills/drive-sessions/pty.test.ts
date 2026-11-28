@@ -12,6 +12,7 @@ const { HOME: home, PATH: path } = process.env;
 const plain = { PATH: path };
 const macos = test.skipIf(process.platform !== 'darwin');
 
+const isSignal = (end: string): end is NodeJS.Signals => end !== 'q';
 const scratch = async (): Promise<string> => {
   const made = await Bun.$`realpath $(mktemp -d)`.text();
   return made.trim();
@@ -176,9 +177,9 @@ macos(
       await pty(job, 'rename', 'agents', 'x'),
       [await mode(`${directory}/drive-sessions`)],
     ];
-    const held = await Promise.all(socks.map((sock) => pids(sock)));
+    const held = await Promise.all(socks.map(async (sock) => pids(sock)));
     runs.push(await pty(job, 'close'), await pty(temporary, 'close'));
-    await Promise.all(socks.map((sock, index) => cleared(sock, held[index] ?? [])));
+    await Promise.all(socks.map(async (sock, index) => cleared(sock, held[index] ?? [])));
     expect(runs).toEqual([
       [0, `${socks[0]}\n`, ''],
       [0, `${socks[1]}\n`, ''],
@@ -202,13 +203,15 @@ macos(
     const holders = socks.map((sock) =>
       Bun.spawn([process.execPath, SCRIPT, 'hold', `--sock=${sock}`, ...fake('0', '0', 'one')]),
     );
-    const held = await Promise.all(socks.map((sock) => pids(sock)));
+    const held = await Promise.all(socks.map(async (sock) => pids(sock)));
     await Promise.all(
-      ends.map((end, index) =>
-        end === 'q'
-          ? pty(plain, 'send', `--sock=${socks[index]}`, end)
-          : holders[index]?.kill(end as NodeJS.Signals),
-      ),
+      ends.map(async (end, index) => {
+        if (isSignal(end)) {
+          holders[index]?.kill(end);
+          return;
+        }
+        await pty(plain, 'send', `--sock=${socks[index]}`, end);
+      }),
     );
     const ended = await Promise.all(
       holders.map(async (holder) => {
@@ -219,7 +222,7 @@ macos(
     const killed = `${directory}/SIGKILL.sock`;
     const isStale = fs.existsSync(killed);
     await Promise.all(
-      socks.map((sock, index) => cleared(sock === killed ? '' : sock, held[index] ?? [])),
+      socks.map(async (sock, index) => cleared(sock === killed ? '' : sock, held[index] ?? [])),
     );
     const flag = `--sock=${killed}`;
     const runs = [

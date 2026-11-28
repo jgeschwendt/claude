@@ -1,24 +1,50 @@
 // State machines, server only: xstate, @xstate/graph and dagre never reach the client bundle. A plan's `machine`
 // parts gain the drawn `svg` (states laid out by dagre, the walk lit in turn by SMIL), which the page renders as
 // the server did, so a hydrate matches. Importing this installs the xstate half of validation into the catalog.
-import { layout as arrange, graphlib } from '@dagrejs/dagre';
+import { type GraphLabel, layout as arrange, graphlib } from '@dagrejs/dagre';
 import { getSimplePaths, toDirectedGraph } from '@xstate/graph';
-import { createMachine } from 'xstate';
-import { type Item, MACHINE } from './catalog.tsx';
+import {
+  type AnyEventObject,
+  type EventObject,
+  type MachineContext,
+  type MetaObject,
+  type NonReducibleUnknown,
+  type ParameterizedObject,
+  type ProvidedActor,
+  createMachine,
+} from 'xstate';
+import { type Item, MACHINE, type MachineProps } from './catalog.tsx';
 
-type Props = { loop?: true; machine: Record<string, unknown> | string[]; walk?: string[] };
 type Spec = {
-  config?: Record<string, unknown>;
-  items?: string[];
-  loop?: true;
-  walk?: string[];
+  config?: Record<string, unknown> | undefined;
+  items?: string[] | undefined;
+  loop?: true | undefined;
+  walk?: string[] | undefined;
 };
+/**
+createMachine with the meta type xstate leaves `any` pinned
+*/
+const build = createMachine<
+  MachineContext,
+  AnyEventObject,
+  ProvidedActor,
+  ParameterizedObject,
+  ParameterizedObject,
+  string,
+  string,
+  unknown,
+  NonReducibleUnknown,
+  EventObject,
+  MetaObject
+>;
+type Machine = ReturnType<typeof build>;
 type Edge = { from: string; label: string; to: string };
-type Machine = ReturnType<typeof createMachine>;
 type Found = { edges: Edge[]; first: string; keys: string[]; walk: string[] };
 type Outcome<T> = { problem: string } | { problem?: never; value: T };
-type Laid = graphlib.Graph;
 type Point = Record<'x' | 'y', number>;
+type Box = Partial<Point> & Record<'height' | 'width', number>;
+type Path = Box & { labelpos: 'c'; points: Point[] };
+type Laid = graphlib.Graph<GraphLabel, Box, Path>;
 type Drawing = { layout: Laid; marker: string; spec: Spec; visits: string[] };
 type Drawn = { problem?: never; svg: string } | { problem: string; svg?: never };
 
@@ -67,7 +93,7 @@ const tried = <T>(run: () => T): Outcome<T> => {
   try {
     return { value: run() };
   } catch (error) {
-    return { problem: `config: ${(error as Error).message}` };
+    return { problem: `config: ${Error.isError(error) ? error.message : String(error)}` };
   }
 };
 
@@ -154,8 +180,8 @@ const follow = (spec: Spec, { edges, first, walk }: Found): Outcome<string[]> =>
 /**
 dagre's layout of the states and edges in one direction
 */
-const placed = (spec: Spec, { edges, keys }: Found, rankdir: string): Laid => {
-  const graph = new graphlib.Graph({ multigraph: true });
+const placed = (spec: Spec, { edges, keys }: Found, rankdir: 'LR' | 'TB'): Laid => {
+  const graph: Laid = new graphlib.Graph({ multigraph: true });
   graph.setGraph({
     edgesep: EDGE_SEP,
     marginx: MARGIN,
@@ -176,6 +202,7 @@ const placed = (spec: Spec, { edges, keys }: Found, rankdir: string): Laid => {
       {
         height: text ? LABEL_HEIGHT : 0,
         labelpos: 'c',
+        points: [],
         width: text ? wide(text, LABEL_CHAR) + LABEL_PAD : 0,
       },
       String(index),
@@ -208,10 +235,17 @@ const glow = (key: string, visits: string[]): string => {
 };
 
 /**
+where dagre put a box's centre; it always has, the types leave it optional for the input
+*/
+const centre = (box: Box): [number, number] => [Number(box.x), Number(box.y)];
+
+/**
 the path of an edge: dagre's route, or a loop on the right of the state for an edge back to itself
 */
 const route = (layout: Laid, edge: Edge, points: Point[]): string => {
-  const { width, x: cx, y: cy } = layout.node(edge.from);
+  const box = layout.node(edge.from);
+  const { width } = box;
+  const [cx, cy] = centre(box);
   const right = cx + width / 2;
   const [near, far] = [cy - LOOP_REACH, cy + LOOP_REACH].map((at) => px(at));
   return edge.from === edge.to
@@ -223,20 +257,20 @@ const route = (layout: Laid, edge: Edge, points: Point[]): string => {
 one edge: its arrow and, on a config, its event name
 */
 const arrow = ({ layout, marker, spec }: Drawing, edge: Edge, index: number): string => {
-  const { points, ...label } = layout.edge(edge.from, edge.to, String(index)) as Point & {
-    points: Point[];
-  };
+  const { points, ...label } = layout.edge(edge.from, edge.to, String(index));
   const line = `<path d='${route(layout, edge, points)}' fill='none' marker-end='url(#${marker})' stroke-opacity='0.5'/>`;
   return spec.items || !edge.label
     ? line
-    : `${line}<text fill-opacity='0.7' font-size='13' stroke='none' text-anchor='middle' x='${px(label.x)}' y='${px(label.y + TEXT_DROP)}'>${esc(edge.label)}</text>`;
+    : `${line}<text fill-opacity='0.7' font-size='13' stroke='none' text-anchor='middle' x='${px(Number(label.x))}' y='${px(Number(label.y) + TEXT_DROP)}'>${esc(edge.label)}</text>`;
 };
 
 /**
 one state: its box, lit by the walk, and its name
 */
 const state = ({ layout, spec, visits }: Drawing, key: string): string => {
-  const { height, width, x: cx, y: cy } = layout.node(key);
+  const box = layout.node(key);
+  const { height, width } = box;
+  const [cx, cy] = centre(box);
   const lit = visits[0] === key ? LIT : 0;
   return `<rect fill='#fff' fill-opacity='${lit}' height='${height}' rx='12' width='${width}' x='${px(cx - width / 2)}' y='${px(cy - height / 2)}'>${glow(key, visits)}</rect><text font-size='16' stroke='none' text-anchor='middle' x='${px(cx)}' y='${px(cy + NAME_DROP)}'>${esc(nameOf(spec, key))}</text>`;
 };
@@ -258,16 +292,16 @@ const svgOf = (spec: Spec, found: Found, visits: string[]): string => {
 /**
 the SVG of a machine part's props (a list of steps is the shorthand), or the problem with it
 */
-const draw = ({ machine, ...rest }: Props): Drawn => {
+const draw = ({ machine, ...rest }: MachineProps): Drawn => {
   const spec: Spec = Array.isArray(machine)
     ? { ...rest, items: machine }
     : { ...rest, config: machine };
-  const made = tried(() => createMachine(configOf(spec) as never));
+  const made = tried(() => build(configOf(spec)));
   if (!('value' in made)) {
     return made;
   }
   const nested = nestedProblem(made.value);
-  if (nested) {
+  if (nested !== undefined) {
     return { problem: nested };
   }
   const found = tried(() => inspect(spec, made.value));
@@ -278,17 +312,24 @@ const draw = ({ machine, ...rest }: Props): Drawn => {
   return 'value' in walked ? { svg: svgOf(spec, found.value, walked.value) } : walked;
 };
 
-MACHINE.problems = (props: Record<string, unknown>): string[] => {
-  const { problem } = draw(props as Props);
-  return problem ? [problem] : [];
+MACHINE.problems = (props: MachineProps): string[] => {
+  const { problem } = draw(props);
+  return problem === undefined ? [] : [problem];
 };
+
+/**
+a copy of `item` with `extra` among its props, which the tuple's two slots cannot say in types
+*/
+const graft = <T extends Item>(item: T, extra: Record<string, string | string[]>): T =>
+  Object.assign([], item, { 1: { ...item[1], ...extra } });
 
 /**
 `item` with its drawn SVG when it is a machine; what is saved stays the author's own
 */
 const drew = <T extends Item>(item: T): T => {
-  const { svg } = item[0] === 'machine' ? draw(item[1] as Props) : {};
-  return svg ? ([item[0], { ...item[1], svg }] as unknown as T) : item;
+  const [kind, own]: Item = item;
+  const { svg } = kind === 'machine' ? draw(own) : {};
+  return svg === undefined ? item : graft(item, { svg });
 };
 
-export { drew };
+export { drew, graft };

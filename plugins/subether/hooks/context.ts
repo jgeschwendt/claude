@@ -72,7 +72,7 @@ const context: Hook<'prompt.submit'> = async ($, e, next) => {
     !ASK.has(e.origin.kind) ||
     prior.some(({ session, who }) => who === 'seed' && session === id)
   ) {
-    return await next(e);
+    return next(e);
   }
   const { stdout, ...ran } = await seed($, e.text).catch((error: unknown) => {
     $.ui.log(`context: sandman recall: ${String(error)}`);
@@ -93,7 +93,7 @@ const context: Hook<'prompt.submit'> = async ($, e, next) => {
     ...was,
     { ...ran, at, session: id, text: kept, who: 'seed' as const },
   ]);
-  return await next(kept === '' ? e : { ...e, context: [...(e.context ?? []), kept] });
+  return next(kept === '' ? e : { ...e, context: [...(e.context ?? []), kept] });
 };
 
 /**

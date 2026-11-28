@@ -22,7 +22,7 @@ const take: Hook<'session.end'> = async ($, e, next) => {
     session: e.sessionId,
   });
   await run($, ['sandman', 'take'], { stdin, timeoutMs: TAKE });
-  return await next(e);
+  return next(e);
 };
 
 export { take };

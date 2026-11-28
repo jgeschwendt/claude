@@ -13,7 +13,7 @@ const PASS: [string, (on: On) => void, ($: Engine) => Promise<unknown>, string][
       on('prompt.submit', ($, e) => ({ text: JSON.stringify(e) }));
     },
     async ($): Promise<unknown> =>
-      await $.prompt.submit({ origin: { kind: 'composer' }, text: SENTINEL, wait: false }),
+      $.prompt.submit({ origin: { kind: 'composer' }, text: SENTINEL, wait: false }),
     'text',
   ],
   [
@@ -22,7 +22,7 @@ const PASS: [string, (on: On) => void, ($: Engine) => Promise<unknown>, string][
       on('session.start', ($, e) => ({ cwd: JSON.stringify(e) }));
     },
     async ($): Promise<unknown> =>
-      await $.session.start({ cwd: SENTINEL, isInteractive: false, surface: 'terminal' }),
+      $.session.start({ cwd: SENTINEL, isInteractive: false, surface: 'terminal' }),
     'cwd',
   ],
   [
@@ -30,7 +30,7 @@ const PASS: [string, (on: On) => void, ($: Engine) => Promise<unknown>, string][
     (on): void => {
       on('tool.call', ($, e) => ({ result: JSON.stringify(e) }));
     },
-    async ($): Promise<unknown> => await $.tool.call({ command: SENTINEL, tool: 'Bash' }),
+    async ($): Promise<unknown> => $.tool.call({ command: SENTINEL, tool: 'Bash' }),
     'result',
   ],
   [
@@ -39,7 +39,7 @@ const PASS: [string, (on: On) => void, ($: Engine) => Promise<unknown>, string][
       on('tool.call', ($, e) => ({ result: JSON.stringify(e) }));
     },
     async ($): Promise<unknown> =>
-      await $.tool.call({ content: SENTINEL, file_path: '/w/a.md', tool: 'Write' }),
+      $.tool.call({ content: SENTINEL, file_path: '/w/a.md', tool: 'Write' }),
     'result',
   ],
 ];

@@ -7,7 +7,7 @@
 // not fail the gate.
 // a gate inside a gate is a step that resolved to the `test` script: it froze the machine twice
 const { GATE } = Bun.env;
-if (GATE) {
+if (GATE !== undefined && GATE !== '') {
   console.error('gate: refusing to run inside itself: `bun --cwd <dir> test` is `bun run test`');
   process.exit(1);
 }
@@ -48,5 +48,5 @@ if (!hasTypes) {
 const steps = Object.entries(STEPS).filter(
   ([name]) => hasTypes || !['senses', 'tsc:mod'].includes(name),
 );
-const results = await Promise.all(steps.map((step) => isGreen(step)));
+const results = await Promise.all(steps.map(async (step) => isGreen(step)));
 process.exitCode = results.every(Boolean) ? 0 : 1;

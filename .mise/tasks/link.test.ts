@@ -21,7 +21,7 @@ const rig = async (): Promise<{
       'user/CLAUDE.md',
       'user/settings.json',
       'workflows/w.js',
-    ].map((path) =>
+    ].map(async (path) =>
       Bun.write(`${checkout}/${path}`, path === '.gitignore' ? '*.log\nskills/synced/\n' : ''),
     ),
   );
@@ -33,7 +33,7 @@ const rig = async (): Promise<{
       .quiet();
     return `${run.exitCode}\n${run.stdout.toString()}`;
   };
-  const tree = (): Promise<string> =>
+  const tree = async (): Promise<string> =>
     Bun.$`find ${home} ${checkout}/skills -exec sh -c 'echo "$0 -> $(readlink "$0")"' {} ';' | sort`.text();
   return { checkout, home, link, tree };
 };

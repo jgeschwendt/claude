@@ -3,42 +3,54 @@
 // in register.tsx (event, matcher, function, file, catch shape), every atom in types/index.d.ts, every read and write a
 // listed atom, every function exported by its file; call.json a well-formed state machine, its owners a fixed set and
 // each write one of its hook's effects. Regexes over the source text; each mismatch is one line, exit 1.
-const HOOKS = 'plugins/subether/hooks';
-type Write = { hook: string; target: string };
+import { boolean, float, list, nullable, optional, parse, string, unknown } from 'verax';
+import { loose } from '#loose';
 
-const data: {
-  atoms: { file: string | null; name: string }[];
-  events: { name: string }[];
-  hooks: {
-    catch: string;
-    effects: { kind: string; target: string }[];
-    event: string;
-    file: string;
-    fn: string | null;
-    id: string;
-    matcher: unknown;
-    reads: string[];
-    status: string;
-    writes: string[];
-  }[];
-  kinds: { name: string }[];
-} = await Bun.file('docs/data/hooks.json').json();
-const [register, types, machine] = await Promise.all([
+const HOOKS = 'plugins/subether/hooks';
+// the fields the checks below read, and no others
+const named = list(loose('named', { name: string() }));
+const writeShape = loose('write', { hook: string(), target: string() });
+const written = optional(list(writeShape));
+const atomShape = loose('atom', { file: nullable(string()), name: string() });
+const effectShape = loose('effect', { kind: string(), target: string() });
+const hookShape = loose('hook', {
+  catch: string(),
+  effects: list(effectShape),
+  event: string(),
+  file: string(),
+  fn: nullable(string()),
+  id: string(),
+  matcher: unknown(),
+  reads: list(string()),
+  writes: list(string()),
+});
+const dataShape = loose('hooks.json', {
+  atoms: list(atomShape),
+  events: named,
+  hooks: list(hookShape),
+  kinds: named,
+});
+const stateShape = loose('state', {
+  col: float(),
+  initial: optional(boolean()),
+  name: string(),
+  owner: string(),
+  row: float(),
+  terminal: optional(boolean()),
+  writes: written,
+});
+const transitionShape = loose('transition', { from: string(), to: string(), writes: written });
+const machineShape = loose('call.json', {
+  owners: named,
+  states: list(stateShape),
+  transitions: list(transitionShape),
+});
+
+const data = parse(await Bun.file('docs/data/hooks.json').json(), dataShape);
+const machine = parse(await Bun.file('docs/data/call.json').json(), machineShape);
+const [register, types] = await Promise.all([
   Bun.file(`${HOOKS}/register.tsx`).text(),
   Bun.file('plugins/subether/types/index.d.ts').text(),
-  Bun.file('docs/data/call.json').json() as Promise<{
-    owners: { name: string }[];
-    states: {
-      col: number;
-      initial?: boolean;
-      name: string;
-      owner: string;
-      row: number;
-      terminal?: boolean;
-      writes?: Write[];
-    }[];
-    transitions: { from: string; to: string; writes?: Write[] }[];
-  }>,
 ]);
 const glob = new Bun.Glob('*.{ts,tsx}');
 const sources = new Map(

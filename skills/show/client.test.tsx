@@ -4,8 +4,9 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator';
 import { afterAll, expect, spyOn, test } from 'bun:test';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
+import { unknown as anything, parse, record, scalar, string, tuple } from 'verax';
 import { run } from './cli.ts';
-import { App, type State } from './page.tsx';
+import { App, stateShape } from './page.tsx';
 import { serve } from './server.tsx';
 
 const { mkdtempSync } = process.getBuiltinModule('node:fs');
@@ -20,6 +21,10 @@ how many times `until` looks before it gives up
 */
 const TRIES = 200;
 const WAIT_MS = 10;
+const fieldsOf = record(anything());
+function readJson(text: string): unknown {
+  return JSON.parse(text);
+}
 /**
 the field that tells an event its place in the plan's log
 */
@@ -47,8 +52,8 @@ Object.assign(globalThis, {
   Headers: native.Headers,
   Request: native.Request,
   Response: native.Response,
-  fetch: (input: string, init?: { unix?: string }) =>
-    (init?.unix ? native.fetch : page)(input, init),
+  fetch: async (input: string, init?: { unix?: string }) =>
+    (init?.unix === undefined ? page : native.fetch)(input, init),
 });
 
 /**
@@ -66,8 +71,8 @@ afterAll(async () => {
 /**
 poll until `found` holds: React and the sockets settle on their own schedule
 */
-async function until(found: () => unknown, tries = 0): Promise<void> {
-  if (found()) {
+async function until(found: () => boolean | undefined, tries = 0): Promise<void> {
+  if (found() === true) {
     return;
   }
   expect(tries).toBeLessThan(TRIES);
@@ -77,30 +82,48 @@ async function until(found: () => unknown, tries = 0): Promise<void> {
 /**
 the first match inside `root`, which the test expects to be there
 */
-function find<Found extends Element>(root: ParentNode, selector: string): Found {
-  const found = root.querySelector<Found>(selector);
-  expect(found).not.toBeNull();
-  return found as Found;
+function find(root: ParentNode, selector: string): Element;
+function find<Found extends Element>(
+  root: ParentNode,
+  selector: string,
+  kind: abstract new () => Found,
+): Found;
+function find(
+  root: ParentNode,
+  selector: string,
+  kind: abstract new () => Element = Element,
+): Element {
+  const only = scalar(kind.name, (value: unknown): value is Element => value instanceof kind);
+  return parse(root.querySelector(selector), only);
+}
+function buttonIn(root: ParentNode, selector: string): HTMLButtonElement {
+  return find(root, selector, HTMLButtonElement);
+}
+function inputIn(root: ParentNode, selector: string): HTMLInputElement {
+  return find(root, selector, HTMLInputElement);
+}
+function textareaIn(root: ParentNode, selector: string): HTMLTextAreaElement {
+  return find(root, selector, HTMLTextAreaElement);
 }
 function question(id: string): HTMLElement {
-  return find(document, `[id="question-${id}"]`);
+  return find(document, `[id="question-${id}"]`, HTMLElement);
 }
 function labels(id: string): (string | null)[] {
   return [...question(id).querySelectorAll('button')].map((button) => button.textContent);
 }
 function send(id: string, message: string, choice?: string): void {
-  if (choice) {
-    find<HTMLInputElement>(question(id), `input[value=${choice}]`).click();
+  if (choice !== undefined) {
+    inputIn(question(id), `input[value=${choice}]`).click();
   }
-  find<HTMLTextAreaElement>(question(id), 'textarea').value = message;
-  find<HTMLButtonElement>(question(id), 'button[value=answer]').click();
+  textareaIn(question(id), 'textarea').value = message;
+  buttonIn(question(id), 'button[value=answer]').click();
 }
 /**
 what a `wait` printed, as its kind and the props of the event it carries
 */
 async function waited(): Promise<Record<string, unknown>> {
   const [, text] = await run(['wait', 'lints-canon']);
-  const [kind, own] = JSON.parse(text);
+  const [kind, own] = parse(readJson(text), tuple([string(), fieldsOf]));
   return { kind, ...own };
 }
 /**
@@ -130,7 +153,10 @@ test('hydrates, sends, says it on hud and follows both sockets', async () => {
 
   // a second view of the same state subscribes, and unsubscribes when it unmounts
   const other = createRoot(document.createElement('div'));
-  flushSync(() => other.render(<App initial={Reflect.get(globalThis, SHOW_KEY) as State} />));
+  const initial = parse(Reflect.get(globalThis, SHOW_KEY), stateShape);
+  flushSync(() => {
+    other.render(<App initial={initial} />);
+  });
   other.unmount();
 
   // an option with a shape draws its path inside the tappable row; one without draws none
@@ -167,7 +193,7 @@ test('hydrates, sends, says it on hud and follows both sockets', async () => {
   await until(() => question('else').textContent?.includes('send again any time'));
 
   // the lean is marked, not chosen, and a second tap takes a choice back
-  const hold = find<HTMLInputElement>(question('land'), 'input[value=hold]');
+  const hold = inputIn(question('land'), 'input[value=hold]');
   expect(question('land').querySelector('input:checked')).toBeNull();
   hold.click();
   await until(() => hold.checked);
@@ -189,19 +215,21 @@ test('hydrates, sends, says it on hud and follows both sockets', async () => {
   // a <hud> that relays what the page says to fake-hud as the owner, and hands the threads back
   const host = document.createElement('hud');
   document.body.append(host);
-  let thread = { id: '' };
+  let thread: Record<string, unknown> = { id: '' };
   async function relay(route: string, detail: object): Promise<void> {
     const response = await native.fetch(`${url.replace('lints-canon', '')}__hud/${route}`, {
       body: JSON.stringify({ ...detail, page: location.pathname }),
       method: 'POST',
     });
-    thread = await response.json();
+    thread = parse(await response.json(), fieldsOf);
     host.dispatchEvent(
       new CustomEvent('hud:threads', { bubbles: true, detail: { threads: [thread] } }),
     );
   }
   for (const name of ['hud:open', 'hud:reply']) {
-    host.addEventListener(name, (event) => relay('say', (event as CustomEvent<object>).detail));
+    host.addEventListener(name, (event) => {
+      void relay('say', parse(Reflect.get(event, 'detail'), fieldsOf));
+    });
   }
   send('land', 'look first', 'hold');
   expect(await waited()).toMatchObject({
@@ -217,20 +245,21 @@ test('hydrates, sends, says it on hud and follows both sockets', async () => {
   send('land', 'still there?');
   expect(await waited()).toMatchObject({ message: 'still there?' });
   await until(() => question('land').querySelectorAll(':scope .thread li').length === 2);
-  expect(find<HTMLInputElement>(question('land'), 'input[value=hold]').checked).toBe(true);
+  expect(inputIn(question('land'), 'input[value=hold]').checked).toBe(true);
 
   // the question he last spoke on waits below the untouched ones; the agent's reply lifts it to the top
   expect(document.querySelector('.waiting article')?.id).toBe('question-land');
-  await relay('reply', { id: thread.id, text: 'on it' });
+  const { id: threadId } = thread;
+  await relay('reply', { id: threadId, text: 'on it' });
   await until(() => document.querySelector('main > article')?.id === 'question-land');
   expect(document.querySelector('.waiting')).toBeNull();
 
   // a pick-many question: picks toggle on and off, and its one ↵ sends them all
   for (const value of ['ascii', 'docs', 'numeric', 'docs']) {
-    find<HTMLInputElement>(question('allow'), `input[value=${value}]`).click();
+    inputIn(question('allow'), `input[value=${value}]`).click();
   }
   await until(() => question('allow').querySelectorAll('input:checked').length === 2);
-  find<HTMLButtonElement>(question('allow'), '[aria-label="Send Allowed rules"]').click();
+  buttonIn(question('allow'), '[aria-label="Send Allowed rules"]').click();
   const many = await waited();
   expect(many).toMatchObject({ picks: { rules: ['numeric', 'ascii'] } });
   expect(many).not.toHaveProperty('notes');
@@ -242,9 +271,9 @@ test('hydrates, sends, says it on hud and follows both sockets', async () => {
 
   // a question with two choices: a pick-one's ↵ sends just that option and its comment, a pick-many's tall ↵ just that
   // choice's picks, Ask every choice's picks with the message
-  find<HTMLInputElement>(question('attribute'), 'input[value=drop]').click();
-  find<HTMLInputElement>(question('attribute'), '[name="note:keep:drop"]').value = 'why keep it';
-  find<HTMLButtonElement>(question('attribute'), 'button[name=only][value="keep:drop"]').click();
+  inputIn(question('attribute'), 'input[value=drop]').click();
+  inputIn(question('attribute'), '[name="note:keep:drop"]').value = 'why keep it';
+  buttonIn(question('attribute'), 'button[name=only][value="keep:drop"]').click();
   expect(await waitedBare()).toEqual({
     at: expect.any(String),
     kind: 'answer',
@@ -255,10 +284,10 @@ test('hydrates, sends, says it on hud and follows both sockets', async () => {
   // a Send's buttons are disabled until hud has carried what it said, and the form is reset once it has
   await until(() => !question('attribute').querySelector('button:disabled'));
   for (const value of ['tests', 'canon']) {
-    find<HTMLInputElement>(question('attribute'), `input[value=${value}]`).click();
+    inputIn(question('attribute'), `input[value=${value}]`).click();
   }
   await until(() => question('attribute').querySelectorAll('input:checked').length === THREE);
-  find<HTMLButtonElement>(question('attribute'), '[aria-label="Send Where it applies"]').click();
+  buttonIn(question('attribute'), '[aria-label="Send Where it applies"]').click();
   expect(await waitedBare()).toEqual({
     at: expect.any(String),
     kind: 'answer',
@@ -267,7 +296,7 @@ test('hydrates, sends, says it on hud and follows both sockets', async () => {
   });
   // happy-dom's form reset after a Send drops the checks until the choice renders again: one more pick does
   await until(() => !question('attribute').querySelector('button:disabled'));
-  find<HTMLInputElement>(question('attribute'), 'input[value=routines]').click();
+  inputIn(question('attribute'), 'input[value=routines]').click();
   send('attribute', 'all of it');
   expect(await waited()).toMatchObject({
     message: 'all of it',
@@ -275,9 +304,11 @@ test('hydrates, sends, says it on hud and follows both sockets', async () => {
   });
 
   // a pick-one ✎ opens its comment inline; Enter in it, or its ↵, sends just that option
-  find<HTMLInputElement>(question('land'), '[name="note:land:hold"]').focus();
-  await until(() => question('land').querySelector(':scope .pick.open [name="note:land:hold"]'));
-  const note = find<HTMLInputElement>(question('land'), '[name="note:land:hold"]');
+  inputIn(question('land'), '[name="note:land:hold"]').focus();
+  await until(
+    () => question('land').querySelector(':scope .pick.open [name="note:land:hold"]')?.isConnected,
+  );
+  const note = inputIn(question('land'), '[name="note:land:hold"]');
   note.value = 'only this';
   note.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'a' }));
   note.dispatchEvent(
@@ -288,8 +319,8 @@ test('hydrates, sends, says it on hud and follows both sockets', async () => {
     notes: { land: { hold: 'only this' } },
     picks: { land: ['hold'] },
   });
-  find<HTMLInputElement>(question('land'), '[name="note:land:land"]').value = 'later';
-  find<HTMLButtonElement>(question('land'), 'button[name=only][value="land:land"]').click();
+  inputIn(question('land'), '[name="note:land:land"]').value = 'later';
+  buttonIn(question('land'), 'button[name=only][value="land:land"]').click();
   expect(await waited()).toMatchObject({
     notes: { land: { land: 'later' } },
     picks: { land: ['land'] },
@@ -307,7 +338,7 @@ test('hydrates, sends, says it on hud and follows both sockets', async () => {
   await until(() => document.querySelector('.tasks li')?.textContent === 'decided: hold');
 
   // he resolves a question himself: `show wait` hears it, and the question collapses to its line
-  find<HTMLButtonElement>(question('else'), 'button[value=resolve]').click();
+  buttonIn(question('else'), 'button[value=resolve]').click();
   expect(await waited()).toMatchObject({ kind: 'resolve', question: 'else' });
   await until(() => document.querySelector('.resolved')?.textContent?.includes('✓ Anything else?'));
   // every question is a task: checked once resolved, a link to it either way

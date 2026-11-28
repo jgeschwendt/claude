@@ -29,7 +29,7 @@ const rig = async (): Promise<string> => {
   const log = 'echo "$(basename "$0") $*" >>"$HOME/calls"; exit "$RC"';
   const ps = '[ "$4" = "$CLI" ] && echo "$ARGS"';
   await Promise.all(
-    Object.entries({ claude: log, ps, sandman: log }).map(([stub, body]) =>
+    Object.entries({ claude: log, ps, sandman: log }).map(async ([stub, body]) =>
       Bun.write(`${home}/bin/${stub}`, `#!/bin/sh\n${body}\n`),
     ),
   );
@@ -190,9 +190,9 @@ macos(
     await Promise.all([
       ...[BG, FG, KEEP]
         .flatMap((sid) => files(sid))
-        .map((path) => Bun.write(`${home}/${path}`, '')),
+        .map(async (path) => Bun.write(`${home}/${path}`, '')),
       Bun.write(`${home}/.claude/history.jsonl`, shared('sessionId')),
-      ...logs.map((path) => Bun.write(`${home}/${path}`, shared('session'))),
+      ...logs.map(async (path) => Bun.write(`${home}/${path}`, shared('session'))),
     ]);
     const [bg, fg] = [Bun.spawn(['sleep', '60']), Bun.spawn(['sleep', '60'])];
     const job = { CLAUDE_JOB_DIR: `${home}/.claude/jobs/aaaaaaaa` };
@@ -213,7 +213,7 @@ macos(
     await Bun.sleep(QUIET_MS);
     const found = await Bun.$`cd ${home} && find .claude tmp .local -type f`.text();
     const texts = await Promise.all(
-      ['.claude/history.jsonl', ...logs].map((path) => read(`${home}/${path}`)),
+      ['.claude/history.jsonl', ...logs].map(async (path) => read(`${home}/${path}`)),
     );
     expect([runs, state(fg), await calls(home), sorted(found.trim().split('\n')), texts]).toEqual([
       [

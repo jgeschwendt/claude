@@ -4,7 +4,7 @@
 // style.css.
 import { bundledLanguages, codeToHtml, createCssVariablesTheme } from 'shiki';
 import { type Item, LANGUAGES, type Plan, type Question } from './catalog.tsx';
-import { drew } from './machine.ts';
+import { drew, graft } from './machine.ts';
 
 type Sample = { code: string; lang?: string | undefined };
 
@@ -16,26 +16,35 @@ for (const id of Object.keys(bundledLanguages)) {
 /**
 the samples each kind of context carries
 */
-const SAMPLES: Record<string, (own: never) => Sample[]> = {
-  code: ({ code, lang }: { code: string; lang?: string }) => [{ code, lang }],
-  compare: ({ lang, pair }: { lang?: string; pair: string[] }) =>
-    pair.map((code) => ({ code, lang })),
-  tabs: ({ tabs }: { tabs: [string, string, string?][] }) =>
-    tabs.map(([, code, lang]) => ({ code, lang })),
+const samplesOf = ([kind, own]: Item): Sample[] => {
+  if (kind === 'code') {
+    return [{ code: own.code, lang: own.lang }];
+  }
+  if (kind === 'compare') {
+    return own.pair.map((code) => ({ code, lang: own.lang }));
+  }
+  return kind === 'tabs'
+    ? own.tabs.map((tab) => {
+        const [, code] = tab;
+        return { code, lang: tab.at(2) };
+      })
+    : [];
 };
 
 /**
 `item` with the highlighted markup of its samples when one names a language, and its machine drawn
 */
-const mark = async <T extends Item>([kind, own]: T): Promise<T> => {
-  const samples = SAMPLES[kind]?.(own as never) ?? [];
+const mark = async <T extends Item>(item: T): Promise<T> => {
+  const samples = samplesOf(item);
   // a sample without a language stays plain: an empty string, so `html` lines up with the samples
-  const html = samples.some((sample) => sample.lang)
+  const html = samples.some(({ lang }) => lang !== undefined)
     ? await Promise.all(
-        samples.map(({ code, lang }) => (lang ? codeToHtml(code, { lang, theme }) : '')),
+        samples.map(async ({ code, lang }) =>
+          lang === undefined ? '' : codeToHtml(code, { lang, theme }),
+        ),
       )
     : undefined;
-  return drew([kind, { ...own, ...(html && { html }) }] as unknown as T);
+  return drew(html === undefined ? item : graft(item, { html }));
 };
 
 /**
@@ -44,13 +53,13 @@ own
 */
 const lit = async ([title, overview, questions]: Plan): Promise<Plan> => [
   title,
-  await Promise.all(overview.map((item) => mark(item))),
+  await Promise.all(overview.map(async (item) => mark(item))),
   Object.fromEntries(
     await Promise.all(
-      Object.entries(questions).map(
-        async ([id, [name, body]]) =>
-          [id, [name, await Promise.all(body.map((item) => mark(item)))]] as [string, Question],
-      ),
+      Object.entries(questions).map(async ([id, [name, body]]): Promise<[string, Question]> => [
+        id,
+        [name, await Promise.all(body.map(async (item) => mark(item)))],
+      ]),
     ),
   ),
 ];

@@ -17,7 +17,7 @@
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "shiki": "4.6.0",
-    "verax": "link:../../typescript/main/packages/verax",
+    "verax": "0.1.2",
     "xstate": "5.33.4"
   },
   "devDependencies": {

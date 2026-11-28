@@ -37,7 +37,7 @@ On the top model tier, tokens buy judgment, not volume: plan, direct, judge, rev
 - Harness: `jgeschwendt/claude` at `~/.grove/code/jgeschwendt/claude/main`—work there per its `AGENTS.md`; `~/.claude` is runtime state and symlinks into it, not a repo.
 - Merge without asking—a reviewed, green PR of yours lands at once (`floodgate add` on a private repo, `gh pr merge` by the ruleset's method on a public one); wait on him only when the change is risky or he might hold a differing opinion.
 - Name nothing that rots—a model or tier name, a version, "current" or "latest" marks a moment and is wrong by the next release. State the role (the top tier, the tier below); literals only in code or config that runs them.
-- Never bare `sleep` to wait: a background command that exits on the condition, or Monitor; the harness blocks a foreground sleep.
+- Never wait in the foreground—no bare `sleep`, nor a `perl -e 'select(…)'` or `time.sleep` standing in for one: a background command that exits on the condition, or Monitor; the harness blocks a foreground sleep.
 - Open-ended aesthetic ask: get his word on a concrete sample first; commit-and-build is for technical calls.
 - Prose to him: answer or action first, fewest tokens, no basics, preamble or hedging. Code has its own rules.
 - Scripts for one module or skill go in its directory, never top-level `shell/` or `scripts/`.

@@ -23,8 +23,8 @@
   "devDependencies": {
     "@happy-dom/global-registrator": "21.0.4",
     "@jlg/oxfmt": "0.1.2",
-    "@jlg/oxlint": "0.1.5",
-    "@jlg/tsconfig": "0.1.2",
+    "@jlg/oxlint": "0.1.6",
+    "@jlg/tsconfig": "0.1.3",
     "@types/bun": "1.4.4",
     "@types/d3-scale": "4.0.9",
     "@types/react": "19.3.0",

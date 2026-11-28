@@ -304,9 +304,9 @@ const verbs: Record<string, (arguments_: string[]) => Promise<string> | string> 
 /**
 one CLI invocation: its exit code and the text for stdout (0) or stderr
 */
-const run = async ([verb = '', ...arguments_]: string[]): Promise<[number, string]> => {
+const run = async ([verb = '', ...verbArguments]: string[]): Promise<[number, string]> => {
   const verbFunction = verbs[verb];
-  if (!verbFunction || arguments_.length < (USAGE[verb]?.match(/</gu) ?? []).length) {
+  if (!verbFunction || verbArguments.length < (USAGE[verb]?.match(/</gu) ?? []).length) {
     return [
       1,
       `show: usage: ${Object.entries(USAGE)
@@ -315,7 +315,7 @@ const run = async ([verb = '', ...arguments_]: string[]): Promise<[number, strin
     ];
   }
   try {
-    return [0, await verbFunction(arguments_)];
+    return [0, await verbFunction(verbArguments)];
   } catch (error) {
     return [1, `show: ${(error as FailError).code ?? 'error'}: ${(error as Error).message}`];
   }
